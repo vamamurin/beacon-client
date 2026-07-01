@@ -21,3 +21,9 @@ flutter pub get
 
 # Chạy ứng dụng lên điện thoại đã kết nối bằng cáp USB
 flutter run
+
+## Bản quyền (License)
+
+Copyright © 2026 TAPAMA. All rights reserved.
+
+Mã nguồn của dự án được công khai nhằm mục đích giới thiệu và tham khảo. Mọi hình thức sao chép, sửa đổi, phân phối, tái sử dụng hoặc sử dụng cho mục đích thương mại mà không có sự cho phép bằng văn bản của chủ sở hữu đều không được phép.
