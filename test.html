@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Demo Trống đồng Ngọc Lũ</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+ background:#111;
+ min-height:100vh;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",sans-serif;
+}
+.phone{
+ width:430px;height:932px;
+ background:#000;
+ border:12px solid #1c1c1c;
+ border-radius:58px;
+ position:relative;
+ overflow:hidden;
+ box-shadow:0 0 0 2px #333,0 30px 80px rgba(0,0,0,.7);
+ color:#fff;
+}
+.dynamic-island{
+ position:absolute;top:16px;left:50%;
+ transform:translateX(-50%);
+ width:126px;height:34px;background:#000;
+ border-radius:20px;z-index:5;
+}
+.status{
+ position:absolute;top:26px;left:28px;right:28px;
+ display:flex;justify-content:space-between;
+ font-weight:600;font-size:18px;z-index:5;
+}
+.content{
+ height:100%;
+ overflow:auto;
+ background:
+ linear-gradient(to bottom,rgba(0,0,0,.15),rgba(0,0,0,.95) 58%),
+ url('https://images.unsplash.com/photo-1518998053901-5348d3961a04?q=80&w=1200&auto=format&fit=crop') center/cover;
+}
+.topbar{
+ padding:88px 28px 0;
+ display:flex;justify-content:space-between;
+}
+.icon{font-size:28px}
+.room{
+ margin:90px 0 0 24px;
+ display:inline-block;
+ background:rgba(70,70,70,.7);
+ padding:10px 16px;
+ border-radius:20px;
+ font-size:16px;
+}
+.hero-space{height:260px}
+.dots{text-align:center;margin-bottom:18px;color:#bdbdbd;letter-spacing:8px}
+.info{padding:0 28px}
+h1{font-size:58px;line-height:.95;font-weight:700}
+.meta{
+ margin-top:16px;color:#d7d7d7;
+ font-size:18px;line-height:1.6;
+}
+.audio{
+ margin-top:24px;
+ background:rgba(48,48,48,.88);
+ border-radius:22px;
+ padding:20px;
+}
+.audio h3{font-size:18px}
+.audio p{color:#cfcfcf;margin-top:8px}
+.bar{
+ height:4px;background:#555;border-radius:4px;
+ margin:18px 0;position:relative;
+}
+.bar:before{
+ content:"";position:absolute;left:0;top:0;
+ width:34%;height:100%;background:#d6b07a;
+}
+.bar:after{
+ content:"";position:absolute;left:34%;top:50%;
+ width:18px;height:18px;background:#d6b07a;border-radius:50%;
+ transform:translate(-50%,-50%);
+}
+.times{display:flex;justify-content:space-between;color:#ddd}
+.controls{
+ display:flex;justify-content:space-around;
+ align-items:center;padding:24px 0;
+}
+.play{
+ width:84px;height:84px;border-radius:50%;
+ background:#d6b07a;color:#111;
+ display:flex;align-items:center;justify-content:center;
+ font-size:34px;font-weight:700;
+}
+.tabs{
+ display:flex;justify-content:space-between;
+ margin-top:24px;border-bottom:1px solid #444;
+}
+.tab{
+ flex:1;text-align:center;padding:16px 0;
+ color:#bfbfbf;font-size:18px;
+}
+.tab.active{color:#d6b07a;border-bottom:3px solid #d6b07a}
+.desc{
+ padding:24px 0;color:#f0f0f0;
+ font-size:17px;line-height:1.7;
+}
+.features{
+ display:flex;justify-content:space-between;
+ text-align:center;margin:10px 0 24px;
+}
+.feature{width:31%;color:#d7b07b}
+.feature span{
+ display:block;color:#fff;margin-top:10px;
+ font-size:15px;line-height:1.4;
+}
+.buttons{
+ display:flex;gap:16px;padding-bottom:30px;
+}
+.btn{
+ flex:1;padding:18px;border-radius:18px;
+ text-align:center;font-size:20px;
+}
+.btn.dark{background:#3a3a3a}
+.btn.gold{background:#d6b07a;color:#222;font-weight:600}
+</style>
+</head>
+<body>
+<div class="phone">
+<div class="dynamic-island"></div>
+<div class="status"><div>9:41</div><div>◔ ◉ ▰</div></div>
+
+<div class="content">
+<div class="topbar"><div class="icon">‹</div><div><span class="icon">♡</span> <span class="icon">↗</span></div></div>
+
+<div class="room">Phòng 2 - Văn hóa Đông Sơn</div>
+<div class="hero-space"></div>
+
+<div class="dots">● ○ ○ ○ ○</div>
+
+<div class="info">
+<h1>Trống đồng Ngọc Lũ</h1>
+
+<div class="meta">
+Văn hóa Đông Sơn • Khoảng thế kỷ I TCN – I SCN<br>
+Chất liệu: Đồng • Kích thước: Cao 63 cm, Mặt trống đường kính 79 cm<br>
+Hiện vật gốc • Bảo tàng Lịch sử Quốc gia
+</div>
+
+<div class="audio">
+<h3>✧ Giới thiệu hiện vật ⓘ</h3>
+<p>Lắng nghe phần thuyết minh về trống đồng Ngọc Lũ.</p>
+<div class="bar"></div>
+<div class="times"><span>01:15</span><span>03:42</span></div>
+<div class="controls">
+<div>↺15</div>
+<div class="play">❚❚</div>
+<div>15↻</div>
+</div>
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div>🔊 ─────●────────</div>
+<div>1.0x</div>
+</div>
+</div>
+
+<div class="tabs">
+<div class="tab active">Thông tin</div>
+<div class="tab">Ý nghĩa</div>
+<div class="tab">Hình ảnh 360°</div>
+<div class="tab">Liên quan</div>
+</div>
+
+<div class="desc">
+Trống đồng Ngọc Lũ là hiện vật tiêu biểu của văn hóa Đông Sơn, được phát hiện tại làng Ngọc Lũ, huyện Bình Lục, tỉnh Hà Nam năm 1893. Trống có kiểu dáng cân đối, hoa văn trang trí tinh xảo với hình ảnh con người, động vật, nhà sàn, thuyền... phản ánh đời sống tinh thần và xã hội của cư dân thời bấy giờ.
+</div>
+
+<div class="features">
+<div class="feature">👥<span>Biểu tượng của quyền lực và sự thịnh vượng</span></div>
+<div class="feature">⛵<span>Hình ảnh thuyền chiến và nhà sàn đặc trưng</span></div>
+<div class="feature">👪<span>Phản ánh đời sống cộng đồng và tín ngưỡng</span></div>
+</div>
+
+<div class="buttons">
+<div class="btn dark">📍 Định vị trên bản đồ</div>
+<div class="btn gold">Tìm hiểu thêm hiện vật ›</div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>

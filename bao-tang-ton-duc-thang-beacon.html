@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bảo tàng Tôn Đức Thắng — Beacon Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Be+Vietnam+Pro:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0b0905;--surface:#140f0a;--card:#1c1510;--border:#2c2318;
+  --gold:#c8973a;--gold2:#e8c570;--text:#ede5d5;--muted:#7a6e5e;
+  --green:#4a8f6a;--red:#9b2c2c;--blue:#4a7fa0;
+}
+html,body{width:100%;min-height:100%;}
+body{background:var(--bg);color:var(--text);font-family:'Be Vietnam Pro',sans-serif;font-size:14px;}
+
+/* ===== LAYOUT ===== */
+.scene{
+  display:flex;gap:44px;align-items:flex-start;justify-content:center;
+  padding:36px 28px 60px;flex-wrap:wrap;
+}
+@media(max-width:780px){.scene{flex-direction:column;align-items:center;gap:28px;padding:20px 14px;}}
+
+/* ===== LEFT PANEL ===== */
+.left-panel{flex:1;min-width:300px;max-width:500px;}
+
+.museum-header{margin-bottom:22px;}
+.museum-tag{
+  font-size:9px;letter-spacing:3.5px;text-transform:uppercase;
+  color:var(--gold);margin-bottom:8px;display:flex;align-items:center;gap:8px;
+}
+.museum-tag::before{content:'';width:24px;height:1px;background:var(--gold);}
+.museum-name{
+  font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;
+  color:var(--text);line-height:1.2;margin-bottom:4px;
+}
+.museum-addr{font-size:11px;color:var(--muted);}
+
+/* ===== FLOOR MAP ===== */
+.map-wrap{
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;
+  padding:20px;position:relative;height:360px;overflow:hidden;
+}
+.map-wrap::before{
+  content:'';position:absolute;inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 39px,var(--border) 39px,var(--border) 40px),
+             repeating-linear-gradient(90deg,transparent,transparent 39px,var(--border) 39px,var(--border) 40px);
+  opacity:.18;border-radius:14px;
+}
+
+/* Floor label */
+.floor-label{
+  position:absolute;top:10px;right:14px;font-size:9px;letter-spacing:2px;
+  text-transform:uppercase;color:var(--gold);opacity:.7;
+}
+
+/* Rooms */
+.room{
+  position:absolute;border:1.5px solid var(--border);border-radius:5px;
+  background:rgba(200,151,58,.03);
+}
+.room-lbl{
+  position:absolute;top:5px;left:7px;font-size:8px;letter-spacing:.8px;
+  text-transform:uppercase;color:var(--muted);opacity:.7;white-space:nowrap;
+}
+
+/* floor legend */
+.floor-pill{
+  position:absolute;bottom:10px;left:14px;background:rgba(20,15,10,.85);
+  border:1px solid var(--border);border-radius:20px;padding:4px 10px;
+  display:flex;align-items:center;gap:10px;
+}
+.fp-item{display:flex;align-items:center;gap:5px;font-size:9px;color:var(--muted);}
+.fp-dot{width:8px;height:8px;border-radius:50%;}
+
+/* Beacon dot */
+.bdot{
+  position:absolute;width:13px;height:13px;border-radius:50%;
+  background:var(--muted);border:2px solid var(--bg);cursor:pointer;
+  transition:all .4s ease;z-index:2;
+}
+.bdot.nearby{
+  background:var(--green);
+  box-shadow:0 0 0 5px rgba(74,143,106,.2),0 0 18px rgba(74,143,106,.5);
+}
+.bdot.nearby::after{
+  content:'';position:absolute;inset:-7px;border-radius:50%;
+  border:1.5px solid rgba(74,143,106,.35);
+  animation:rpl 1.6s ease-out infinite;
+}
+@keyframes rpl{0%{transform:scale(1);opacity:1}100%{transform:scale(2.1);opacity:0}}
+
+/* Beacon name tag */
+.btag{
+  position:absolute;font-size:8.5px;color:var(--muted);white-space:nowrap;
+  pointer-events:none;transition:color .3s;
+}
+.btag.nearby{color:var(--gold2);}
+
+/* User dot */
+.udot{
+  position:absolute;width:16px;height:16px;border-radius:50%;
+  background:#4fa3e0;border:3px solid #fff;
+  box-shadow:0 0 12px rgba(79,163,224,.7);z-index:10;
+  transition:left 1.6s cubic-bezier(.4,0,.2,1),top 1.6s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;
+}
+.udot::after{
+  content:'';position:absolute;inset:-6px;border-radius:50%;
+  background:rgba(79,163,224,.14);animation:upulse 2s ease infinite;
+}
+@keyframes upulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.45);opacity:.4}}
+
+/* Proximity ring on map */
+.pring{
+  position:absolute;border-radius:50%;
+  border:1.5px dashed rgba(74,143,106,.22);pointer-events:none;
+  transition:opacity .5s;
+}
+
+/* ===== CONTROLS ===== */
+.controls{margin-top:18px;display:flex;gap:9px;flex-wrap:wrap;}
+.sbtn{
+  flex:1;padding:11px 14px;border-radius:9px;border:1.5px solid var(--border);
+  background:var(--card);color:var(--text);font-family:'Be Vietnam Pro',sans-serif;
+  font-size:12px;cursor:pointer;transition:all .2s;min-width:88px;
+}
+.sbtn:hover{border-color:var(--gold);color:var(--gold);}
+.sbtn.active{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:600;}
+
+.step-info{
+  margin-top:14px;padding:13px 15px;background:var(--surface);
+  border-radius:9px;border-left:3px solid var(--gold);font-size:12.5px;
+  color:var(--muted);line-height:1.7;min-height:54px;transition:all .3s;
+}
+
+/* Legend */
+.legend{margin-top:14px;display:flex;gap:18px;flex-wrap:wrap;}
+.lg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);}
+.lg-dot{width:10px;height:10px;border-radius:50%;}
+
+/* ===== PHONE ===== */
+.phone-wrap{display:flex;flex-direction:column;align-items:center;}
+.phone{
+  width:300px;height:634px;background:#111;border-radius:46px;
+  border:2px solid #252525;
+  box-shadow:0 0 0 1px #333,0 36px 72px rgba(0,0,0,.75),inset 0 0 36px rgba(0,0,0,.4);
+  position:relative;overflow:hidden;
+}
+.notch{
+  position:absolute;top:13px;left:50%;transform:translateX(-50%);
+  width:88px;height:24px;background:#111;border-radius:12px;z-index:100;
+}
+.screen{
+  position:absolute;inset:4px;border-radius:42px;
+  background:var(--bg);overflow:hidden;display:flex;flex-direction:column;
+}
+
+/* Status bar */
+.sbar{
+  padding:14px 18px 5px;display:flex;justify-content:space-between;
+  align-items:center;font-size:10px;color:var(--muted);flex-shrink:0;
+}
+
+/* App header */
+.aheader{
+  padding:3px 17px 11px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.atitle{
+  font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:700;
+  color:var(--text);
+}
+.asub{font-size:9.5px;color:var(--gold);letter-spacing:1.5px;text-transform:uppercase;}
+
+/* Notification banner */
+.nban{
+  margin:9px 9px 0;
+  background:linear-gradient(135deg,#1a2a1a,#121f12);
+  border:1px solid rgba(74,143,106,.4);border-radius:12px;
+  padding:9px 11px;display:flex;gap:9px;align-items:center;
+  transform:translateY(-90px);opacity:0;
+  transition:all .5s cubic-bezier(.34,1.56,.64,1);flex-shrink:0;
+}
+.nban.show{transform:translateY(0);opacity:1;}
+.nicon{
+  width:30px;height:30px;border-radius:8px;background:var(--green);
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;
+}
+.ntxt{flex:1;}
+.ntitle{font-size:10.5px;font-weight:600;color:var(--text);}
+.nbody{font-size:9.5px;color:var(--muted);}
+
+/* App scroll content */
+.acontent{flex:1;overflow-y:auto;padding:11px 13px;}
+.acontent::-webkit-scrollbar{width:0;}
+
+.sec-title{
+  font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);
+  margin-bottom:9px;display:flex;align-items:center;gap:6px;
+}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border);}
+
+/* Artifact card */
+.alist{display:flex;flex-direction:column;gap:7px;}
+.acard{
+  background:var(--card);border:1px solid var(--border);border-radius:11px;
+  padding:9px 11px;display:flex;gap:9px;align-items:center;
+  transition:all .4s cubic-bezier(.34,1.2,.64,1);
+}
+.acard.new{
+  animation:slin .5s cubic-bezier(.34,1.2,.64,1) forwards;
+  border-color:rgba(200,151,58,.4);
+  background:linear-gradient(135deg,rgba(200,151,58,.06),var(--card));
+}
+@keyframes slin{from{transform:translateX(28px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.acard-ico{
+  width:38px;height:38px;border-radius:9px;
+  background:rgba(200,151,58,.1);display:flex;align-items:center;
+  justify-content:center;font-size:19px;flex-shrink:0;
+}
+.acard-body{flex:1;min-width:0;}
+.acard-name{font-size:11.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.acard-meta{font-size:9.5px;color:var(--muted);}
+.dist-chip{
+  display:inline-flex;align-items:center;gap:3px;font-size:8.5px;
+  background:rgba(200,151,58,.1);color:var(--gold2);padding:2px 6px;
+  border-radius:20px;border:1px solid rgba(200,151,58,.2);margin-top:2px;
+}
+.acard-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;}
+.badge{
+  font-size:8.5px;padding:2px 7px;border-radius:20px;
+  background:rgba(74,143,106,.14);color:var(--green);
+  border:1px solid rgba(74,143,106,.3);white-space:nowrap;
+}
+.nbdot{
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green);flex-shrink:0;
+  animation:blk 1.6s ease infinite;
+}
+@keyframes blk{0%,100%{opacity:1}50%{opacity:.25}}
+
+.sig{display:flex;align-items:flex-end;gap:1.5px;}
+.sig-b{width:3px;border-radius:1px;background:var(--border);}
+.sig-b.on{background:var(--green);}
+.sig-b:nth-child(1){height:5px;}
+.sig-b:nth-child(2){height:8px;}
+.sig-b:nth-child(3){height:11px;}
+.sig-b:nth-child(4){height:14px;}
+
+.empty{
+  text-align:center;padding:22px 0;color:var(--muted);font-size:11px;
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+}
+.empty-ico{font-size:26px;opacity:.35;}
+
+/* ===== VIDEO OVERLAY ===== */
+.voverlay{
+  position:absolute;inset:0;background:#000;z-index:50;
+  display:flex;flex-direction:column;border-radius:42px;overflow:hidden;
+  transform:translateY(101%);transition:transform .55s cubic-bezier(.22,1,.36,1);
+}
+.voverlay.show{transform:translateY(0);}
+
+.vtopbar{
+  padding:14px 15px 7px;display:flex;justify-content:space-between;
+  align-items:center;background:rgba(0,0,0,.85);flex-shrink:0;
+}
+.vclose{
+  width:27px;height:27px;border-radius:50%;background:rgba(255,255,255,.14);
+  border:none;color:#fff;font-size:13px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.vauto-badge{
+  font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--gold);background:rgba(200,151,58,.14);padding:3px 8px;
+  border-radius:4px;border:1px solid rgba(200,151,58,.3);
+}
+
+.vbody{flex:1;display:flex;align-items:center;justify-content:center;position:relative;background:#080503;}
+
+.vsim{
+  width:100%;height:100%;
+  background:linear-gradient(155deg,#1e1408,#080503 50%,#0e0e14);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  position:relative;
+}
+
+.art-orb{
+  width:110px;height:110px;border-radius:50%;
+  background:radial-gradient(circle at 35% 35%,var(--gold2),#4a2a08);
+  box-shadow:0 0 55px rgba(200,151,58,.3),inset 0 0 28px rgba(0,0,0,.45);
+  margin-bottom:20px;
+  display:flex;align-items:center;justify-content:center;font-size:44px;
+  animation:flt 3.2s ease-in-out infinite;
+}
+@keyframes flt{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+
+.eq{display:flex;gap:3px;align-items:flex-end;margin-bottom:12px;}
+.eq-b{width:3px;border-radius:2px;background:var(--gold);animation:eq 0.85s ease-in-out infinite;}
+.eq-b:nth-child(1){height:7px;animation-delay:0s}
+.eq-b:nth-child(2){height:15px;animation-delay:.14s}
+.eq-b:nth-child(3){height:11px;animation-delay:.28s}
+.eq-b:nth-child(4){height:19px;animation-delay:.07s}
+.eq-b:nth-child(5){height:8px;animation-delay:.21s}
+@keyframes eq{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+
+.vtitle{
+  font-family:'Cormorant Garamond',serif;font-size:15px;
+  color:var(--text);text-align:center;margin-bottom:4px;padding:0 12px;
+}
+.vsub{font-size:10px;color:var(--muted);text-align:center;}
+
+.vpbar{position:absolute;bottom:0;left:0;right:0;height:3px;background:rgba(255,255,255,.08);}
+.vpfill{height:100%;background:var(--gold);animation:pgrow 14s linear infinite;}
+@keyframes pgrow{from{width:0%}to{width:100%}}
+
+.vinfobar{
+  padding:9px 15px;background:rgba(0,0,0,.6);
+  display:flex;align-items:center;gap:10px;flex-shrink:0;
+}
+.vthumb{
+  width:34px;height:34px;border-radius:8px;
+  background:linear-gradient(135deg,var(--gold),#3a1e04);
+  display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;
+}
+.vmeta{flex:1;}
+.vmeta-t{font-size:11.5px;font-weight:600;color:var(--text);}
+.vmeta-s{font-size:9.5px;color:var(--muted);}
+.ap-badge{
+  font-size:8.5px;background:rgba(200,151,58,.18);color:var(--gold);
+  padding:3px 8px;border-radius:20px;border:1px solid rgba(200,151,58,.4);
+}
+
+/* ===== TOAST ===== */
+.toast{
+  position:fixed;bottom:28px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--card);border:1px solid var(--gold);padding:11px 20px;
+  border-radius:50px;font-size:12.5px;color:var(--text);
+  transition:transform .4s cubic-bezier(.34,1.4,.64,1);
+  z-index:999;white-space:nowrap;box-shadow:0 8px 28px rgba(0,0,0,.45);
+}
+.toast.show{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div class="scene">
+
+<!-- ====== LEFT: SƠ ĐỒ + ĐIỀU KHIỂN ====== -->
+<div class="left-panel">
+  <div class="museum-header">
+    <div class="museum-tag">Smart Museum · Beacon System</div>
+    <div class="museum-name">Bảo tàng<br>Tôn Đức Thắng</div>
+    <div class="museum-addr">📍 Số 5 đường Tôn Đức Thắng, P. Bến Nghé, Q.1, TP.HCM</div>
+  </div>
+
+  <!-- Floor map -->
+  <div class="map-wrap">
+    <div class="floor-label">Tầng 3 &amp; 4</div>
+
+    <!-- Rooms tầng 3 -->
+    <div class="room" style="left:18px;top:18px;width:150px;height:105px;">
+      <span class="room-lbl">Thời Niên Thiếu</span>
+    </div>
+    <div class="room" style="left:186px;top:18px;width:140px;height:105px;">
+      <span class="room-lbl">Phong Trào Công Nhân</span>
+    </div>
+    <div class="room" style="left:18px;top:140px;width:140px;height:100px;">
+      <span class="room-lbl">15 Năm Tù Côn Đảo</span>
+    </div>
+    <!-- Rooms tầng 4 -->
+    <div class="room" style="left:176px;top:140px;width:150px;height:100px;">
+      <span class="room-lbl">Đại Đoàn Kết / ATK</span>
+    </div>
+    <div class="room" style="left:18px;top:257px;width:150px;height:82px;">
+      <span class="room-lbl">Chủ Tịch Nước</span>
+    </div>
+    <div class="room" style="left:186px;top:257px;width:140px;height:82px;">
+      <span class="room-lbl">Tác Phẩm Mỹ Thuật</span>
+    </div>
+
+    <!-- Proximity rings -->
+    <div class="pring" id="r0" style="width:70px;height:70px;left:89px;top:62px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+    <div class="pring" id="r1" style="width:70px;height:70px;left:252px;top:62px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+    <div class="pring" id="r2" style="width:70px;height:70px;left:84px;top:185px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+    <div class="pring" id="r3" style="width:70px;height:70px;left:248px;top:185px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+    <div class="pring" id="r4" style="width:70px;height:70px;left:89px;top:294px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+    <div class="pring" id="r5" style="width:70px;height:70px;left:252px;top:294px;margin-left:-35px;margin-top:-35px;opacity:0;"></div>
+
+    <!-- Beacon dots -->
+    <div class="bdot" id="b0" style="left:82px;top:55px;" title="Bộ đồ nghề thợ mộc"></div>
+    <div class="btag" id="bt0" style="left:60px;top:71px;">Đồ Nghề Thợ Mộc</div>
+
+    <div class="bdot" id="b1" style="left:245px;top:55px;" title="Cờ đỏ Biển Đen"></div>
+    <div class="btag" id="bt1" style="left:218px;top:71px;">Cờ Đỏ Biển Đen</div>
+
+    <div class="bdot" id="b2" style="left:77px;top:178px;" title="Tù phục Côn Đảo"></div>
+    <div class="btag" id="bt2" style="left:54px;top:194px;">Tù Phục Côn Đảo</div>
+
+    <div class="bdot" id="b3" style="left:241px;top:178px;" title="Mô hình nhà sàn ATK"></div>
+    <div class="btag" id="bt3" style="left:215px;top:194px;">Nhà Sàn ATK</div>
+
+    <div class="bdot" id="b4" style="left:82px;top:287px;" title="Xe ô tô Chủ tịch nước"></div>
+    <div class="btag" id="bt4" style="left:58px;top:303px;">Xe Chủ Tịch Nước</div>
+
+    <div class="bdot" id="b5" style="left:245px;top:287px;" title="Tranh ghép hạt lúa"></div>
+    <div class="btag" id="bt5" style="left:222px;top:303px;">Tranh Hạt Lúa</div>
+
+    <!-- User dot -->
+    <div class="udot" id="udot" style="left:160px;top:175px;"></div>
+
+    <!-- Legend -->
+    <div class="floor-pill">
+      <div class="fp-item"><div class="fp-dot" style="background:#4fa3e0;"></div>Bạn</div>
+      <div class="fp-item"><div class="fp-dot" style="background:var(--muted);"></div>Beacon</div>
+      <div class="fp-item"><div class="fp-dot" style="background:var(--green);"></div>Gần</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <button class="sbtn active" id="s0" onclick="goStep(0)">① Lối vào</button>
+    <button class="sbtn" id="s1" onclick="goStep(1)">② Tầng 3</button>
+    <button class="sbtn" id="s2" onclick="goStep(2)">③ Tiếp cận</button>
+    <button class="sbtn" id="s3" onclick="goStep(3)">④ Tầng 4</button>
+  </div>
+  <div class="step-info" id="stepInfo">
+    📍 Khách tham quan đang đứng tại sảnh chính. Hệ thống beacon đang quét xung quanh — chưa phát hiện hiện vật nào trong tầm gần.
+  </div>
+</div>
+
+<!-- ====== RIGHT: PHONE ====== -->
+<div class="phone-wrap">
+  <div class="phone">
+    <div class="notch"></div>
+    <div class="screen">
+
+      <!-- Status bar -->
+      <div class="sbar">
+        <span>9:41</span>
+        <span style="display:flex;align-items:center;gap:5px;">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);display:inline-block;animation:blk 2s ease infinite;"></span>
+          Bluetooth · 4G
+        </span>
+      </div>
+
+      <!-- App header -->
+      <div class="aheader">
+        <div class="atitle">Museum Guide</div>
+        <div class="asub">Bảo tàng Tôn Đức Thắng</div>
+      </div>
+
+      <!-- Notification banner -->
+      <div class="nban" id="nban">
+        <div class="nicon" id="nico">🏛️</div>
+        <div class="ntxt">
+          <div class="ntitle">Hiện vật gần bạn!</div>
+          <div class="nbody" id="nbody">Đang tiếp cận...</div>
+        </div>
+      </div>
+
+      <!-- Content -->
+      <div class="acontent">
+        <div class="sec-title">Hiện vật gần đây</div>
+        <div class="alist" id="alist">
+          <div class="empty" id="empty">
+            <div class="empty-ico">📡</div>
+            <span>Chưa phát hiện hiện vật nào.<br>Di chuyển để khám phá bảo tàng.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Video overlay -->
+      <div class="voverlay" id="voverlay">
+        <div class="vtopbar">
+          <button class="vclose" onclick="closeVideo()">✕</button>
+          <div class="vauto-badge">● TỰ ĐỘNG PHÁT</div>
+          <div style="width:27px;"></div>
+        </div>
+        <div class="vbody">
+          <div class="vsim">
+            <div class="art-orb" id="vorb">🔨</div>
+            <div class="eq">
+              <div class="eq-b"></div><div class="eq-b"></div><div class="eq-b"></div>
+              <div class="eq-b"></div><div class="eq-b"></div>
+            </div>
+            <div class="vtitle" id="vtitle">Bộ đồ nghề làm mộc</div>
+            <div class="vsub" id="vsub">Thời niên thiếu · Bác Tôn</div>
+            <div class="vpbar"><div class="vpfill"></div></div>
+          </div>
+        </div>
+        <div class="vinfobar">
+          <div class="vthumb" id="vthumb">🔨</div>
+          <div class="vmeta">
+            <div class="vmeta-t" id="vmetaT">Thuyết minh hiện vật</div>
+            <div class="vmeta-s">Video tự động · Beacon kích hoạt</div>
+          </div>
+          <div class="ap-badge">AutoPlay</div>
+        </div>
+      </div>
+
+    </div><!-- /screen -->
+  </div><!-- /phone -->
+</div><!-- /phone-wrap -->
+
+</div><!-- /scene -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+const ARTIFACTS = [
+  {
+    id:'a0', ico:'🔨', name:'Bộ Đồ Nghề Làm Mộc',
+    room:'Thời Niên Thiếu · Tầng 3',
+    dist:'2.4m',
+    desc:'Bộ đồ nghề thợ mộc và sửa xe gắn bó suốt thời trẻ của Bác Tôn tại Sài Gòn.',
+    mapX:82, mapY:55
+  },
+  {
+    id:'a1', ico:'🚩', name:'Cờ Đỏ Tàu Pháp (Biển Đen)',
+    room:'Phong Trào Công Nhân · Tầng 3',
+    dist:'3.1m',
+    desc:'Lá cờ đỏ Bác Tôn kéo lên tàu Pháp năm 1919, ủng hộ Cách mạng Nga tại Biển Đen.',
+    mapX:245, mapY:55
+  },
+  {
+    id:'a2', ico:'🧥', name:'Tù Phục Côn Đảo',
+    room:'15 Năm Tù Côn Đảo · Tầng 3',
+    dist:'2.9m',
+    desc:'Trang phục và thư từ của Bác Tôn trong 15 năm bị giam cầm tại "địa ngục trần gian" Côn Đảo.',
+    mapX:77, mapY:178
+  },
+  {
+    id:'a3', ico:'🏠', name:'Mô Hình Nhà Sàn ATK – Việt Bắc',
+    room:'Đại Đoàn Kết / ATK · Tầng 4',
+    dist:'3.6m',
+    desc:'Mô phỏng ngôi nhà sàn phong cách Nam Bộ nơi Bác Tôn sống và làm việc tại chiến khu Việt Bắc.',
+    mapX:241, mapY:178
+  },
+  {
+    id:'a4', ico:'🚗', name:'Xe Ô Tô Chủ Tịch Nước',
+    room:'Một Vị Chủ Tịch Nước · Tầng 4',
+    dist:'2.1m',
+    desc:'Chiếc xe ô tô Chủ tịch Tôn Đức Thắng sử dụng trong những năm giữ cương vị lãnh đạo đất nước.',
+    mapX:82, mapY:287
+  },
+  {
+    id:'a5', ico:'🎨', name:'Tranh Chân Dung Ghép Hạt Lúa',
+    room:'Tác Phẩm Mỹ Thuật · Tầng 4',
+    dist:'4.0m',
+    desc:'Chân dung Bác Tôn được ghép từ hạt lúa, hạt mè — chất liệu quê hương An Giang do nghệ nhân thực hiện.',
+    mapX:245, mapY:287
+  }
+];
+
+const STEPS = [
+  {
+    uPos:{x:160,y:175}, nearby:[],
+    info:'📍 Khách tham quan đang đứng tại sảnh chính. Hệ thống beacon đang quét xung quanh — chưa phát hiện hiện vật nào trong tầm gần.',
+    video:false
+  },
+  {
+    uPos:{x:105,y:95}, nearby:[0,1],
+    info:'📡 Beacon phát hiện 2 hiện vật! Khách vừa bước vào Tầng 3 — Thông báo "Bộ Đồ Nghề Làm Mộc" và "Cờ Đỏ Biển Đen" xuất hiện trong danh sách.',
+    video:false
+  },
+  {
+    uPos:{x:82,y:68}, nearby:[0,1],
+    info:'▶️ Khoảng cách < 3m! Video thuyết minh "Bộ Đồ Nghề Làm Mộc" tự động phát. Đây là kỷ vật thời niên thiếu gắn bó với Bác Tôn suốt những năm tháng làm thợ tại Sài Gòn.',
+    video:true, videoIdx:0
+  },
+  {
+    uPos:{x:240,y:185}, nearby:[2,3],
+    info:'🏛️ Khách di chuyển lên Tầng 4. Beacon phát hiện "Tù Phục Côn Đảo" và "Nhà Sàn ATK – Việt Bắc". Danh sách hiện vật gần đây cập nhật tức thì.',
+    video:false
+  }
+];
+
+let currentStep = 0;
+let nearbySet = new Set();
+const udot = document.getElementById('udot');
+const alist = document.getElementById('alist');
+const empty = document.getElementById('empty');
+const nban  = document.getElementById('nban');
+const voverlay = document.getElementById('voverlay');
+const toast = document.getElementById('toast');
+
+function goStep(n){
+  currentStep = n;
+  const s = STEPS[n];
+  document.querySelectorAll('.sbtn').forEach((b,i)=>b.classList.toggle('active',i===n));
+  document.getElementById('stepInfo').textContent = s.info;
+
+  // Move user
+  udot.style.left = s.uPos.x + 'px';
+  udot.style.top  = s.uPos.y + 'px';
+
+  const newSet = new Set(s.nearby);
+
+  // Update beacon dots
+  ARTIFACTS.forEach((_,i)=>{
+    const b = document.getElementById('b'+i);
+    const t = document.getElementById('bt'+i);
+    const r = document.getElementById('r'+i);
+    if(newSet.has(i)){
+      b.className='bdot nearby'; t.className='btag nearby'; r.style.opacity='1';
+    } else {
+      b.className='bdot'; t.className='btag'; r.style.opacity='0';
+    }
+  });
+
+  // Add new cards
+  s.nearby.forEach(i=>{
+    if(!nearbySet.has(i)){
+      addCard(ARTIFACTS[i]);
+      showNotif(ARTIFACTS[i]);
+    }
+  });
+  nearbySet = newSet;
+
+  // Video
+  if(s.video && s.videoIdx!=null){
+    const art = ARTIFACTS[s.videoIdx];
+    document.getElementById('vorb').textContent = art.ico;
+    document.getElementById('vtitle').textContent = art.name;
+    document.getElementById('vsub').textContent = art.room;
+    document.getElementById('vmetaT').textContent = art.name;
+    document.getElementById('vthumb').textContent = art.ico;
+    setTimeout(()=>voverlay.classList.add('show'),700);
+  } else {
+    voverlay.classList.remove('show');
+  }
+}
+
+function addCard(art){
+  if(document.getElementById('card-'+art.id)) return;
+  if(empty.parentNode) empty.remove();
+
+  const c = document.createElement('div');
+  c.className = 'acard new';
+  c.id = 'card-'+art.id;
+  c.innerHTML = `
+    <div class="acard-ico">${art.ico}</div>
+    <div class="acard-body">
+      <div class="acard-name">${art.name}</div>
+      <div class="acard-meta">${art.room}</div>
+      <div class="dist-chip">📡 ${art.dist}</div>
+    </div>
+    <div class="acard-right">
+      <div class="sig">
+        <div class="sig-b on"></div><div class="sig-b on"></div>
+        <div class="sig-b on"></div><div class="sig-b"></div>
+      </div>
+      <span class="badge">Gần đây</span>
+    </div>
+    <div class="nbdot"></div>`;
+  alist.insertBefore(c, alist.firstChild);
+}
+
+function showNotif(art){
+  document.getElementById('nico').textContent = art.ico;
+  document.getElementById('nbody').textContent = art.name + ' · ' + art.dist;
+  nban.classList.add('show');
+  setTimeout(()=>nban.classList.remove('show'), 3600);
+  showToast('📡 Beacon: ' + art.name);
+}
+
+function closeVideo(){
+  voverlay.classList.remove('show');
+  showToast('⏸ Video đã tạm dừng');
+}
+
+function showToast(msg){
+  toast.textContent = msg;
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'), 2800);
+}
+
+// Auto demo on load
+function autoDemo(){
+  goStep(0);
+  setTimeout(()=>goStep(1), 2000);
+  setTimeout(()=>goStep(2), 4200);
+}
+setTimeout(autoDemo, 500);
+</script>
+</body>
+</html>
