@@ -1,29 +1,34 @@
 # Beacon Client
 
-Đây là ứng dụng di động (được xây dựng bằng công nghệ Flutter) sử dụng sóng Bluetooth Low Energy (iBeacon). Ứng dụng giúp tự động phát hiện khi người tham quan đi lại gần các hiện vật để hiển thị thông tin, hình ảnh và thuyết minh tương ứng.
+A Flutter-based mobile application that uses **Bluetooth Low Energy (iBeacon)** technology to automatically detect nearby museum artifacts and display their corresponding information, images, and multimedia guides in real time.
 
-## Tác giả
+## Author
 
-Dự án được thiết kế và phát triển bởi đội ngũ **TAPAMA**.
+This project was designed and developed by the **TAPAMA** team.
 
-## Cài đặt cơ bản (Installation)
+## Installation
 
-### 1. Yêu cầu hệ thống
-- Đã cài đặt [Flutter SDK](https://flutter.dev/).
-- Cần có một chiếc điện thoại Android thực tế cắm vào máy tính để test (Lưu ý: Máy ảo / Emulator không hỗ trợ quét sóng Bluetooth phần cứng).
+### 1. Prerequisites
 
-### 2. Các bước chạy ứng dụng
-Mở Terminal / Command Prompt tại thư mục gốc của dự án và chạy lần lượt các lệnh sau:
+* Install the latest stable version of the [Flutter SDK](https://flutter.dev/).
+* An **Android physical device** is required for testing.
+
+  > **Note:** Android emulators do not support hardware Bluetooth Low Energy (BLE) scanning.
+
+### 2. Run the application
+
+Open a Terminal (or Command Prompt) in the project's root directory and execute the following commands:
 
 ```bash
-# Tải thư viện
+# Install dependencies
 flutter pub get
 
-# Chạy ứng dụng lên điện thoại đã kết nối bằng cáp USB
+# Run the application on a connected Android device
 flutter run
+```
 
-## Bản quyền (License)
+## License
 
 Copyright © 2026 TAPAMA. All rights reserved.
 
-Mã nguồn của dự án được công khai nhằm mục đích giới thiệu và tham khảo. Mọi hình thức sao chép, sửa đổi, phân phối, tái sử dụng hoặc sử dụng cho mục đích thương mại mà không có sự cho phép bằng văn bản của chủ sở hữu đều không được phép.
+This source code is made publicly available for demonstration and reference purposes only. Any copying, modification, distribution, reuse, or commercial use of this project, in whole or in part, without prior written permission from the copyright holder is strictly prohibited.
