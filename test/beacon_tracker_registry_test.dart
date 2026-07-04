@@ -82,10 +82,16 @@ void main() {
       expect(emits.length, 3);
       expect(emits.every((s) => s.isEmpty), isTrue);
 
-      // Steady signal (identical packets) — old registry would gate these;
-      // the new contract must keep the arbiter's clock ticking.
+      // A NEW beacon appears: by contract that publishes ONE immediate
+      // snapshot (entry latency) — see the previous test. Capture the count
+      // AFTER that immediate emit so we isolate just the heartbeats below.
       reg.onReading(reading(1, 1, -60, t0.add(async.elapsed)));
+      async.flushMicrotasks();
+      expect(emits.length, 4); // 3 heartbeats + 1 sighting
       final countAfterSighting = emits.length;
+
+      // Steady signal (identical packets) — the old registry would gate
+      // these; the new contract must keep the arbiter's clock ticking.
       async.elapse(const Duration(seconds: 3));
       async.flushMicrotasks();
       expect(emits.length, countAfterSighting + 3);
