@@ -1,75 +1,86 @@
+// Destination: lib/data/processors/beacon_tracker_registry.dart (REPLACES file)
+//
+// What changed vs the previous version (zone-first refactor, Phase 1 Step 3):
+//   OUTPUT:  List<ActiveBeacon> leaderboard (sorted by metres, per-beacon)
+//            → List<ZoneSignal> snapshot (aggregated PER MAJOR, sorted by dB).
+//   EMISSION PHILOSOPHY — deliberately REVERSED: the old registry fed the UI
+//            directly, so signature-gating was essential. This registry feeds
+//            the ZoneArbiter, which consumes snapshots as a CLOCK (dwell and
+//            lockout are time-based). It therefore emits UNGATED:
+//              • a 1 Hz heartbeat on every sweep (even if nothing changed,
+//                even if the snapshot is empty), plus
+//              • an immediate emit when a NEW beacon appears (zone-entry
+//                latency: first packet → candidate starts without waiting up
+//                to 1 s for the next tick).
+//            UI-facing change-gating now lives one layer up, on ZonePresence.
+//   CLOCK:   DateTime.now() is injected (`now` ctor param) so sweeps are
+//            deterministic under FakeAsync in tests.
+//   KEPT:    O(1) hot path, create-on-sight trackers, staleness demotion /
+//            eviction sweep, maxTrackers flood ceiling, stop()/dispose()
+//            semantics, no-await-across-mutation concurrency rule.
+
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:beacon_client/data/processors/beacon_tracker.dart';
-import 'package:beacon_client/domain/models/active_beacon.dart';
 import 'package:beacon_client/domain/models/beacon_reading.dart';
-import 'package:beacon_client/domain/models/proximity_info.dart';
+import 'package:beacon_client/domain/models/zone_signal.dart';
 
-/// Owns the live beacon population and the *single* time authority.
-///
-/// Responsibilities:
-///   - O(1) routing of packets to per-beacon [BeaconTracker]s (create-on-sight).
-///   - A 1 Hz sweep that demotes stale beacons (→ outOfRange) and evicts dead
-///     ones (→ removed from the map) for deterministic, bounded memory.
-///   - Projecting the live population into a sorted leaderboard (closest first)
-///     and emitting it **only when it meaningfully changes**.
-///
-/// Concurrency: single isolate, cooperative scheduling. The hot path and the
-/// sweep never `await` across a map mutation, so they are mutually atomic — no
-/// locks. (Implementation rule: do not introduce such an `await`.)
 class BeaconTrackerRegistry {
   BeaconTrackerRegistry({
     Duration stalenessThreshold = const Duration(seconds: 3),
     Duration evictionThreshold = const Duration(seconds: 12),
     Duration sweepInterval = const Duration(seconds: 1),
     int maxTrackers = 64,
+    DateTime Function()? now,
   })  : _stalenessThreshold = stalenessThreshold,
         _evictionThreshold = evictionThreshold,
         _sweepInterval = sweepInterval,
-        _maxTrackers = maxTrackers;
+        _maxTrackers = maxTrackers,
+        _now = now ?? DateTime.now;
 
-  /// Silent longer than this → demote zone to outOfRange (drops off leaderboard).
-  /// At ~100 ms advertising this is ~30 missed packets — unambiguous loss.
+  /// Beacon silent longer than this → excluded from the aggregate (its zone
+  /// may still be carried by sibling minors). ~30 missed packets at 100 ms.
   final Duration _stalenessThreshold;
 
-  /// Silent longer than this → evict from the map (GC). Deliberately ≫ staleness
-  /// so a briefly-occluded beacon keeps warm Kalman state (no cold restart).
+  /// Silent longer than this → tracker evicted (GC). ≫ staleness so a briefly
+  /// occluded beacon keeps warm Kalman state instead of cold-restarting.
   final Duration _evictionThreshold;
 
   final Duration _sweepInterval;
 
-  /// Defensive ceiling against scan-flooding; real N is bounded by museum beacons
-  /// in RF range (the UUID filter upstream means only museum packets reach here).
+  /// Defensive ceiling against scan flooding (UUID filter upstream already
+  /// limits traffic to museum packets).
   final int _maxTrackers;
 
+  /// Injected time authority — swap for a fake in tests.
+  final DateTime Function() _now;
+
   final Map<int, BeaconTracker> _trackers = {}; // O(1) by packed key
-  final _controller = StreamController<List<ActiveBeacon>>.broadcast();
+  final _controller = StreamController<List<ZoneSignal>>.broadcast();
   Timer? _sweepTimer;
 
-  // Signature of the last emitted leaderboard, for flood-gating.
-  List<_LbSig> _lastSignature = const [];
-  bool _emittedOnce = false;
+  /// Per-major aggregate snapshots, strongest zone first.
+  /// Contract: 1 Hz heartbeat + immediate emit on new-beacon sighting.
+  /// NOT change-gated — see header note.
+  Stream<List<ZoneSignal>> get zoneSignals => _controller.stream;
 
-  /// Sorted leaderboard stream (closest first). Repo-free; service enriches.
-  Stream<List<ActiveBeacon>> get leaderboardStream => _controller.stream;
+  /// Live tracker count — debug/ops surface and test hook.
+  @visibleForTesting
+  int get trackerCount => _trackers.length;
 
-  /// Idempotent. Begins the 1 Hz temporal sweep.
+  /// Idempotent. Begins the 1 Hz sweep (the pipeline's heartbeat).
   void start() {
     _sweepTimer ??= Timer.periodic(_sweepInterval, _sweep);
   }
 
-  /// HOT PATH — O(1): packed-key lookup + [BeaconTracker.update] (Kalman+FSM O(1)).
-  ///
-  /// Projection (O(N) sort) is deliberately **kept off the per-packet path**: it
-  /// runs only on (a) a membership addition or (b) a per-beacon zone change —
-  /// both rare — while plain distance drift and re-ordering are refreshed by the
-  /// 1 Hz sweep. Steady-state cost per packet is therefore O(1).
+  /// HOT PATH — O(1): packed-key lookup + one Kalman step. Projection stays
+  /// off the per-packet path except for the rare new-beacon case.
   void onReading(BeaconReading reading) {
-    if (_controller.isClosed) return; // guard clause
+    if (_controller.isClosed) return;
 
-    final key = (reading.major << 16) | reading.minor;
+    final key = BeaconTracker.packKey(reading.major, reading.minor);
     final existing = _trackers[key];
 
     if (existing == null) {
@@ -83,93 +94,70 @@ class BeaconTrackerRegistry {
       if (kDebugMode) {
         debugPrint('[Registry] + tracker $key (live=${_trackers.length})');
       }
-      _projectAndEmit(); // ADDITION → publish immediately (rare event)
+      _emitSnapshot(); // NEW SIGHTING → publish immediately (entry latency)
       return;
     }
 
-    final zoneBefore = existing.zone;
-    existing.update(reading); // O(1)
-    if (existing.zone != zoneBefore) {
-      _projectAndEmit(); // ZONE CHANGE → publish immediately (rare per beacon)
-    }
+    existing.update(reading); // O(1); next heartbeat carries the new value
   }
 
-  /// 1 Hz temporal authority. Replaces the (banned) busy-loop; yields between
-  /// ticks. Demotes stale, evicts dead, then refreshes ordering (gated).
+  /// 1 Hz temporal authority: evict dead trackers, then emit the heartbeat
+  /// snapshot unconditionally.
   void _sweep(Timer _) {
     if (_controller.isClosed) return;
-    final now = DateTime.now();
+    final now = _now();
 
-    // Snapshot keys: must not mutate _trackers while iterating its views.
     for (final key in _trackers.keys.toList(growable: false)) {
       final t = _trackers[key];
       if (t == null) continue;
-
       if (t.isStaleAt(now, _evictionThreshold)) {
-        _trackers.remove(key); // EVICTION → memory reclaimed deterministically
+        _trackers.remove(key);
         if (kDebugMode) {
           debugPrint('[Registry] - evict $key '
               '(silent > ${_evictionThreshold.inSeconds}s)');
         }
-      } else if (t.isStaleAt(now, _stalenessThreshold)) {
-        if (t.markLost() && kDebugMode) {
-          debugPrint('[Registry] demote $key → outOfRange '
-              '(silent > ${_stalenessThreshold.inSeconds}s)');
-        }
       }
     }
 
-    _projectAndEmit(); // refresh order + distance buckets + removals; still gated
+    _emitSnapshot();
   }
 
-  /// Build the leaderboard (live, in-range, closest first) and emit iff its
-  /// signature changed: order / zone / distance-bucket / membership.
-  void _projectAndEmit() {
+  /// Aggregate live (non-stale) trackers by major and publish. O(N) over a
+  /// population bounded by museum beacons in RF range — trivially cheap at
+  /// 1 Hz + rare sightings.
+  void _emitSnapshot() {
     if (_controller.isClosed) return;
+    final now = _now();
 
-    final board = <ActiveBeacon>[];
+    final byMajor = <int, _MajorAgg>{};
     for (final t in _trackers.values) {
-      if (t.zone == ProximityZone.outOfRange) continue; // demoted/stale excluded
-      board.add(ActiveBeacon(
-        key: t.key,
-        major: t.major,
-        minor: t.minor,
-        reading: t.lastReading,
-        smoothedDistance: t.smoothedDistance,
-        zone: t.zone,
-      ));
+      if (t.isStaleAt(now, _stalenessThreshold)) continue; // silent ⇒ no vote
+      final agg = byMajor.putIfAbsent(t.major, () => _MajorAgg());
+      agg.rssiByMinor[t.minor] = t.smoothedRssi;
+      if (t.smoothedRssi > agg.maxRssi) agg.maxRssi = t.smoothedRssi;
+      if (agg.lastSeen == null || t.lastSeen.isAfter(agg.lastSeen!)) {
+        agg.lastSeen = t.lastSeen;
+      }
     }
-    board.sort((a, b) => a.smoothedDistance.compareTo(b.smoothedDistance));
 
-    final sig = [
-      for (final b in board)
-        _LbSig(b.key, b.zone, (b.smoothedDistance * 10).round()),
-    ];
+    final snapshot = <ZoneSignal>[
+      for (final e in byMajor.entries)
+        ZoneSignal(
+          major: e.key,
+          rssiDb: e.value.maxRssi,
+          rssiByMinor: Map.unmodifiable(e.value.rssiByMinor),
+          lastSeenAt: e.value.lastSeen!,
+        ),
+    ]..sort((a, b) => b.rssiDb.compareTo(a.rssiDb)); // strongest first
 
-    // Emission optimization: drop redundant publishes to spare the UI thread.
-    if (_emittedOnce && _sameSignature(sig, _lastSignature)) return;
-    _lastSignature = sig;
-    _emittedOnce = true;
-    _controller.add(board);
+    _controller.add(snapshot);
   }
 
-  /// Ordered, element-wise comparison: any reorder, zone flip, bucket shift, or
-  /// add/remove yields inequality → a publish.
-  static bool _sameSignature(List<_LbSig> a, List<_LbSig> b) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) return false;
-    }
-    return true;
-  }
-
-  /// Cancel the sweep and drop all state (used on a stop→start cycle).
+  /// Cancel the sweep and drop all state (stop→start cycle).
   void stop() {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _trackers.clear();
-    _lastSignature = const [];
-    _emittedOnce = false;
   }
 
   void dispose() {
@@ -180,23 +168,9 @@ class BeaconTrackerRegistry {
   }
 }
 
-/// Compact, value-equal fingerprint of one leaderboard slot.
-/// distBucket = round(distance × 10) → 0.1 m granularity (matches the displayed
-/// value), so the metres on screen stay live without per-packet flooding.
-class _LbSig {
-  final int key;
-  final ProximityZone zone;
-  final int distBucket;
-
-  const _LbSig(this.key, this.zone, this.distBucket);
-
-  @override
-  bool operator ==(Object other) =>
-      other is _LbSig &&
-      other.key == key &&
-      other.zone == zone &&
-      other.distBucket == distBucket;
-
-  @override
-  int get hashCode => Object.hash(key, zone, distBucket);
+/// Mutable scratch cell used only inside one _emitSnapshot pass.
+class _MajorAgg {
+  double maxRssi = double.negativeInfinity;
+  final Map<int, double> rssiByMinor = {};
+  DateTime? lastSeen;
 }
