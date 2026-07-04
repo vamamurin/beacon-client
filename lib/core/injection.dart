@@ -26,7 +26,7 @@ abstract final class Injection {
       RemoteArtifactRepository(
     // TODO(config): tách endpoint ra --dart-define / AppEnvironment; production
     // phải là HTTPS thay vì IP LAN cleartext.
-    apiUrl: 'http://172.20.10.4:8000/data.json',
+    apiUrl: 'http://192.168.1.8:8000/data.json',
   );
 
   static BeaconService createBeaconService() {
