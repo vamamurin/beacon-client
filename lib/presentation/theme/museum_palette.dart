@@ -1,48 +1,66 @@
+// Destination: lib/presentation/theme/museum_palette.dart (REPLACES current)
+//
+// Colours lifted verbatim from giaodien.html :root, so the Flutter build
+// matches the mockup 1:1. The old gold/brown museum_palette is replaced by this
+// Rijksmuseum-style dark palette (black ground, white ink, grey supporting).
+
 import 'package:flutter/material.dart';
 
-/// Centralised museum palette — the single source of truth for every brand
-/// colour that was previously copy-pasted as private `_kXxx` constants across
-/// the widget layer (home, carousel, near view, out-of-range, video overlay).
-///
-/// Reference semantically: `AppColors.gold`, `AppColors.background`, etc.
-///
-/// `abstract final` ⇒ cannot be instantiated or extended, mirroring the
-/// `AppConstants` idiom in `core/constants.dart`.
 abstract final class AppColors {
-  // ── Surfaces (darkest → lightest) ───────────────────────────────────
-  /// Scaffold background (was `_kBg`).
-  static const Color background = Color(0xFF0B0905);
+  // ── from :root in giaodien.html ──
+  static const Color black = Color(0xFF000000); // --black
+  static const Color ink = Color(0xFF0A0A0A); // --ink
+  static const Color white = Color(0xFFFFFFFF); // --white
+  static const Color grey = Color(0xFF9B9B9B); // --grey
+  static const Color greyDark = Color(0xFF3A3A3A); // --grey-d
+  static const Color line = Color(0xFF222222); // --line
 
-  /// Elevated surface: app bars, headers (was `_kSurface`).
-  static const Color surface = Color(0xFF140F0A);
+  /// body background (#141414)
+  static const Color background = Color(0xFF141414);
 
-  /// Card fill (was `_kCard`).
-  static const Color card = Color(0xFF1C1510);
+  // ── derived tones used across the mockup ──
+  static const Color surface = black; // phone/tabbar/player use pure black
+  static const Color text = white;
+  static const Color muted = Color(0xFF8A8A8A); // page-note / meta grey
+  static const Color kicker = Color(0xFFD8D8D8); // uppercase kicker text
+  static const Color subText = Color(0xFFCFCFCF); // card subtitles
 
-  /// Hairline dividers, inactive signal bars, unfocused borders (`_kBorder`).
-  static const Color border = Color(0xFF2C2318);
+  // ── veils (gradient overlays over hero images) ──
+  /// Standard bottom-up veil on cards/heroes.
+  static const LinearGradient cardVeil = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [Color(0xC7000000), Color(0x1A000000)], // rgba(0,0,0,.78) -> .1
+    stops: [0.0, 0.55],
+  );
 
-  // ── Brand / gold ────────────────────────────────────────────────────
-  /// Primary brand gold — accents, eyebrow labels, focus borders (`_kGold`).
-  static const Color gold = Color(0xFFC8973A);
+  /// Stronger veil for the tour list cards.
+  static const LinearGradient tourCardVeil = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [Color(0xD1000000), Color(0x14000000)], // .82 -> .08
+    stops: [0.0, 0.60],
+  );
 
-  /// Lighter gold for emphasis text and highlights (was `_kGoldLight`).
-  static const Color goldLight = Color(0xFFE8C570);
+  /// Player screen veil: dark top + dark bottom, clear middle.
+  static const LinearGradient playerVeil = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0x8C000000), // .55
+      Color(0x00000000), // transparent
+      Color(0x00000000),
+      Color(0xE6000000), // .9
+      Color(0xFF000000),
+    ],
+    stops: [0.0, 0.22, 0.45, 0.78, 1.0],
+  );
 
-  // ── Text ────────────────────────────────────────────────────────────
-  /// Primary text on dark surfaces (was `_kText`).
-  static const Color text = Color(0xFFEDE5D5);
-
-  /// Secondary / muted text and captions (was `_kMuted`).
-  static const Color muted = Color(0xFF7A6E5E);
-
-  // ── Status accents ──────────────────────────────────────────────────
-  /// "Very near" / live signal — zone near2m, status dot (was `_kGreen`).
-  static const Color green = Color(0xFF4A8F6A);
-
-  /// "Approaching" — zone near5m accent (was `_kAmber`).
-  static const Color amber = Color(0xFFD98A3D);
-
-  /// Idle / scanning radar accent — out-of-range view (was `_kBlue`).
-  static const Color blue = Color(0xFF4FA3E0);
+  /// Hero veil on the exhibit-list top image.
+  static const LinearGradient heroVeil = LinearGradient(
+    begin: Alignment.bottomCenter,
+    end: Alignment.topCenter,
+    colors: [Color(0xFF000000), Color(0x26000000)], // #000 4% -> .15 60%
+    stops: [0.04, 0.60],
+  );
 }

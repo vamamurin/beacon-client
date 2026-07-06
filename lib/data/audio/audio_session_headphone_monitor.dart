@@ -75,7 +75,7 @@ class AudioSessionHeadphoneMonitor implements IHeadphoneMonitor {
       case AudioDeviceType.bluetoothA2dp:
       case AudioDeviceType.bluetoothSco:
       case AudioDeviceType.usbAudio:
-      case AudioDeviceType.headphones: // iOS generic headphones
+      // case AudioDeviceType.headphones: // iOS generic headphones
         return true;
       default:
         return false;

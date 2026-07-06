@@ -1,22 +1,20 @@
+// Destination: lib/presentation/app/app.dart (REPLACES current)
+//
+// Root MaterialApp: new palette/fonts + the zone-first route table. Keeps the
+// global routeObserver (the load-bearing piece of freeze-on-obscured, reused in
+// Step 5/6 so the exhibit list/detail freeze while a zone changes underneath).
+
 import 'package:flutter/material.dart';
 
 import 'package:beacon_client/presentation/app/app_router.dart';
+import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
-/// Global route observer — the load-bearing piece of the freeze-on-obscured
-/// design.
-///
-/// Screen 2 ([DiscoveryScreen]) subscribes to this so it can detect when
-/// Screen 3 is pushed over it (`didPushNext`) and popped back (`didPopNext`).
-/// It MUST be the same instance registered in [MaterialApp.navigatorObservers],
-/// which is why it lives here at the app root and is imported by any
-/// `RouteAware` screen rather than constructed locally.
+/// Global route observer — same instance registered in navigatorObservers and
+/// subscribed by RouteAware screens (Steps 5-6).
 final RouteObserver<PageRoute<dynamic>> routeObserver =
     RouteObserver<PageRoute<dynamic>>();
 
-/// Root application widget: `MaterialApp` + theme + route table, lifted out of
-/// `main.dart` so bootstrapping (DI, permissions, provider) stays cleanly
-/// separated from app configuration.
 class MuseumApp extends StatelessWidget {
   const MuseumApp({super.key});
 
@@ -29,7 +27,6 @@ class MuseumApp extends StatelessWidget {
       initialRoute: AppRouter.initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
       onUnknownRoute: AppRouter.onUnknownRoute,
-      // Same instance the RouteAware screens subscribe to.
       navigatorObservers: [routeObserver],
     );
   }
@@ -39,17 +36,15 @@ class MuseumApp extends StatelessWidget {
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.background,
+      fontFamily: AppFonts.sans,
       colorScheme: const ColorScheme.dark(
         surface: AppColors.surface,
-        primary: AppColors.gold,
-        secondary: AppColors.goldLight,
-        onPrimary: AppColors.background,
+        primary: AppColors.white,
+        onPrimary: AppColors.black,
         onSurface: AppColors.text,
       ),
-      // Screens draw their own SafeArea-aware app bars; stop M3 surface-tinting
-      // any default AppBar that slips through.
       appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
       ),

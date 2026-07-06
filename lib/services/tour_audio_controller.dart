@@ -96,6 +96,7 @@ class TourAudioController {
     return true;
   }
 
+  
   /// Reading mode: no private-listening route AND the museum forbids the
   /// loudspeaker. In this mode NOTHING plays sound — not autoplay, not a
   /// manual tap (rule (a)): the difference between listening and reading is
@@ -301,6 +302,8 @@ class TourAudioController {
     _engine.stop();
   }
 
+  void resetVisitedZones() => _visitedZones.clear();
+  
   String get _fallback => _config?.fallbackLanguage ?? _language;
 
   Future<void> dispose() async {
