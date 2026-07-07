@@ -12,6 +12,8 @@
 //
 // NOT unit-tested (plugin/hardware). Verified via the on-device checklist.
 
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';

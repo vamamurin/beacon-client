@@ -29,7 +29,7 @@ import 'package:flutter/foundation.dart';
 import 'package:beacon_client/domain/interfaces/i_audio_engine.dart';
 import 'package:beacon_client/domain/interfaces/i_headphone_monitor.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
-import 'package:beacon_client/domain/models/audio_clip_info.dart';
+// import 'package:beacon_client/domain/models/audio_clip_info.dart';
 import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
@@ -303,7 +303,7 @@ class TourAudioController {
   }
 
   void resetVisitedZones() => _visitedZones.clear();
-  
+
   String get _fallback => _config?.fallbackLanguage ?? _language;
 
   Future<void> dispose() async {

@@ -4,24 +4,26 @@
 // graph once, in order, and exposes the pieces the app shell needs. Everything
 // flows down through constructors — no service-locator singletons leaking out.
 //
-// Graph (bottom to top):
-//   scanner ─┐
-//            ├─> registry ─> arbiter ─> ZonePresenceService ─┬─> ZoneEvents
-//   (uuid) ──┘                                               │
-//   repository(bundle) ─> TourAudioController <── engine,headphones, uriResolver
-//   power ─> SessionController <── zoneEvents, presenceTicks, TourAudioSink
-//
-// Mode switch (mock vs real) mirrors the old injection: mock for desktop/dev,
-// real for on-device.
+// Mode switch:
+//   • mock    — desktop/dev: scanner giả + nội dung mock. Không cần phần cứng.
+//   • real    — on-device: scanner BLE thật + nội dung TỪ SERVER. Lúc khởi động
+//               gọi syncIfNeeded() để kéo version.json + bundle-<ver>.tar.gz về,
+//               verify sha256, giải nén, đổi con trỏ active — RỒI mới preWarm().
+//               Offline-tolerant: server chết thì giữ bundle cũ (nếu có), hoặc
+//               màn Gate báo "cần đồng bộ" (nếu máy trắng).
+//   • bringUp — chạy thử phần cứng: scanner BLE thật + nội dung mock nhúng
+//               (không cần server). Đổi lại `.real` khi đã có server.
 
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:beacon_client/data/audio/audio_session_headphone_monitor.dart';
 import 'package:beacon_client/data/audio/chime_player.dart';
 import 'package:beacon_client/data/audio/just_audio_engine.dart';
+import 'package:beacon_client/data/gateways/real_bluetooth_gate.dart';
 import 'package:beacon_client/data/platform/battery_plus_power_monitor.dart';
 import 'package:beacon_client/data/processors/beacon_tracker_registry.dart';
 import 'package:beacon_client/data/processors/zone_arbiter.dart';
@@ -38,12 +40,19 @@ import 'package:beacon_client/domain/interfaces/i_headphone_monitor.dart';
 import 'package:beacon_client/domain/interfaces/i_power_monitor.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
+import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
 import 'package:beacon_client/services/tour_wiring.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 
-enum RunMode { mock, real }
+enum RunMode { mock, real, bringUp }
+
+/// True khi mode dùng scanner BLE thật (cần quyền runtime + adapter bật).
+bool _usesRealRadio(RunMode m) => m == RunMode.real || m == RunMode.bringUp;
+
+/// True khi mode dùng nội dung mock nhúng (không cần server sync).
+bool _usesMockContent(RunMode m) => m == RunMode.mock || m == RunMode.bringUp;
 
 /// Holds the fully-wired graph after [Injection.build]. Owns disposal.
 class AppGraph {
@@ -53,7 +62,15 @@ class AppGraph {
   final IAudioEngine audioEngine;
   final SessionController session;
   final ChimePlayer chime;
-  final ContentSyncService? sync; // null in mock mode
+  final ContentSyncService? sync; // null in mock / bringUp mode
+
+  /// Trạng thái cổng Bluetooth lúc khởi động (chỉ có nghĩa với radio thật).
+  final StartupStatus? bluetoothStatus;
+
+  /// Resolves a bundle-relative asset path (from the manifest) to an absolute
+  /// file path for HeroImage, or null when it can't (mock/bringUp / no bundle).
+  final String? Function(String bundleRelativePath) imagePathResolver;
+
   final ZoneEventRouter _router;
   final IPowerMonitor _power;
   final IHeadphoneMonitor _headphones;
@@ -66,6 +83,8 @@ class AppGraph {
     required this.session,
     required this.chime,
     required this.sync,
+    required this.bluetoothStatus,
+    required this.imagePathResolver,
     required ZoneEventRouter router,
     required IPowerMonitor power,
     required IHeadphoneMonitor headphones,
@@ -88,41 +107,60 @@ class AppGraph {
 abstract final class Injection {
   static const RunMode mode = RunMode.real;
 
-  /// Internal content server base (Phase-0: general protocol; adapt when the
-  /// real server lands). TODO(config): move to --dart-define.
-  static const String syncBaseUrl = 'https://content.museum.local/tour';
+  /// Gốc server nội dung — KHÔNG kèm tên file, KHÔNG dấu '/' cuối.
+  /// Client tự ghép "/version.json" và "/bundle-<ver>.tar.gz".
+  /// ⚠️ ĐỔI thành IP máy chạy python http.server của bạn.
+  static const String syncBaseUrl = 'http://192.168.1.8:8000';
 
-  /// Builds and wires everything. Async because it warms the bundle and reads
-  /// the dock/documents dir. Safe to call once at startup.
+  /// Builds and wires everything. Async because it (optionally) syncs, warms the
+  /// bundle, and reads the documents dir. Safe to call once at startup.
   static Future<AppGraph> build() async {
     // ── repository (+ optional sync in real mode) ──
     final IZoneRepository repository;
     ContentSyncService? sync;
 
-    switch (mode) {
-      case RunMode.mock:
-        repository = MockZoneRepository(simulatedLatency: Duration.zero);
-        break;
-      case RunMode.real:
-        final docs = await getApplicationDocumentsDirectory();
-        final layout =
-            BundleLayout(Directory(p.join(docs.path, 'bundles')));
-        sync = ContentSyncService(
-          layout: layout,
-          transport: HttpSyncTransport(baseUrl: syncBaseUrl),
-        );
-        await sync.cleanupOnBoot(); // GC crash leftovers before reading
-        repository = LocalBundleZoneRepository(layout);
-        break;
+    if (_usesMockContent(mode)) {
+      repository = MockZoneRepository(simulatedLatency: Duration.zero);
+    } else {
+      final docs = await getApplicationDocumentsDirectory();
+      final layout = BundleLayout(Directory(p.join(docs.path, 'bundles')));
+      sync = ContentSyncService(
+        layout: layout,
+        transport: HttpSyncTransport(baseUrl: syncBaseUrl),
+      );
+      await sync.cleanupOnBoot(); // GC crash leftovers before reading
+
+      // Kéo nội dung mới TRƯỚC khi đọc. syncIfNeeded không throw cho các lỗi
+      // mong đợi (mạng/checksum/validate) — chúng nằm trong result.error.
+      final result = await sync.syncIfNeeded(
+        onProgress: kDebugMode
+            ? (pr) => debugPrint('[Injection] sync ${(pr * 100).round()}%')
+            : null,
+      );
+      if (kDebugMode) {
+        debugPrint('[Injection] sync outcome=${result.outcome} '
+            'version=${result.version} error=${result.error}');
+      }
+
+      repository = LocalBundleZoneRepository(layout);
     }
 
-    await repository.preWarm(); // may set lastError (fresh device) — Gate shows it
+    await repository.preWarm(); // đọc bundle active; set lastError nếu chưa có
     final cfg = repository.config;
+
+    // ── bluetooth gate (real radio only) ──
+    StartupStatus? bluetoothStatus;
+    if (_usesRealRadio(mode)) {
+      final gate = RealBluetoothGate();
+      bluetoothStatus = await gate.ensureReady();
+      if (kDebugMode) debugPrint('[Injection] bluetooth gate: $bluetoothStatus');
+      gate.dispose();
+    }
 
     // ── radio pipeline ──
     final IBeaconScanner scanner = switch (mode) {
       RunMode.mock => MockBeaconScanner(),
-      RunMode.real => RealBeaconScanner(),
+      RunMode.real || RunMode.bringUp => RealBeaconScanner(),
     };
     final registry = BeaconTrackerRegistry();
     final arbiter = ZoneArbiter(
@@ -158,8 +196,6 @@ abstract final class Injection {
     final IPowerMonitor power = BatteryPlusPowerMonitor();
     await power.start();
 
-    // The session needs presence ticks (deskStable + lastBeaconAt). Derive a
-    // PresenceTick stream from the arbiter's presence stream.
     final presenceTicks = arbiter.presence.map((pz) => PresenceTick(
           deskStable: pz.deskStable,
           lastBeaconAt: pz.lastBeaconAt,
@@ -186,6 +222,21 @@ abstract final class Injection {
     // Start the radio pipeline last, once everything downstream is listening.
     presence.start();
 
+    // Image path resolver for the UI: real bundle -> absolute file path;
+    // mock/bringUp/no-bundle -> null (HeroImage shows its gradient fallback).
+    String? imagePathResolver(String bundleRelativePath) {
+      if (repository is LocalBundleZoneRepository) {
+        try {
+          return (repository as LocalBundleZoneRepository)
+              .resolveAsset(bundleRelativePath)
+              .toFilePath();
+        } catch (_) {
+          return null;
+        }
+      }
+      return null;
+    }
+
     return AppGraph._(
       repository: repository,
       presence: presence,
@@ -194,21 +245,18 @@ abstract final class Injection {
       session: session,
       chime: chime,
       sync: sync,
+      bluetoothStatus: bluetoothStatus,
+      imagePathResolver: imagePathResolver,
       router: router,
       power: power,
       headphones: headphones,
     );
   }
 
-  /// Resolves bundle-relative asset paths to file URIs. For the real repo this
-  /// goes through the active bundle dir; for mock it returns a dummy file URI
-  /// (mock has no real audio files — dev uses placeholder assets).
   static AudioUriResolver _uriResolver(IZoneRepository repo) {
     if (repo is LocalBundleZoneRepository) {
       return repo.resolveAsset;
     }
-    // Mock mode: paths won't resolve to real files; audio won't actually play
-    // on desktop, which is fine for UI dev. Return a stable dummy URI.
     return (path) => Uri.parse('asset:///$path');
   }
 }

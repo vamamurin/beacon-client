@@ -6,6 +6,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:beacon_client/presentation/gate/gate_screen.dart';
+import 'package:beacon_client/presentation/zone/zone_screen.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
@@ -19,9 +21,9 @@ abstract final class AppRouter {
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case gateRoute:
-        return _page(const _Stub('Gate (Screen 1)'), settings);
+        return _page(const GateScreen(), settings);
       case zoneRoute:
-        return _page(const _Stub('Zone card / Radar (Screen 2)'), settings);
+        return _page(const ZoneScreen(), settings);
       case exhibitListRoute:
         return _page(const _Stub('Exhibit list (Screen 3)'), settings);
       case exhibitDetailRoute:

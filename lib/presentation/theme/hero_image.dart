@@ -15,7 +15,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-import 'museum_palette.dart';
+// import 'museum_palette.dart';
 
 class HeroImage extends StatelessWidget {
   /// Absolute file path from the active bundle (via repository.resolveAsset),
