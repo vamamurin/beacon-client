@@ -4,43 +4,35 @@
 // full-bleed hero image + veil, wordmark top, welcome block bottom, white
 // "Bắt đầu tham quan" button. Wired to SessionProvider.
 //
+// Purely presentational w.r.t. navigation (Phase-4 Step 7): pressing Start just
+// calls session.startTour(); the ROOT (MuseumApp) watches the phase and moves
+// the stack to the zone screen when touring begins — and back here when the
+// tour ends. The gate never navigates itself, so there is one owner of the
+// session→route mapping.
+//
 // Beyond the static mockup it handles real state:
-//   • fresh device (repository.lastError set) -> staff "needs sync" notice
-//     instead of a Start button (a tour with no content would be broken).
-//   • pressing Start -> session.startTour() -> phase becomes touring -> navigate
-//     to the zone screen.
-//   • listens to phase: when touring begins, route forward (covers both the
-//     button tap and, later, any programmatic start).
+//   • BLE not ready -> staff status + retry/settings (no Start).
+//   • fresh device (repository.lastError set) -> staff "needs sync" notice.
+//   • otherwise -> Start button, enabled only when the session is at the gate
+//     (device lifted off the dock).
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
-import 'package:beacon_client/domain/models/tour_session.dart';
-import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
-class GateScreen extends StatefulWidget {
+class GateScreen extends StatelessWidget {
   const GateScreen({super.key});
-
-  @override
-  State<GateScreen> createState() => _GateScreenState();
-}
-
-class _GateScreenState extends State<GateScreen> {
-  SessionPhase? _lastPhase;
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
     final graph = context.read<AppGraph>();
-
-    // React to phase transitions: entering touring -> go to the zone screen.
-    _handlePhase(session.phase);
 
     final museumName = graph.repository.config?.museumName;
     final lang = graph.repository.config?.fallbackLanguage ?? 'vi';
@@ -136,22 +128,8 @@ class _GateScreenState extends State<GateScreen> {
     }
     return _StartButton(
       enabled: session.isAtGate,
-      onPressed: session.startTour,
+      onPressed: session.startTour, // root navigates when phase -> touring
     );
-  }
-
-  void _handlePhase(SessionPhase phase) {
-    if (phase == _lastPhase) return;
-    final was = _lastPhase;
-    _lastPhase = phase;
-    // On the edge into touring, navigate forward once (post-frame to avoid
-    // navigating during build).
-    if (was != null && phase == SessionPhase.touring) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        Navigator.of(context).pushReplacementNamed(AppRouter.zoneRoute);
-      });
-    }
   }
 
   static const LinearGradient _welcomeVeil = LinearGradient(

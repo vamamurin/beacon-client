@@ -15,6 +15,7 @@
 // Mode switch (mock vs real) mirrors the old injection: mock for desktop/dev,
 // real for on-device.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -43,6 +44,7 @@ import 'package:beacon_client/domain/interfaces/i_power_monitor.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
+import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/services/exhibit_presence_tracker.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
@@ -82,6 +84,10 @@ class AppGraph {
   final IPowerMonitor _power;
   final IHeadphoneMonitor _headphones;
 
+  /// Re-announces the current zone to the audio layer on the gate->touring
+  /// edge (see build()). Held only so it can be cancelled on dispose.
+  final StreamSubscription<SessionState> _tourStartSub;
+
   AppGraph._({
     required this.repository,
     required this.presence,
@@ -97,9 +103,11 @@ class AppGraph {
     required ZoneEventRouter router,
     required IPowerMonitor power,
     required IHeadphoneMonitor headphones,
+    required StreamSubscription<SessionState> tourStartSub,
   })  : _router = router,
         _power = power,
-        _headphones = headphones;
+        _headphones = headphones,
+        _tourStartSub = tourStartSub;
 
   /// Runs a content sync if in real mode (no-op in mock). Safe to call from the
   /// Gate (atDesk/gate only — never mid-tour). Returns null in mock mode.
@@ -110,6 +118,7 @@ class AppGraph {
   }
 
   Future<void> dispose() async {
+    await _tourStartSub.cancel();
     await _router.dispose();
     await session.dispose();
     await presence.dispose();
@@ -230,6 +239,22 @@ abstract final class Injection {
       isTouring: () => session.current.isTouring,
     );
 
+    // On the gate->touring edge, re-announce the current zone so a visitor who
+    // is ALREADY inside a zone at Start still gets EnteredZone (intro + grace
+    // close). The arbiter won't re-emit an unchanged presence on its own, so
+    // without this the audio layer would stay dormant. At the desk the current
+    // zone is null (desk major is arbitrated separately), so it's a no-op there
+    // and the dock-linger grace is preserved. The router (built above) is
+    // already listening, so the replayed EnteredZone reaches the audio.
+    SessionPhase lastPhase = session.current.phase;
+    final tourStartSub = session.state.listen((s) {
+      final was = lastPhase;
+      lastPhase = s.phase;
+      if (was != SessionPhase.touring && s.phase == SessionPhase.touring) {
+        presence.resyncCurrentZone();
+      }
+    });
+
     // BLE readiness gate: request permissions + check adapter BEFORE starting
     // the radio pipeline. If not ready, the pipeline stays stopped and the Gate
     // screen surfaces startupStatus so staff can grant permission / enable BT.
@@ -270,6 +295,7 @@ abstract final class Injection {
       router: router,
       power: power,
       headphones: headphones,
+      tourStartSub: tourStartSub,
     );
   }
 

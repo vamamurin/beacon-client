@@ -155,6 +155,25 @@ class ZonePresenceService {
     _scanner.startScan();
   }
 
+  /// Re-announce the CURRENTLY confirmed zone as a fresh [EnteredZone], if any.
+  ///
+  /// Called when a tour starts (gate -> touring). The arbiter only emits on a
+  /// CHANGE, so a visitor who was already standing inside a zone at the moment
+  /// they press Start would otherwise get no event — no intro, no grace close,
+  /// and the audio controller would never learn its active zone. Resetting the
+  /// diff anchor and replaying the arbiter's current presence produces exactly
+  /// the EnteredZone that "just walked in" would, through the SAME event stream
+  /// the router and session already consume.
+  ///
+  /// No-op when there's no confirmed zone (standby, or resting at the desk —
+  /// the desk major is arbitrated separately and never becomes currentMajor),
+  /// so the start-grace that protects a visitor lingering on the dock is kept.
+  void resyncCurrentZone() {
+    if (!_running) return;
+    _lastMajor = null; // make the next diff look like a fresh acquisition
+    _onPresence(_arbiter.current);
+  }
+
   /// UUID guard, then feed the registry hot path. O(1) per packet.
   void _onReading(BeaconReading r) {
     if (r.uuid.toLowerCase() != _museumUuid) return;

@@ -3,8 +3,17 @@
 // Screen 4 — exhibit detail + audio player. Matches giaodien.html screen 4:
 // full-bleed exhibit image + playerVeil, top (back + minor numbadge), info
 // (kicker "Khu · Hiện vật số N" + serif name + italic artist line), controls
-// (progress track + times + skip/play/skip). Extended below the fold (the
-// confirmed "more images + more info"): summary, meaning, specs, extra images.
+// (progress track + times + begin/play/next), then below the fold: summary,
+// meaning, specs.
+//
+// CONTROLS SEMANTICS (Phase-4 Step 7, coherent with the auto-advance tour):
+//   • begin (left, "Về đầu"): restart THIS exhibit from 0. If it isn't the
+//     loaded clip yet, load+play it from the start (tapExhibit). Always "play
+//     this from the beginning".
+//   • play/pause (centre): toggle THIS exhibit; if it isn't loaded, load+play.
+//   • next (right, "Tiếp"): advance to the NEXT exhibit in tour order — play it
+//     (rule 2a: an explicit tap) and pushReplacement its detail. Disabled on
+//     the last exhibit. Uses the frozen `major`; only `minor` moves.
 //
 // PERFORMANCE — the key rule: the progress bar advances several times/second.
 // Only a small StreamBuilder bound to AudioProvider.position rebuilds for it;
@@ -19,7 +28,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/core/injection.dart';
-import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
@@ -146,7 +154,7 @@ class _PlayerPane extends StatelessWidget {
                 ),
               ),
               // Controls (progress + times + buttons).
-              _Controls(major: zone.major, exhibit: exhibit),
+              _Controls(zone: zone, exhibit: exhibit),
               const SizedBox(height: 4),
               // Scroll affordance.
               const Icon(Icons.keyboard_arrow_down,
@@ -165,16 +173,18 @@ class _PlayerPane extends StatelessWidget {
   }
 }
 
-/// Play/pause + progress. Only the progress sub-tree rebuilds on position ticks.
+/// Play/pause + progress + begin/next. Only the progress sub-tree rebuilds on
+/// position ticks; the rest rebuilds on AudioQueueState changes.
 class _Controls extends StatelessWidget {
-  final int major;
+  final ZoneInfo zone;
   final ExhibitInfo exhibit;
-  const _Controls({required this.major, required this.exhibit});
+  const _Controls({required this.zone, required this.exhibit});
 
   @override
   Widget build(BuildContext context) {
     final audio = context.watch<AudioProvider>(); // rebuilds on state change
     final state = audio.state;
+    final major = zone.major;
 
     // Is THIS exhibit the currently loaded clip? Compare BOTH major and minor —
     // minor is only unique within a zone, so minor alone would false-match an
@@ -182,6 +192,10 @@ class _Controls extends StatelessWidget {
     final isThis = state.current?.zoneMajor == major &&
         state.current?.exhibitMinor == exhibit.minor;
     final duration = state.duration ?? Duration.zero;
+
+    // Next exhibit in tour order (manifest order), if any.
+    final curIdx = zone.tourIndexOf(exhibit.minor);
+    final hasNext = curIdx >= 0 && curIdx + 1 < zone.exhibits.length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
@@ -220,7 +234,10 @@ class _Controls extends StatelessWidget {
               _SkipButton(
                 icon: Icons.first_page,
                 label: 'Về đầu',
-                onTap: () => audio.play(), // controller seeks 0 if completed
+                // Restart this clip from 0; if it isn't loaded, load+play it.
+                onTap: () => isThis
+                    ? audio.replay()
+                    : audio.tapExhibit(exhibit.minor),
               ),
               const SizedBox(width: 34),
               _PlayButton(
@@ -240,12 +257,27 @@ class _Controls extends StatelessWidget {
               _SkipButton(
                 icon: Icons.last_page,
                 label: 'Tiếp',
-                onTap: () => audio.tapExhibit(exhibit.minor),
+                // Advance to the next exhibit in tour order and open it. Off at
+                // the last exhibit (onTap null greys the control out).
+                onTap: hasNext ? () => _goNext(context, audio) : null,
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  void _goNext(BuildContext context, AudioProvider audio) {
+    final curIdx = zone.tourIndexOf(exhibit.minor);
+    if (curIdx < 0 || curIdx + 1 >= zone.exhibits.length) return;
+    final next = zone.exhibits[curIdx + 1];
+    // Rule 2a: an explicit request interrupts and plays the chosen clip.
+    audio.tapExhibit(next.minor);
+    // Replace (don't stack) so back from any detail returns to the list.
+    Navigator.of(context).pushReplacementNamed(
+      AppRouter.exhibitDetailRoute,
+      arguments: ExhibitDetailArgs(major: zone.major, minor: next.minor),
     );
   }
 
@@ -342,7 +374,10 @@ class _PlayButton extends StatelessWidget {
 class _SkipButton extends StatelessWidget {
   final IconData icon;
   final String label;
-  final VoidCallback onTap;
+
+  /// Null disables the control (dimmed, no ripple) — used for "Tiếp" at the
+  /// last exhibit.
+  final VoidCallback? onTap;
   const _SkipButton({
     required this.icon,
     required this.label,
@@ -351,8 +386,10 @@ class _SkipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final enabled = onTap != null;
     return Semantics(
       button: true,
+      enabled: enabled,
       label: label,
       child: Material(
         color: Colors.transparent,
@@ -364,7 +401,9 @@ class _SkipButton extends StatelessWidget {
             width: 48,
             height: 48,
             child: Icon(icon,
-                color: AppColors.white.withValues(alpha: 0.85), size: 24),
+                color: AppColors.white
+                    .withValues(alpha: enabled ? 0.85 : 0.3),
+                size: 24),
           ),
         ),
       ),
@@ -426,7 +465,7 @@ class _NumBadge extends StatelessWidget {
   }
 }
 
-/// Below-the-fold: summary, meaning, specs, extra images. The "more info".
+/// Below-the-fold: summary, meaning, specs. The "more info".
 class _DetailBody extends StatelessWidget {
   final ExhibitInfo exhibit;
   final String lang;

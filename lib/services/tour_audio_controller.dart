@@ -40,6 +40,21 @@ import 'package:beacon_client/domain/models/zone_info.dart';
 typedef AudioUriResolver = Uri Function(String bundleRelativePath);
 
 class TourAudioController {
+  // ⚠️⚠️⚠️ TEMPORARY DEV/TEST OVERRIDE — SET BACK TO `false` BEFORE RELEASE. ⚠️⚠️⚠️
+  //
+  // When true, the controller pretends headphones are ALWAYS connected:
+  //   • reading mode never engages (a tap always plays),
+  //   • autoplay is allowed even with nothing plugged in,
+  //   • unplugging no longer pauses.
+  // This lets you bench-test audio through the device speaker without earphones.
+  // It bypasses the museum's real headphone policy — flip to `false` to restore
+  // the confirmed rules (1), (6) and the autoplayRequiresHeadphones gate.
+  //
+  // NOTE: this only forces the "is there a listening route" answer. It does NOT
+  // touch allowLoudspeaker/autoplayRequiresHeadphones in the bundle — those
+  // remain the real production knobs.
+  static const bool kDebugAssumeHeadphones = true;
+
   TourAudioController({
     required IZoneRepository repository,
     required IAudioEngine engine,
@@ -82,6 +97,13 @@ class TourAudioController {
 
   MuseumConfig? get _config => _repo.config;
 
+  /// Whether there is a legitimate private-listening route right now. Single
+  /// source of truth for every headphone gate below, so the debug override
+  /// only has to be applied in ONE place. In production this is exactly
+  /// "headphones connected"; under [kDebugAssumeHeadphones] it's forced true.
+  bool get _hasAudioRoute =>
+      kDebugAssumeHeadphones || _headphones.isConnected;
+
   bool get _autoplayAllowed {
     final cfg = _config;
     if (cfg == null) return false;
@@ -90,7 +112,7 @@ class TourAudioController {
     // we never autoplay, regardless of the autoplayRequiresHeadphones setting.
     if (_readingMode) return false;
     // Otherwise honour the headphone-preference policy.
-    if (cfg.policies.autoplayRequiresHeadphones && !_headphones.isConnected) {
+    if (cfg.policies.autoplayRequiresHeadphones && !_hasAudioRoute) {
       return false;
     }
     return true;
@@ -105,7 +127,7 @@ class TourAudioController {
   bool get _readingMode {
     final cfg = _config;
     if (cfg == null) return true;
-    final noRoute = !_headphones.isConnected;
+    final noRoute = !_hasAudioRoute;
     return noRoute && !cfg.policies.allowLoudspeaker;
   }
 
@@ -287,6 +309,10 @@ class TourAudioController {
 
   /// Headphone connection changed. Rule 6.
   void _onHeadphoneChanged(bool connected) {
+    // Debug override: ignore unplug entirely so bench testing over the speaker
+    // isn't cut short. Revert kDebugAssumeHeadphones to restore rule 6.
+    if (kDebugAssumeHeadphones) return;
+
     if (!connected) {
       // Becoming noisy -> pause immediately (never blast the loudspeaker).
       if (_engine.state.status == PlaybackStatus.playing) {
