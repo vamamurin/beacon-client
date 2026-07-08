@@ -7,9 +7,10 @@
 // Graph (bottom to top):
 //   scanner ─┐
 //            ├─> registry ─> arbiter ─> ZonePresenceService ─┬─> ZoneEvents
-//   (uuid) ──┘                                               │
-//   repository(bundle) ─> TourAudioController <── engine,headphones, uriResolver
-//   power ─> SessionController <── zoneEvents, presenceTicks, TourAudioSink
+//   (uuid) ──┘                                               ├─> ZoneStatus
+//   repository(bundle) ─> TourAudioController <── engine,headphones, uriResolver│
+//   power ─> SessionController <── zoneEvents, presenceTicks, TourAudioSink     │
+//   registry.signals ─> ExhibitPresenceTracker <────────────────────────────────┘
 //
 // Mode switch (mock vs real) mirrors the old injection: mock for desktop/dev,
 // real for on-device.
@@ -42,6 +43,7 @@ import 'package:beacon_client/domain/interfaces/i_power_monitor.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
+import 'package:beacon_client/services/exhibit_presence_tracker.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
 import 'package:beacon_client/services/tour_wiring.dart';
@@ -58,6 +60,10 @@ class AppGraph {
   final SessionController session;
   final ChimePlayer chime;
   final ContentSyncService? sync; // null in mock mode
+
+  /// Live "which exhibit minors are broadcasting right now, per zone", with
+  /// anti-flicker hysteresis. Screen 3 reads this to show only nearby exhibits.
+  final ExhibitPresenceTracker exhibitPresence;
 
   /// Bluetooth readiness gate (permission + adapter). The Gate screen shows
   /// its status and lets staff retry / open settings.
@@ -84,6 +90,7 @@ class AppGraph {
     required this.session,
     required this.chime,
     required this.sync,
+    required this.exhibitPresence,
     required this.bluetoothGate,
     required this.startupStatus,
     required this.imagePathResolver,
@@ -106,6 +113,7 @@ class AppGraph {
     await _router.dispose();
     await session.dispose();
     await presence.dispose();
+    exhibitPresence.dispose();
     await audioController.dispose();
     await audioEngine.dispose();
     await _power.dispose();
@@ -170,6 +178,11 @@ abstract final class Injection {
       registry: registry,
       arbiter: arbiter,
     );
+
+    // Live per-minor presence for the exhibit list (screen 3). Taps the raw
+    // registry heartbeat exposed by presence.signals and adds anti-flicker
+    // hysteresis + change-gating. Independent of the arbiter/audio paths.
+    final exhibitPresence = ExhibitPresenceTracker(signals: presence.signals);
 
     // ── audio ──
     final IAudioEngine engine = JustAudioEngine();
@@ -250,6 +263,7 @@ abstract final class Injection {
       session: session,
       chime: chime,
       sync: sync,
+      exhibitPresence: exhibitPresence,
       bluetoothGate: bluetoothGate,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,

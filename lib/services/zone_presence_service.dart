@@ -14,6 +14,11 @@
 //      UNTOUCHED (Phase 1 boundary: reporting only; the SessionController in
 //      Phase 3 will consume it — nothing here acts on it).
 //
+// It ALSO re-exposes the registry's raw per-major signal heartbeat via
+// [signals], for consumers that need per-minor liveness (the live exhibit list
+// in Phase 4). That stream is passed straight through, ungated — whoever wants
+// stable per-minor presence layers its own hysteresis (ExhibitPresenceTracker).
+//
 // Deliberately does NOT own audio: it emits transitions; whoever wires it to a
 // TourAudioController (Phase 4) connects the two. Keeps this testable with zero
 // audio dependencies.
@@ -119,6 +124,13 @@ class ZonePresenceService {
 
   /// Enriched, change-gated status for the UI + Phase 3.
   Stream<ZoneStatus> get status => _status.stream;
+
+  /// Raw per-major signal snapshots straight from the registry (1 Hz heartbeat
+  /// + immediate on new sighting), carrying [ZoneSignal.rssiByMinor]. Ungated
+  /// on purpose: consumers that need STABLE per-minor presence (the live
+  /// exhibit list) apply their own hysteresis via ExhibitPresenceTracker. The
+  /// arbiter path is unaffected — it consumes the same broadcast stream.
+  Stream<List<ZoneSignal>> get signals => _registry.zoneSignals;
 
   ZoneStatus get currentStatus => _lastStatus;
 

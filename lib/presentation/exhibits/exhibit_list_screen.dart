@@ -5,15 +5,24 @@
 // hint bar "Chọn theo số ghi trên nhãn", then .stop rows: 26px circled number
 // + 40x40 thumb + serif name + grey meta, hairline separators.
 //
-// The circled number is the exhibit's MINOR — the number physically printed on
-// the label next to the display case (mockup note: "Danh sách hiện vật
-// (minor)") — NOT the tour index. Visitors match what they see on the wall.
+// PRESENCE-DRIVEN LIST (Phase-4 change, confirmed with product): the list shows
+// ONLY exhibits whose minor beacon is currently being heard over the air — not
+// the full manifest. A visitor at the front of the room hears the nearest
+// exhibits; the far ones simply aren't in the list until they walk closer.
+// Consequence accepted by product: a dead-battery beacon removes its exhibit
+// from the list (the manifest is no longer the visibility source, only the
+// CONTENT source — name/thumb/audio still come from it).
 //
-// FREEZE-BY-DESIGN: this screen does NOT watch ZoneProvider. It takes a fixed
-// `major` from route arguments and reads the ZoneInfo from the repository once.
-// If the arbiter switches zones underneath (visitor's feet moved), this screen
-// stays exactly as-is — the confirmed Phase-1 rule. Only the Zone screen
-// (screen 2) follows the arbiter.
+// ZONE STILL FROZEN: the `major` comes from route arguments and the ZoneInfo is
+// read from the repository once. What's LIVE is only the SUBSET of that zone's
+// exhibits shown. If the arbiter switches zones underneath, this screen keeps
+// its frozen `major` (Phase-1 rule); only screen 2 follows the arbiter.
+//
+// NO RANKING / NO FLICKER: rows are NOT sorted by signal strength (no distance
+// heuristic here, per product). Visible rows keep MANIFEST ORDER, so nothing
+// reorders as RSSI wobbles. The present set arrives already debounced and
+// change-gated from ExhibitPresenceTracker (appears instantly, disappears only
+// after sustained silence), so the list doesn't blink step-to-step.
 //
 // Tapping a row = rule 2a: interrupt + play that exhibit (tapExhibit), then
 // open its detail screen.
@@ -58,17 +67,40 @@ class ExhibitListScreen extends StatelessWidget {
       body: Column(
         children: [
           _ZoneHero(zone: zone, lang: lang, graph: graph),
-          const _HintBar(text: 'Chọn theo số ghi trên nhãn'),
+          // Live subset: rebuilds only when the set of heard minors changes.
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
-              itemCount: zone.exhibits.length,
-              itemBuilder: (context, i) => _StopRow(
-                exhibit: zone.exhibits[i],
-                lang: lang,
-                graph: graph,
-                onTap: () => _openExhibit(context, zone.exhibits[i]),
-              ),
+            child: StreamBuilder<Set<int>>(
+              initialData: graph.exhibitPresence.currentPresent(major),
+              stream: graph.exhibitPresence.watchMajor(major),
+              builder: (context, snap) {
+                final present = snap.data ?? const <int>{};
+
+                // Filter to heard minors, but keep MANIFEST ORDER (no ranking).
+                final visible = <ExhibitInfo>[
+                  for (final e in zone.exhibits)
+                    if (present.contains(e.minor)) e,
+                ];
+
+                if (visible.isEmpty) return const _NoneNearby();
+
+                return Column(
+                  children: [
+                    const _HintBar(text: 'Chọn theo số ghi trên nhãn'),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 18),
+                        itemCount: visible.length,
+                        itemBuilder: (context, i) => _StopRow(
+                          exhibit: visible[i],
+                          lang: lang,
+                          graph: graph,
+                          onTap: () => _openExhibit(context, visible[i]),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -97,7 +129,6 @@ class _ZoneHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = zone.name.resolve(lang, lang);
-    final count = zone.exhibits.length;
 
     return SizedBox(
       height: 250,
@@ -132,7 +163,9 @@ class _ZoneHero extends StatelessWidget {
               ),
             ),
           ),
-          // Title + meta, bottom-left.
+          // Title + meta, bottom-left. The meta is intentionally STATIC (no
+          // live count) — a number that changed as you walked would itself
+          // flicker; the list below already tells you what's near.
           Positioned(
             left: 18,
             right: 18,
@@ -143,9 +176,9 @@ class _ZoneHero extends StatelessWidget {
               children: [
                 Text(name, style: AppText.heroTitle),
                 const SizedBox(height: 5),
-                Text(
-                  '$count hiện vật · chọn theo số trên nhãn',
-                  style: const TextStyle(
+                const Text(
+                  'Hiện vật quanh bạn · chọn theo số trên nhãn',
+                  style: TextStyle(
                     fontFamily: AppFonts.sans,
                     fontWeight: FontWeight.w300,
                     fontSize: 11,
@@ -177,6 +210,43 @@ class _HintBar extends StatelessWidget {
       ),
       alignment: Alignment.center,
       child: Text(text.toUpperCase(), style: AppText.button),
+    );
+  }
+}
+
+/// Shown when the frozen zone currently has no exhibit beacon in range. Not an
+/// error — a direction: walk up to a display case and it appears in the list.
+class _NoneNearby extends StatelessWidget {
+  const _NoneNearby();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 40),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.travel_explore, color: AppColors.greyDark, size: 34),
+            const SizedBox(height: 16),
+            Text('CHƯA CÓ HIỆN VẬT NÀO Ở GẦN'.toUpperCase(),
+                style: AppText.kicker.copyWith(color: AppColors.white)),
+            const SizedBox(height: 8),
+            const Text(
+              'Hãy tiến lại gần một tủ trưng bày. Hiện vật sẽ tự xuất hiện '
+              'trong danh sách khi bạn tới đủ gần.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: AppFonts.sans,
+                fontWeight: FontWeight.w300,
+                fontSize: 12,
+                height: 1.5,
+                color: AppColors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
