@@ -6,10 +6,21 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:beacon_client/presentation/exhibits/exhibit_detail_screen.dart';
+import 'package:beacon_client/presentation/exhibits/exhibit_list_screen.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart';
 import 'package:beacon_client/presentation/zone/zone_screen.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
+
+/// Route-argument contract between the exhibit list (screen 3) and the exhibit
+/// detail (screen 4). Both identifiers are needed: minor alone is only unique
+/// WITHIN a zone.
+class ExhibitDetailArgs {
+  final int major;
+  final int minor;
+  const ExhibitDetailArgs({required this.major, required this.minor});
+}
 
 abstract final class AppRouter {
   static const String gateRoute = '/'; // Screen 1: welcome / start
@@ -25,9 +36,22 @@ abstract final class AppRouter {
       case zoneRoute:
         return _page(const ZoneScreen(), settings);
       case exhibitListRoute:
-        return _page(const _Stub('Exhibit list (Screen 3)'), settings);
+        final args = settings.arguments;
+        if (args is! int) {
+          return _error(settings,
+              'exhibitListRoute cần arguments là int (zone major).');
+        }
+        return _page(ExhibitListScreen(major: args), settings);
       case exhibitDetailRoute:
-        return _page(const _Stub('Exhibit detail (Screen 4)'), settings);
+        final args = settings.arguments;
+        if (args is! ExhibitDetailArgs) {
+          return _error(settings,
+              'exhibitDetailRoute cần arguments là ExhibitDetailArgs.');
+        }
+        return _page(
+          ExhibitDetailScreen(major: args.major, minor: args.minor),
+          settings,
+        );
       default:
         return _error(settings, 'Unknown route: "${settings.name}".');
     }
