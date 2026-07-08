@@ -18,6 +18,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
@@ -71,14 +72,21 @@ class AppGraph {
   /// its status and lets staff retry / open settings.
   final IBluetoothGate bluetoothGate;
 
-  /// Result of the boot-time BLE readiness check. If not [StartupStatus.ready],
-  /// the radio pipeline was NOT started and the UI should surface the reason.
-  final StartupStatus startupStatus;
-
   /// Resolves a bundle-relative asset path (from the manifest) to an absolute
   /// file path for HeroImage, or null when it can't (mock mode / no bundle).
   /// UI uses this instead of guessing the repository's concrete type.
   final String? Function(String bundleRelativePath) imagePathResolver;
+
+  /// Reactive BLE readiness. Unlike the old one-shot snapshot, this updates
+  /// when the user grants permission / enables Bluetooth (via [retryBluetooth]
+  /// or [refreshBluetoothOnResume]), so the Gate flips to the Start button
+  /// WITHOUT an app restart. The Gate listens to this.
+  final ValueNotifier<StartupStatus> _ble;
+
+  ValueListenable<StartupStatus> get bleStatus => _ble;
+
+  /// Current BLE readiness value (convenience; prefer listening to [bleStatus]).
+  StartupStatus get startupStatus => _ble.value;
 
   final ZoneEventRouter _router;
   final IPowerMonitor _power;
@@ -98,13 +106,14 @@ class AppGraph {
     required this.sync,
     required this.exhibitPresence,
     required this.bluetoothGate,
-    required this.startupStatus,
+    required StartupStatus startupStatus,
     required this.imagePathResolver,
     required ZoneEventRouter router,
     required IPowerMonitor power,
     required IHeadphoneMonitor headphones,
     required StreamSubscription<SessionState> tourStartSub,
-  })  : _router = router,
+  })  : _ble = ValueNotifier<StartupStatus>(startupStatus),
+        _router = router,
         _power = power,
         _headphones = headphones,
         _tourStartSub = tourStartSub;
@@ -115,6 +124,29 @@ class AppGraph {
     final s = sync;
     if (s == null) return null;
     return s.syncIfNeeded(onProgress: onProgress);
+  }
+
+  /// Explicit user retry ("Cấp quyền" / "Thử lại"): re-run the readiness check
+  /// (this MAY prompt for permission), publish the new status, and start
+  /// scanning if we just became ready. No app restart needed — the pipeline
+  /// was built at boot; it only needed permission/adapter to start.
+  Future<void> retryBluetooth() async {
+    final status = await bluetoothGate.ensureReady();
+    if (status == StartupStatus.ready) presence.start(); // idempotent
+    _ble.value = status; // notifies the Gate
+  }
+
+  /// Called when the app returns to the foreground (e.g. back from Settings).
+  /// PROMPT-SAFE: only re-derives readiness once permission is already granted,
+  /// so we never re-pop the permission dialog on every resume. This is what
+  /// makes "grant in Settings -> return to app" flip the Gate to ready.
+  Future<void> refreshBluetoothOnResume() async {
+    if (_ble.value == StartupStatus.ready) return; // already good
+    final granted = await bluetoothGate.hasPermissions(); // no dialog
+    if (!granted) return; // leave the current status/button; don't prompt
+    final status = await bluetoothGate.ensureReady(); // won't prompt now
+    if (status == StartupStatus.ready) presence.start();
+    _ble.value = status;
   }
 
   Future<void> dispose() async {
@@ -129,6 +161,7 @@ class AppGraph {
     await _headphones.dispose();
     await chime.dispose();
     bluetoothGate.dispose();
+    _ble.dispose();
   }
 }
 
@@ -140,7 +173,8 @@ abstract final class Injection {
   static const String syncBaseUrl = 'http://192.168.1.8:8000';
 
   /// Builds and wires everything. Async because it warms the bundle and reads
-  /// the dock/documents dir. Safe to call once at startup.
+  /// the dock/documents dir. Safe to call once at startup (and again on a
+  /// full restart — a fresh graph is returned each time).
   static Future<AppGraph> build() async {
     // ── repository (+ optional sync in real mode) ──
     final IZoneRepository repository;
@@ -257,10 +291,11 @@ abstract final class Injection {
 
     // BLE readiness gate: request permissions + check adapter BEFORE starting
     // the radio pipeline. If not ready, the pipeline stays stopped and the Gate
-    // screen surfaces startupStatus so staff can grant permission / enable BT.
+    // screen surfaces the status so staff can grant permission / enable BT.
     final startupStatus = await bluetoothGate.ensureReady();
 
-    // Start the radio pipeline last, and ONLY if BLE is ready.
+    // Start the radio pipeline last, and ONLY if BLE is ready. If it isn't, the
+    // Gate can start it later via retryBluetooth/refreshBluetoothOnResume.
     if (startupStatus == StartupStatus.ready) {
       presence.start();
     }

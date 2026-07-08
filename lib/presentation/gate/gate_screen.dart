@@ -2,32 +2,60 @@
 //
 // Screen 1 — welcome / session gate. Matches giaodien.html screen 1 1:1:
 // full-bleed hero image + veil, wordmark top, welcome block bottom, white
-// "Bắt đầu tham quan" button. Wired to SessionProvider.
+// "Bắt đầu tham quan" button. Wired to SessionProvider + AppGraph.
 //
-// Purely presentational w.r.t. navigation (Phase-4 Step 7): pressing Start just
-// calls session.startTour(); the ROOT (MuseumApp) watches the phase and moves
-// the stack to the zone screen when touring begins — and back here when the
-// tour ends. The gate never navigates itself, so there is one owner of the
-// session→route mapping.
+// Navigation is owned by the root (MuseumApp): pressing Start just calls
+// session.startTour(); the root moves the stack when touring begins/ends.
 //
-// Beyond the static mockup it handles real state:
-//   • BLE not ready -> staff status + retry/settings (no Start).
-//   • fresh device (repository.lastError set) -> staff "needs sync" notice.
-//   • otherwise -> Start button, enabled only when the session is at the gate
-//     (device lifted off the dock).
+// Real state it handles (in priority order):
+//   • BLE not ready -> staff status + retry/settings. REACTIVE: it listens to
+//     graph.bleStatus, and re-checks readiness when the app resumes (returning
+//     from Settings), so granting permission flips the screen to Start WITHOUT
+//     an app restart.
+//   • fresh device (repository.lastError set) -> staff "needs sync" notice. A
+//     successful sync requires a rebuild (the pipeline was built with no
+//     config), so the notice offers a real in-app "Khởi động lại" button.
+//   • otherwise -> Start button, enabled only when the session is at the gate.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
+import 'package:beacon_client/presentation/app/app_restarter.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
-class GateScreen extends StatelessWidget {
+class GateScreen extends StatefulWidget {
   const GateScreen({super.key});
+
+  @override
+  State<GateScreen> createState() => _GateScreenState();
+}
+
+class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning to the app (e.g. after granting permission in Settings):
+    // re-derive BLE readiness without prompting. Flips to Start if now ready.
+    if (state == AppLifecycleState.resumed && mounted) {
+      context.read<AppGraph>().refreshBluetoothOnResume();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,13 +126,16 @@ class GateScreen extends StatelessWidget {
 
                 const SizedBox(height: 14),
 
-                // Bottom action area, branches on device readiness:
-                //  • BLE not ready  -> status + retry/settings (staff)
-                //  • needs sync     -> sync notice + "Đồng bộ" button (staff)
-                //  • otherwise      -> Start button (visitor)
+                // Bottom action area. Rebuilds on BLE-status change (grant /
+                // enable BT) via bleStatus, and on session change via the outer
+                // watch. Branches: BLE not ready -> needs sync -> Start.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
-                  child: _buildAction(context, graph, session, needsSync),
+                  child: ValueListenableBuilder<StartupStatus>(
+                    valueListenable: graph.bleStatus,
+                    builder: (context, bleStatus, _) =>
+                        _buildAction(context, graph, session, bleStatus, needsSync),
+                  ),
                 ),
               ],
             ),
@@ -115,16 +146,13 @@ class GateScreen extends StatelessWidget {
   }
 
   Widget _buildAction(BuildContext context, AppGraph graph,
-      SessionProvider session, bool needsSync) {
+      SessionProvider session, StartupStatus bleStatus, bool needsSync) {
     // BLE not ready takes precedence — no tour possible without scanning.
-    if (graph.startupStatus != StartupStatus.ready) {
-      return _BleNotReady(status: graph.startupStatus, graph: graph);
+    if (bleStatus != StartupStatus.ready) {
+      return _BleNotReady(status: bleStatus, graph: graph);
     }
     if (needsSync) {
-      return _SyncNotice(
-        error: graph.repository.lastError!,
-        graph: graph,
-      );
+      return _SyncNotice(graph: graph);
     }
     return _StartButton(
       enabled: session.isAtGate,
@@ -168,12 +196,12 @@ class _StartButton extends StatelessWidget {
   }
 }
 
-/// Fresh-device state: content not yet synced. Shown to museum STAFF, with a
-/// working "Đồng bộ nội dung" button that runs the real sync pipeline.
+/// Fresh-device state: content not yet synced. Shown to museum STAFF. A
+/// successful sync arms an in-app restart (the pipeline was built without a
+/// config and must be rebuilt to pick up the just-synced beacon UUID / params).
 class _SyncNotice extends StatefulWidget {
-  final String error;
   final AppGraph graph;
-  const _SyncNotice({required this.error, required this.graph});
+  const _SyncNotice({required this.graph});
 
   @override
   State<_SyncNotice> createState() => _SyncNoticeState();
@@ -182,13 +210,15 @@ class _SyncNotice extends StatefulWidget {
 class _SyncNoticeState extends State<_SyncNotice> {
   bool _syncing = false;
   double _progress = 0;
-  String? _result;
+  String? _message;
+  bool _readyToRestart = false; // sync succeeded -> offer restart
 
   Future<void> _sync() async {
     setState(() {
       _syncing = true;
       _progress = 0;
-      _result = null;
+      _message = null;
+      _readyToRestart = false;
     });
     final res = await widget.graph.runSync(
       onProgress: (p) => setState(() => _progress = p),
@@ -197,20 +227,20 @@ class _SyncNoticeState extends State<_SyncNotice> {
     if (res == null) {
       setState(() {
         _syncing = false;
-        _result = 'Chế độ mock — không có server.';
+        _message = 'Chế độ mock — không có server.';
       });
       return;
     }
-    // On success, re-warm the repository so the tour has content.
-    if (res.outcome.name == 'updated' || res.outcome.name == 'upToDate') {
-      await widget.graph.repository.preWarm();
-    }
+    final ok = res.outcome.name == 'updated' || res.outcome.name == 'upToDate';
     setState(() {
       _syncing = false;
-      _result = switch (res.outcome.name) {
-        'updated' => 'Đã cập nhật ${res.version}. Khởi động lại ứng dụng.',
-        'upToDate' => 'Đã là bản mới nhất (${res.version}).',
-        'noConnectivity' => 'Không kết nối được máy chủ.',
+      _readyToRestart = ok;
+      _message = switch (res.outcome.name) {
+        'updated' =>
+          'Đã tải nội dung ${res.version}. Nhấn để khởi động lại và bắt đầu.',
+        'upToDate' =>
+          'Nội dung đã là bản mới nhất (${res.version}). Nhấn để khởi động lại.',
+        'noConnectivity' => 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
         _ => 'Đồng bộ thất bại: ${res.error ?? ""}',
       };
     });
@@ -228,11 +258,11 @@ class _SyncNoticeState extends State<_SyncNotice> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('CHƯA SẴN SÀNG'.toUpperCase(),
+          Text((_readyToRestart ? 'Đã tải xong' : 'Chưa sẵn sàng').toUpperCase(),
               style: AppText.kicker.copyWith(color: AppColors.white)),
           const SizedBox(height: 6),
           Text(
-            _result ??
+            _message ??
                 'Thiết bị chưa có nội dung tham quan. Nhấn Đồng bộ để tải '
                     'dữ liệu trước khi bàn giao cho khách.',
             style: const TextStyle(
@@ -246,6 +276,11 @@ class _SyncNoticeState extends State<_SyncNotice> {
           const SizedBox(height: 12),
           if (_syncing)
             _ProgressLine(progress: _progress)
+          else if (_readyToRestart)
+            _StaffButton(
+              label: 'Khởi động lại ứng dụng',
+              onPressed: () => context.read<AppRestarter>().call(),
+            )
           else
             _StaffButton(label: 'Đồng bộ nội dung', onPressed: _sync),
         ],
@@ -255,7 +290,9 @@ class _SyncNoticeState extends State<_SyncNotice> {
 }
 
 /// BLE not ready: permission denied / bluetooth off / unsupported. Staff-facing
-/// with a retry or settings CTA matching the reason.
+/// with a retry or settings CTA matching the reason. The action re-checks
+/// readiness and, on success, the Gate's bleStatus flips it to the Start button
+/// (no restart) — and returning from Settings auto-rechecks on resume.
 class _BleNotReady extends StatefulWidget {
   final StartupStatus status;
   final AppGraph graph;
@@ -281,7 +318,8 @@ class _BleNotReadyState extends State<_BleNotReady> {
       case StartupStatus.permissionPermanentlyDenied:
         return (
           title: 'QUYỀN BỊ TỪ CHỐI',
-          body: 'Quyền Bluetooth đã bị tắt. Vui lòng bật lại trong Cài đặt.',
+          body: 'Quyền Bluetooth đã bị tắt. Mở Cài đặt để bật, rồi quay lại — '
+              'ứng dụng sẽ tự nhận.',
           cta: 'Mở cài đặt',
           opensSettings: true,
         );
@@ -313,11 +351,12 @@ class _BleNotReadyState extends State<_BleNotReady> {
     final c = _copy;
     setState(() => _busy = true);
     if (c.opensSettings) {
+      // Open settings; the Gate's resume handler re-checks when we come back.
       await widget.graph.bluetoothGate.openSettings();
     } else {
-      // Retry the readiness check; if ready, prompt an app restart so the
-      // pipeline (which only starts at boot) comes up cleanly.
-      await widget.graph.bluetoothGate.ensureReady();
+      // Request/re-check now. On success, graph.bleStatus flips and this whole
+      // widget is replaced by the Start button.
+      await widget.graph.retryBluetooth();
     }
     if (mounted) setState(() => _busy = false);
   }
