@@ -43,7 +43,8 @@ class AudioProvider extends ChangeNotifier {
   AudioTrackRef? get current => _state.current;
 
   // ── user intents ── (tất cả đi qua controller, không chạm engine)
-  AudioIntentResult tapExhibit(int minor) => _controller.tapExhibit(minor);
+  AudioIntentResult tapExhibit({required int major, required int minor}) =>
+      _controller.tapExhibit(major: major, minor: minor);
   AudioIntentResult play() => _controller.userPlay();
   void pause() => _controller.userPause();
 

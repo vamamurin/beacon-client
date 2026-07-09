@@ -31,13 +31,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/core/injection.dart';
-import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
+import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
-import 'package:beacon_client/presentation/providers/audio_provider.dart';
+import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/providers/audio_provider.dart';
 
 class ExhibitListScreen extends StatelessWidget {
   /// Fixed zone identity from route arguments — the freeze anchor.
@@ -109,9 +110,14 @@ class ExhibitListScreen extends StatelessWidget {
   }
 
   void _openExhibit(BuildContext context, ExhibitInfo exhibit) {
-    // Rule 2a: a tap is an explicit request — interrupt & play (or load-for-
-    // transcript in reading mode; the controller decides).
-    context.read<AudioProvider>().tapExhibit(exhibit.minor);
+    // Rule 2a: tap là yêu cầu tường minh -> interrupt & play (hoặc load-for-
+    // transcript trong reading mode). `major` là zone ĐÓNG BĂNG của màn hình
+    // này, không phải zone hiện tại của arbiter.
+    final r = context
+        .read<AudioProvider>()
+        .tapExhibit(major: major, minor: exhibit.minor);
+    showAudioFeedback(context, r);
+
     Navigator.of(context).pushNamed(
       AppRouter.exhibitDetailRoute,
       arguments: ExhibitDetailArgs(major: major, minor: exhibit.minor),

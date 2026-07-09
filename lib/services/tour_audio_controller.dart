@@ -58,20 +58,11 @@ enum AudioIntentResult {
 typedef AudioUriResolver = Uri Function(String bundleRelativePath);
 
 class TourAudioController {
-  // ⚠️⚠️⚠️ TEMPORARY DEV/TEST OVERRIDE — SET BACK TO `false` BEFORE RELEASE. ⚠️⚠️⚠️
-  //
-  // When true, the controller pretends headphones are ALWAYS connected:
-  //   • reading mode never engages (a tap always plays),
-  //   • autoplay is allowed even with nothing plugged in,
-  //   • unplugging no longer pauses.
-  // This lets you bench-test audio through the device speaker without earphones.
-  // It bypasses the museum's real headphone policy — flip to `false` to restore
-  // the confirmed rules (1), (6) and the autoplayRequiresHeadphones gate.
-  //
-  // NOTE: this only forces the "is there a listening route" answer. It does NOT
-  // touch allowLoudspeaker/autoplayRequiresHeadphones in the bundle — those
-  // remain the real production knobs.
-  static const bool kDebugAssumeHeadphones = true;
+  // Bench-test qua loa ngoài, không cần tai nghe:
+  //   flutter run --dart-define=ASSUME_HEADPHONES=true
+  // Mặc định false ở MỌI nơi khác: test suite, CI, và release build.
+  static const bool kDebugAssumeHeadphones =
+      bool.fromEnvironment('ASSUME_HEADPHONES', defaultValue: false);
 
   TourAudioController({
     required IZoneRepository repository,
@@ -253,9 +244,13 @@ class TourAudioController {
 
   /// Visitor tapped an exhibit tile. Rule 2a: interrupt, play it, then resume
   /// auto-tour from the NEXT exhibit.
-  AudioIntentResult tapExhibit(int minor) {
-    final major = _activeZoneMajor;
-    if (major == null) return AudioIntentResult.notFound;
+  ///
+  /// [major] là zone MÀ MÀN HÌNH ĐANG HIỂN THỊ (frozen theo route args), KHÔNG
+  /// phải zone của arbiter. Hai giá trị này lệch nhau khi visitor đứng ở biên
+  /// và arbiter chuyển zone dưới nền trong lúc họ đang đọc danh sách. `minor`
+  /// chỉ unique trong một zone, nên resolve theo _activeZoneMajor sẽ phát nhầm
+  /// hiện vật cùng số của zone khác.
+  AudioIntentResult tapExhibit({required int major, required int minor}) {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return AudioIntentResult.notFound;
     final idx = zone.tourIndexOf(minor);
@@ -265,12 +260,16 @@ class TourAudioController {
     final resolved = exhibit.audio.resolve(_language, _fallback);
     if (resolved == null) return AudioIntentResult.notFound;
 
-    // Resume point: the exhibit AFTER the tapped one.
-    _autoIndex = idx + 1;
+    // Chỉ nối tiếp auto-tour khi tap nằm TRONG zone vật lý hiện tại. Tap vào
+    // một zone đã rời đi thì phát đúng clip được yêu cầu, nhưng không cướp
+    // quyền auto-queue của zone visitor đang thực sự đứng.
+    if (major == _activeZoneMajor) {
+      _autoIndex = idx + 1;
+    }
 
     _engine.load(
       AudioTrackRef(
-        zoneMajor: major,
+        zoneMajor: major, // ref mang major ĐÚNG -> `isThis` ở màn 4 khớp
         exhibitMinor: minor,
         clipKind: AudioClipKind.exhibitManual,
       ),
@@ -279,7 +278,6 @@ class TourAudioController {
           milliseconds: (resolved.track.durationSec * 1000).round()),
     );
 
-    // Rule (a): reading mode vẫn LOAD (để UI hiện transcript) nhưng KHÔNG phát.
     return _tryPlay()
         ? AudioIntentResult.started
         : AudioIntentResult.blockedNoHeadphones;
@@ -315,19 +313,19 @@ class TourAudioController {
   // ========================================================================
 
   /// A clip finished naturally -> advance the queue.
-  void _onClipCompleted(AudioTrackRef ref) {
+void _onClipCompleted(AudioTrackRef ref) {
     final major = _activeZoneMajor;
     if (major == null) return;
+
+    // Clip vừa phát thuộc một zone khác zone vật lý hiện tại (visitor tap một
+    // hiện vật của zone họ đã rời đi). Phát xong thì im, chờ tap tiếp — KHÔNG
+    // auto-advance. Advance trong zone cũ sẽ trôi ngày càng xa không gian thật;
+    // nhảy sang queue zone mới thì đột ngột không giải thích được.
+    if (ref.zoneMajor != major) return;
+
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
-
-    // Only auto-advance when autoplay is allowed (headphones etc). In reading
-    // mode a completed manual clip simply stops.
     if (!_autoplayAllowed) return;
-
-    // Intro finished, or an exhibit (auto or manual) finished: play exhibit at
-    // _autoIndex, which was set to idx+1 for a manual tap (rule 2a) or
-    // incremented for the auto sequence.
     _playExhibitAt(zone, _autoIndex);
   }
 

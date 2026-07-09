@@ -12,6 +12,16 @@ import 'fakes/fake_audio_engine.dart';
 // The mock bundle: zone 1 (minors 1,2,5), zone 2 (minors 1,2). Desk 99.
 // Policies: allowLoudspeaker=false, autoplayRequiresHeadphones=true,
 // revisitPlaysWelcome=false.
+//
+// NOTE: minor 5 exists ONLY in zone 1. That asymmetry is what lets the
+// cross-zone tests below distinguish "resolved against the screen's frozen
+// major" from "resolved against the arbiter's active major", without needing
+// the fake engine to log source URIs.
+//
+// NOTE: these tests assume TourAudioController.kDebugAssumeHeadphones is
+// false. It is, unless someone passes --dart-define=ASSUME_HEADPHONES=true,
+// which must never happen in CI — the flag disables reading mode outright and
+// every reading-mode test here would (correctly) fail.
 
 Uri _resolve(String path) => Uri.parse('file:///bundle/$path');
 
@@ -127,7 +137,7 @@ void main() {
       await pumpEventQueue();
 
       // Visitor taps the grenade (minor 5, tour index 2).
-      h.ctrl.tapExhibit(5);
+      h.ctrl.tapExhibit(major: 1, minor: 5);
       await pumpEventQueue();
       expect(h.engine.loadLog.last.exhibitMinor, 5);
       expect(h.engine.loadLog.last.clipKind, AudioClipKind.exhibitManual);
@@ -149,7 +159,7 @@ void main() {
       await pumpEventQueue();
 
       // Tap minor 1 (index 0) -> resume should be index 1 (minor 2).
-      h.ctrl.tapExhibit(1);
+      h.ctrl.tapExhibit(major: 1, minor: 1);
       await pumpEventQueue();
       expect(h.ctrl.autoIndex, 1);
       h.engine.completeCurrent(); // manual done -> auto index 1 = minor 2
@@ -162,8 +172,9 @@ void main() {
       final h = await harness(headphones: false);
       h.ctrl.enterZone(1);
       await pumpEventQueue();
-      h.ctrl.tapExhibit(5);
+      final r = h.ctrl.tapExhibit(major: 1, minor: 5);
       await pumpEventQueue();
+      expect(r, AudioIntentResult.blockedNoHeadphones);
       expect(h.engine.loadLog.last.exhibitMinor, 5); // loaded for transcript
       expect(h.engine.state.isPlaying, isFalse); // never blasts loudspeaker
     });
@@ -262,6 +273,146 @@ void main() {
       // enterZone from standby doesn't chime, and revisit suppresses intro:
       // no playback should start.
       expect(h.engine.state.isPlaying, isFalse);
+    });
+  });
+
+  // ==========================================================================
+  // Step 1 — the policy gate. Every playback intent must pass through
+  // _tryPlay(); none may reach the engine behind reading mode's back.
+  // ==========================================================================
+
+  group('Policy gate — no playback intent bypasses reading mode', () {
+    test('userPlay in reading mode reports blocked and stays silent', () async {
+      final h = await harness(headphones: false);
+      h.ctrl.enterZone(1); // intro loaded, silent
+      await pumpEventQueue();
+      expect(h.engine.state.isPlaying, isFalse);
+
+      final r = h.ctrl.userPlay();
+      await pumpEventQueue();
+
+      expect(r, AudioIntentResult.blockedNoHeadphones);
+      expect(h.engine.state.isPlaying, isFalse);
+    });
+
+    test('userReplay in reading mode seeks to 0 but never plays', () async {
+      // This is the exact hole Step 1 closed: AudioProvider.replay() used to
+      // call engine.seek + engine.play directly, so "Về đầu" would blast the
+      // loudspeaker even though tapExhibit was careful not to.
+      final h = await harness(headphones: false);
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+
+      final r = h.ctrl.userReplay();
+      await pumpEventQueue();
+
+      expect(r, AudioIntentResult.blockedNoHeadphones);
+      expect(h.engine.state.isPlaying, isFalse);
+    });
+
+    test('userPlay with nothing loaded reports noClip, not a headphone problem',
+        () async {
+      // The UI must not show "plug in headphones" when the real reason is
+      // "no clip has been loaded yet" — hence an enum rather than a bool.
+      final h = await harness(headphones: false);
+      final r = h.ctrl.userPlay(); // never entered a zone
+      expect(r, AudioIntentResult.noClip);
+    });
+
+    test('with headphones, userReplay restarts the clip and plays', () async {
+      final h = await harness();
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+
+      final r = h.ctrl.userReplay();
+      await pumpEventQueue();
+
+      expect(r, AudioIntentResult.started);
+      expect(h.engine.state.isPlaying, isTrue);
+    });
+  });
+
+  // ==========================================================================
+  // Step 2 — the screen's zone is frozen; the arbiter's is not. `minor` is
+  // only unique within a zone, so a tap must resolve against the major the
+  // CALLER is showing, never against _activeZoneMajor.
+  //
+  // Discriminator: minor 5 exists only in zone 1. Under the old code, tapping
+  // it after the arbiter moved to zone 2 would resolve tourIndexOf(5) == -1
+  // and silently load nothing.
+  // ==========================================================================
+
+  group('Cross-zone tap — screen zone frozen, arbiter zone moved', () {
+    test('tap resolves against the SCREEN zone, not the arbiter zone', () async {
+      final h = await harness();
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+      h.ctrl.changeZone(2); // arbiter moved underneath the frozen screen
+      await pumpEventQueue();
+      expect(h.ctrl.activeZoneMajor, 2);
+
+      final r = h.ctrl.tapExhibit(major: 1, minor: 5);
+      await pumpEventQueue();
+
+      expect(r, AudioIntentResult.started);
+      expect(h.engine.loadLog.last.zoneMajor, 1);
+      expect(h.engine.loadLog.last.exhibitMinor, 5);
+      expect(h.engine.loadLog.last.clipKind, AudioClipKind.exhibitManual);
+    });
+
+    test('cross-zone tap does not hijack the active zone auto-queue', () async {
+      final h = await harness();
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+      h.ctrl.changeZone(2);
+      await pumpEventQueue();
+      final autoIndexBefore = h.ctrl.autoIndex; // zone 2's queue position
+
+      h.ctrl.tapExhibit(major: 1, minor: 5); // index 2 inside zone 1
+      await pumpEventQueue();
+
+      // If _autoIndex jumped to 3, zone 2's auto-tour (the zone the visitor is
+      // physically standing in) would resume from the wrong place.
+      expect(h.ctrl.autoIndex, autoIndexBefore);
+    });
+
+    test('cross-zone manual clip goes quiet on completion (no auto-advance)',
+        () async {
+      final h = await harness();
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+      h.ctrl.changeZone(2);
+      await pumpEventQueue();
+      h.ctrl.tapExhibit(major: 1, minor: 5);
+      await pumpEventQueue();
+      final loadsBefore = h.engine.loadLog.length;
+
+      h.engine.completeCurrent(); // zone 1's clip ends; visitor is in zone 2
+      await pumpEventQueue();
+
+      // PRODUCT DECISION, locked in by this test: go quiet and wait for a tap.
+      // Advancing inside the stale zone drifts further from physical space
+      // ("physical sync is supreme"); jumping into zone 2's queue would be
+      // unexplainable to the listener. If someone "fixes" this into an
+      // advance, they must delete this test and justify it.
+      expect(h.engine.loadLog.length, loadsBefore);
+    });
+
+    test('tap into the active zone still advances the queue normally', () async {
+      // Guard against over-correcting: the freeze only suppresses advance when
+      // the tap is CROSS-zone. A tap inside the active zone behaves as rule 2a.
+      final h = await harness();
+      h.ctrl.enterZone(1);
+      await pumpEventQueue();
+
+      h.ctrl.tapExhibit(major: 1, minor: 1); // index 0, active zone
+      await pumpEventQueue();
+      expect(h.ctrl.autoIndex, 1);
+
+      h.engine.completeCurrent();
+      await pumpEventQueue();
+      expect(h.engine.loadLog.last.exhibitMinor, 2);
+      expect(h.engine.loadLog.last.clipKind, AudioClipKind.exhibitAuto);
     });
   });
 }
