@@ -25,7 +25,7 @@ import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
 class ZoneScreen extends StatelessWidget {
   const ZoneScreen({super.key});
-  
+
   @override
   Widget build(BuildContext context) {
     final zone = context.watch<ZoneProvider>().currentZone;
@@ -141,7 +141,7 @@ class _ZoneCard extends StatelessWidget {
                               fontFamily: AppFonts.sans,
                               fontWeight: FontWeight.w300,
                               fontSize: 10,
-                              color: Color(0xFFCFCFCF),
+                              color: AppColors.subText,
                             ),
                           ),
                         ],

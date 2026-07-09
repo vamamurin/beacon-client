@@ -103,7 +103,7 @@ abstract final class AppText {
     fontWeight: FontWeight.w300,
     fontStyle: FontStyle.italic,
     fontSize: 11,
-    color: Color(0xFFC8C8C8),
+    color: AppColors.artistText,
   );
 
   /// start button label (12px 600 uppercase, .08em)

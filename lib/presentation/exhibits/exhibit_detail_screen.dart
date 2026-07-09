@@ -426,7 +426,7 @@ class _RoundIcon extends StatelessWidget {
       button: true,
       label: label,
       child: Material(
-        color: const Color(0x66000000),
+        color: AppColors.scrimBack,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -532,6 +532,6 @@ class _DetailBody extends StatelessWidget {
     fontWeight: FontWeight.w300,
     fontSize: 13,
     height: 1.7,
-    color: Color(0xFFCFCFCF),
+    color: AppColors.subText,
   );
 }

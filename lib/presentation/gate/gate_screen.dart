@@ -2,7 +2,7 @@
 //
 // Screen 1 — welcome / session gate. Matches giaodien.html screen 1 1:1:
 // full-bleed hero image + veil, wordmark top, welcome block bottom, white
-// "Bắt đầu tham quan" button. Wired to SessionProvider + AppGraph.
+// "Bắt đầu tham quan" button. Wired to SessionProvider, StartupProvider + ContentProvider.
 //
 // Navigation is owned by the root (MuseumApp): pressing Start just calls
 // session.startTour(); the root moves the stack when touring begins/ends.
@@ -75,7 +75,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
           // Full-bleed hero (bundle image later; gradient fallback for now).
           const HeroImage(
             filePath: null, // Screen 1 has no zone image; use fallback tone.
-            veil: _welcomeVeil,
+            veil: AppColors.welcomeVeil,
           ),
 
           SafeArea(
@@ -118,7 +118,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                           fontWeight: FontWeight.w300,
                           fontSize: 11,
                           height: 1.6,
-                          color: Color(0xFFD0D0D0),
+                          color: AppColors.onImageText,
                         ),
                       ),
                     ],
@@ -160,13 +160,6 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
       onPressed: session.startTour, // root navigates when phase -> touring
     );
   }
-
-  static const LinearGradient _welcomeVeil = LinearGradient(
-    begin: Alignment.bottomCenter,
-    end: Alignment.topCenter,
-    colors: [Color(0xFF000000), Color(0x59000000), Color(0x8C000000)],
-    stops: [0.10, 0.55, 1.0],
-  );
 }
 
 /// White uppercase CTA, matching .startbtn.
@@ -181,7 +174,7 @@ class _StartButton extends StatelessWidget {
       button: true,
       label: 'Bắt đầu tham quan',
       child: Material(
-        color: enabled ? AppColors.white : const Color(0xFF6E6E6E),
+        color: enabled ? AppColors.white : AppColors.buttonDisabled,
         borderRadius: BorderRadius.circular(2),
         child: InkWell(
           onTap: enabled ? onPressed : null,

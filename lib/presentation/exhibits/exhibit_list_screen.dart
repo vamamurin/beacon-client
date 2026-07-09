@@ -129,7 +129,7 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
     // Rule 2a: tap là yêu cầu tường minh -> interrupt & play (hoặc load-for-
     // transcript trong reading mode). `major` là zone ĐÓNG BĂNG của màn hình
     // này, không phải zone hiện tại của arbiter.
-    // Cố ý gọi trước pushNamed để Snackbar nổi trên màn hình Chi tiết (detail screen) sắp mở. Đừng đổi thứ tự.
+    // Cố ý gọi trước pushNamed để Snackbar nổi trên màn hình Chi tiết (detail screen) sắp mở. Đừng đổi thứ tự. Nếu cần đổi hãy ib
     final r = context
         .read<AudioProvider>()
         .tapExhibit(major: widget.major, minor: exhibit.minor);
@@ -171,7 +171,7 @@ class _ZoneHero extends StatelessWidget {
               button: true,
               label: 'Quay lại',
               child: Material(
-                color: const Color(0x66000000),
+                color: AppColors.scrimBack,
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
@@ -205,7 +205,7 @@ class _ZoneHero extends StatelessWidget {
                     fontFamily: AppFonts.sans,
                     fontWeight: FontWeight.w300,
                     fontSize: 11,
-                    color: Color(0xFFD0D0D0),
+                    color: AppColors.onImageText,
                   ),
                 ),
               ],
