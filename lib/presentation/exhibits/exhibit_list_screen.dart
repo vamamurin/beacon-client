@@ -30,7 +30,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
@@ -39,6 +38,8 @@ import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
 class ExhibitListScreen extends StatelessWidget {
   /// Fixed zone identity from route arguments — the freeze anchor.
@@ -48,9 +49,8 @@ class ExhibitListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final graph = context.read<AppGraph>();
-    final zone = graph.repository.zoneByMajor(major);
-    final lang = graph.repository.config?.fallbackLanguage ?? 'vi';
+    final content = context.watch<ContentProvider>();
+    final zone = content.zoneByMajor(major);
 
     if (zone == null) {
       // Unknown major (stale route after a bundle swap) — graceful, not a crash.
@@ -63,16 +63,18 @@ class ExhibitListScreen extends StatelessWidget {
       );
     }
 
+    final presence = context.read<ExhibitPresenceProvider>();
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
-          _ZoneHero(zone: zone, lang: lang, graph: graph),
+          _ZoneHero(zone: zone, content: content),
           // Live subset: rebuilds only when the set of heard minors changes.
           Expanded(
             child: StreamBuilder<Set<int>>(
-              initialData: graph.exhibitPresence.currentPresent(major),
-              stream: graph.exhibitPresence.watchMajor(major),
+              initialData: presence.currentPresent(major), 
+              stream: presence.watchMajor(major),
               builder: (context, snap) {
                 final present = snap.data ?? const <int>{};
 
@@ -93,8 +95,7 @@ class ExhibitListScreen extends StatelessWidget {
                         itemCount: visible.length,
                         itemBuilder: (context, i) => _StopRow(
                           exhibit: visible[i],
-                          lang: lang,
-                          graph: graph,
+                          content: content,
                           onTap: () => _openExhibit(context, visible[i]),
                         ),
                       ),
@@ -128,13 +129,13 @@ class ExhibitListScreen extends StatelessWidget {
 /// 250px hero: zone image + heroVeil + back button + serif title + meta.
 class _ZoneHero extends StatelessWidget {
   final ZoneInfo zone;
-  final String lang;
-  final AppGraph graph;
-  const _ZoneHero({required this.zone, required this.lang, required this.graph});
+  final ContentProvider content;
+
+  const _ZoneHero({required this.zone, required this.content});
 
   @override
   Widget build(BuildContext context) {
-    final name = zone.name.resolve(lang, lang);
+    final name = content.text(zone.name);
 
     return SizedBox(
       height: 250,
@@ -142,7 +143,7 @@ class _ZoneHero extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           HeroImage(
-            filePath: graph.imagePathResolver(zone.heroImagePath),
+            filePath: content.imagePath(zone.heroImagePath),
             veil: AppColors.heroVeil,
             cacheWidth: 900,
           ),
@@ -260,14 +261,12 @@ class _NoneNearby extends StatelessWidget {
 /// One .stop row: circled MINOR + 40x40 thumb + serif name + grey meta.
 class _StopRow extends StatelessWidget {
   final ExhibitInfo exhibit;
-  final String lang;
-  final AppGraph graph;
+  final ContentProvider content;
   final VoidCallback onTap;
 
   const _StopRow({
     required this.exhibit,
-    required this.lang,
-    required this.graph,
+    required this.content,
     required this.onTap,
   });
 
@@ -276,15 +275,15 @@ class _StopRow extends StatelessWidget {
   String _metaLine() {
     if (exhibit.specs.isNotEmpty) {
       return exhibit.specs
-          .map((s) => s.value.resolve(lang, lang))
+          .map((s) => content.text(s.value))
           .join(' · ');
     }
-    return exhibit.summary.resolve(lang, lang);
+    return content.text(exhibit.summary);
   }
 
   @override
   Widget build(BuildContext context) {
-    final name = exhibit.name.resolve(lang, lang);
+    final name = content.text(exhibit.name);
 
     return Semantics(
       button: true,
@@ -327,8 +326,7 @@ class _StopRow extends StatelessWidget {
                     width: 40,
                     height: 40,
                     child: HeroImage(
-                      filePath:
-                          graph.imagePathResolver(exhibit.thumbnailPath),
+                      filePath: content.imagePath(exhibit.thumbnailPath),
                       cacheWidth: 120,
                     ),
                   ),

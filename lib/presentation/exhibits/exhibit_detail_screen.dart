@@ -27,15 +27,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/core/injection.dart';
-import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
+import 'package:beacon_client/domain/models/exhibit_info.dart';
+import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
-import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
-import 'package:beacon_client/presentation/audio_feedback.dart';
+import 'package:beacon_client/presentation/providers/audio_provider.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
+
 
 class ExhibitDetailScreen extends StatelessWidget {
   final int major;
@@ -49,10 +50,10 @@ class ExhibitDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final graph = context.read<AppGraph>();
-    final zone = graph.repository.zoneByMajor(major);
-    final exhibit = zone?.exhibitByMinor(minor);
-    final lang = graph.repository.config?.fallbackLanguage ?? 'vi';
+    final content = context.watch<ContentProvider>();
+    final zone = content.zoneByMajor(major);
+    final exhibit = content.exhibitAt(major, minor);
+    
 
     if (zone == null || exhibit == null) {
       return Scaffold(
@@ -75,13 +76,12 @@ class ExhibitDetailScreen extends StatelessWidget {
               child: _PlayerPane(
                 zone: zone,
                 exhibit: exhibit,
-                lang: lang,
-                graph: graph,
+                content: content,
               ),
             ),
           ),
           SliverToBoxAdapter(
-            child: _DetailBody(exhibit: exhibit, lang: lang, graph: graph),
+            child: _DetailBody(exhibit: exhibit, content: content),
           ),
         ],
       ),
@@ -93,27 +93,25 @@ class ExhibitDetailScreen extends StatelessWidget {
 class _PlayerPane extends StatelessWidget {
   final ZoneInfo zone;
   final ExhibitInfo exhibit;
-  final String lang;
-  final AppGraph graph;
+  final ContentProvider content;
 
   const _PlayerPane({
     required this.zone,
     required this.exhibit,
-    required this.lang,
-    required this.graph,
+    required this.content,
   });
 
   @override
   Widget build(BuildContext context) {
-    final zoneName = zone.name.resolve(lang, lang);
-    final name = exhibit.name.resolve(lang, lang);
+    final zoneName = content.text(zone.name);
+    final name = content.text(exhibit.name);
     final artistLine = _artistLine();
 
     return Stack(
       fit: StackFit.expand,
       children: [
         HeroImage(
-          filePath: graph.imagePathResolver(exhibit.imagePath),
+          filePath: content.imagePath(exhibit.imagePath),
           veil: AppColors.playerVeil,
           cacheWidth: 1000,
         ),
@@ -170,7 +168,7 @@ class _PlayerPane extends StatelessWidget {
 
   String? _artistLine() {
     if (exhibit.specs.isEmpty) return null;
-    return exhibit.specs.map((s) => s.value.resolve(lang, lang)).join(' · ');
+    return exhibit.specs.map((s) => content.text(s.value)).join(' · ');
   }
 }
 
@@ -472,15 +470,15 @@ class _NumBadge extends StatelessWidget {
 /// Below-the-fold: summary, meaning, specs. The "more info".
 class _DetailBody extends StatelessWidget {
   final ExhibitInfo exhibit;
-  final String lang;
-  final AppGraph graph;
+  final ContentProvider content;
+
   const _DetailBody(
-      {required this.exhibit, required this.lang, required this.graph});
+      {required this.exhibit, required this.content});
 
   @override
   Widget build(BuildContext context) {
-    final summary = exhibit.summary.resolve(lang, lang);
-    final meaning = exhibit.meaning?.resolve(lang, lang);
+    final summary = content.text(exhibit.summary);
+    final meaning = content.textOrNull(exhibit.meaning);
 
     return Container(
       color: AppColors.background,
@@ -508,11 +506,11 @@ class _DetailBody extends StatelessWidget {
                     children: [
                       SizedBox(
                         width: 120,
-                        child: Text(s.label.resolve(lang, lang),
+                        child: Text(content.text(s.label),
                             style: AppText.stopMeta),
                       ),
                       Expanded(
-                        child: Text(s.value.resolve(lang, lang),
+                        child: Text(content.text(s.value),
                             style: _bodyStyle.copyWith(fontSize: 12)),
                       ),
                     ],

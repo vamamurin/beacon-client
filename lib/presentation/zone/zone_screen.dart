@@ -15,7 +15,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/core/injection.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
@@ -24,19 +24,13 @@ import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
 class ZoneScreen extends StatelessWidget {
-  const ZoneScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
-    final zoneProvider = context.watch<ZoneProvider>();
-    final zone = zoneProvider.currentZone;
-
+    final zone = context.watch<ZoneProvider>().currentZone;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: zone == null
-            ? const _RadarStandby()
-            : _CurrentZoneView(zone: zone),
+        child: zone == null ? const _RadarStandby() : _CurrentZoneView(zone: zone),
       ),
     );
   }
@@ -49,9 +43,7 @@ class _CurrentZoneView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final graph = context.read<AppGraph>();
-    final lang = graph.repository.config?.fallbackLanguage ?? 'vi';
-    final fallback = lang;
+    final content = context.watch<ContentProvider>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -79,9 +71,7 @@ class _CurrentZoneView extends StatelessWidget {
             children: [
               _ZoneCard(
                 zone: zone,
-                lang: lang,
-                fallback: fallback,
-                resolveImage: graph.imagePathResolver,
+                content: content,
                 onTap: () => Navigator.of(context)
                     .pushNamed(AppRouter.exhibitListRoute, arguments: zone.major),
               ),
@@ -96,22 +86,18 @@ class _CurrentZoneView extends StatelessWidget {
 /// A single .tourcard (150px, veil, serif title, meta line).
 class _ZoneCard extends StatelessWidget {
   final ZoneInfo zone;
-  final String lang;
-  final String fallback;
-  final String? Function(String path) resolveImage;
+  final ContentProvider content;
   final VoidCallback onTap;
 
   const _ZoneCard({
-    required this.zone,
-    required this.lang,
-    required this.fallback,
-    required this.resolveImage,
-    required this.onTap,
+    required this.zone, 
+    required this.content, 
+    required this.onTap
   });
 
   @override
   Widget build(BuildContext context) {
-    final name = zone.name.resolve(lang, fallback);
+    final name = content.text(zone.name);
     final count = zone.exhibits.length;
 
     return Padding(
@@ -133,7 +119,7 @@ class _ZoneCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     HeroImage(
-                      filePath: resolveImage(zone.heroImagePath),
+                      filePath: content.imagePath(zone.heroImagePath),
                       veil: AppColors.tourCardVeil,
                       cacheWidth: 800,
                     ),
