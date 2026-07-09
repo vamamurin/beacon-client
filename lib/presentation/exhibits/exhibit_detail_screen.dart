@@ -35,6 +35,7 @@ import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/services/tour_audio_controller.dart';
 
 class ExhibitDetailScreen extends StatelessWidget {
   final int major;
@@ -173,6 +174,27 @@ class _PlayerPane extends StatelessWidget {
   }
 }
 
+/// Phản hồi cho một ý định phát tiếng. Một nút bấm mà "không có gì xảy ra"
+/// là dạng lỗi tệ nhất: người dùng không biết là do họ hay do máy.
+void _feedback(BuildContext context, AudioIntentResult r) {
+  final String? msg = switch (r) {
+    AudioIntentResult.blockedNoHeadphones =>
+      'Cắm tai nghe để nghe thuyết minh.',
+    AudioIntentResult.notFound =>
+      'Chưa có bản thuyết minh cho hiện vật này.',
+    AudioIntentResult.started || AudioIntentResult.noClip => null,
+  };
+  if (msg == null) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(msg, style: AppText.meta.copyWith(color: AppColors.black)),
+      backgroundColor: AppColors.white,
+      behavior: SnackBarBehavior.floating,
+      duration: const Duration(seconds: 2),
+    ),
+  );
+}
+
 /// Play/pause + progress + begin/next. Only the progress sub-tree rebuilds on
 /// position ticks; the rest rebuilds on AudioQueueState changes.
 class _Controls extends StatelessWidget {
@@ -234,10 +256,12 @@ class _Controls extends StatelessWidget {
               _SkipButton(
                 icon: Icons.first_page,
                 label: 'Về đầu',
-                // Restart this clip from 0; if it isn't loaded, load+play it.
-                onTap: () => isThis
-                    ? audio.replay()
-                    : audio.tapExhibit(exhibit.minor),
+                onTap: () {
+                  final r = isThis
+                      ? audio.replay()
+                      : audio.tapExhibit(exhibit.minor);
+                  _feedback(context, r);
+                },
               ),
               const SizedBox(width: 34),
               _PlayButton(
@@ -245,12 +269,11 @@ class _Controls extends StatelessWidget {
                 onTap: () {
                   if (isThis && state.isPlaying) {
                     audio.pause();
-                  } else if (isThis) {
-                    audio.play();
-                  } else {
-                    // Not the current clip -> request it (interrupt + play).
-                    audio.tapExhibit(exhibit.minor);
-                  }
+                  } 
+                  final r = isThis
+                      ? audio.play()
+                      : audio.tapExhibit(exhibit.minor);
+                  _feedback(context, r);
                 },
               ),
               const SizedBox(width: 34),
@@ -273,7 +296,8 @@ class _Controls extends StatelessWidget {
     if (curIdx < 0 || curIdx + 1 >= zone.exhibits.length) return;
     final next = zone.exhibits[curIdx + 1];
     // Rule 2a: an explicit request interrupts and plays the chosen clip.
-    audio.tapExhibit(next.minor);
+    final r = audio.tapExhibit(next.minor);
+    _feedback(context, r);
     // Replace (don't stack) so back from any detail returns to the list.
     Navigator.of(context).pushReplacementNamed(
       AppRouter.exhibitDetailRoute,

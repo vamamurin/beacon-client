@@ -34,6 +34,24 @@ import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 
+/// Kết quả của một ý định phát tiếng do người dùng khởi xướng. Trả về enum
+/// thay vì bool để UI phân biệt được "bị chặn vì không có tai nghe" với
+/// "chưa có clip nào" — hai trường hợp cần phản hồi khác nhau.
+enum AudioIntentResult {
+  /// Đã bắt đầu phát.
+  started,
+
+  /// Reading mode: không có đường nghe riêng và bảo tàng cấm loa ngoài.
+  /// Clip VẪN được load (để hiện transcript), chỉ không phát tiếng.
+  blockedNoHeadphones,
+
+  /// Chưa có clip nào được load — nút play không có gì để phát.
+  noClip,
+
+  /// Không resolve được zone/exhibit/audio track.
+  notFound,
+}
+
 /// Resolves a bundle-relative audio path to a playable Uri. Injected so the
 /// same controller works over MockZoneRepository (asset/file) and the real
 /// LocalBundleZoneRepository (file on disk) without knowing which.
@@ -213,7 +231,20 @@ class TourAudioController {
       durationHint: Duration(
           milliseconds: (resolved.track.durationSec * 1000).round()),
     );
-    if (play) _engine.play();
+    if (play) _tryPlay();
+  }
+
+  // ========================================================================
+  // Cổng chính sách phát tiếng
+  // ========================================================================
+
+  /// CHỖ DUY NHẤT trong toàn bộ codebase được phép gọi `_engine.play()`.
+  /// Mọi đường phát tiếng — autoplay, tap, play, replay, auto-advance — đều
+  /// phải đi qua đây. Nếu bạn thấy `_engine.play()` ở chỗ khác, đó là bug.
+  bool _tryPlay() {
+    if (_readingMode) return false;
+    _engine.play();
+    return true;
   }
 
   // ========================================================================
@@ -222,17 +253,17 @@ class TourAudioController {
 
   /// Visitor tapped an exhibit tile. Rule 2a: interrupt, play it, then resume
   /// auto-tour from the NEXT exhibit.
-  void tapExhibit(int minor) {
+  AudioIntentResult tapExhibit(int minor) {
     final major = _activeZoneMajor;
-    if (major == null) return;
+    if (major == null) return AudioIntentResult.notFound;
     final zone = _repo.zoneByMajor(major);
-    if (zone == null) return;
+    if (zone == null) return AudioIntentResult.notFound;
     final idx = zone.tourIndexOf(minor);
-    if (idx < 0) return;
+    if (idx < 0) return AudioIntentResult.notFound;
 
     final exhibit = zone.exhibits[idx];
     final resolved = exhibit.audio.resolve(_language, _fallback);
-    if (resolved == null) return;
+    if (resolved == null) return AudioIntentResult.notFound;
 
     // Resume point: the exhibit AFTER the tapped one.
     _autoIndex = idx + 1;
@@ -247,18 +278,37 @@ class TourAudioController {
       durationHint: Duration(
           milliseconds: (resolved.track.durationSec * 1000).round()),
     );
-    // Rule (a): in reading mode a tap loads the clip (so the UI can show its
-    // transcript) but plays NO sound — a tap must never blast the loudspeaker.
-    // With headphones, a tap is an explicit request and always plays.
-    if (!_readingMode) _engine.play();
+
+    // Rule (a): reading mode vẫn LOAD (để UI hiện transcript) nhưng KHÔNG phát.
+    return _tryPlay()
+        ? AudioIntentResult.started
+        : AudioIntentResult.blockedNoHeadphones;
   }
 
-  /// Visitor pressed play (resume, or start a queued-but-silent intro).
-  void userPlay() => _engine.play();
+  /// Visitor bấm play (resume, hoặc khởi động một intro đã load nhưng im).
+  AudioIntentResult userPlay() {
+    if (_engine.state.current == null) return AudioIntentResult.noClip;
+    return _tryPlay()
+        ? AudioIntentResult.started
+        : AudioIntentResult.blockedNoHeadphones;
+  }
 
-  /// Visitor pressed pause. Recorded implicitly via engine status; the
-  /// zone-change logic reads that status to honour intent.
+  /// Visitor bấm pause.
   void userPause() => _engine.pause();
+
+  /// Visitor bấm "Về đầu". Tua về 0 LUÔN được phép (đây là thao tác vị trí,
+  /// không phải phát tiếng); chỉ việc phát mới đi qua cổng chính sách.
+  AudioIntentResult userReplay() {
+    if (_engine.state.current == null) return AudioIntentResult.noClip;
+    _engine.seek(Duration.zero);
+    return _tryPlay()
+        ? AudioIntentResult.started
+        : AudioIntentResult.blockedNoHeadphones;
+  }
+
+  /// Visitor kéo thanh progress. Không phát tiếng ⇒ không qua cổng.
+  /// (Chưa có UI dùng — chuẩn bị cho seek ở bước 6.)
+  void userSeek(Duration position) => _engine.seek(position);
 
   // ========================================================================
   // Reactions
@@ -304,7 +354,7 @@ class TourAudioController {
       durationHint: Duration(
           milliseconds: (resolved.track.durationSec * 1000).round()),
     );
-    _engine.play();
+    _tryPlay();
   }
 
   /// Headphone connection changed. Rule 6.

@@ -42,18 +42,15 @@ class AudioProvider extends ChangeNotifier {
   bool get isPaused => _state.isPaused;
   AudioTrackRef? get current => _state.current;
 
-  // ── user intents ──
-  void tapExhibit(int minor) => _controller.tapExhibit(minor);
-  void play() => _controller.userPlay();
+  // ── user intents ── (tất cả đi qua controller, không chạm engine)
+  AudioIntentResult tapExhibit(int minor) => _controller.tapExhibit(minor);
+  AudioIntentResult play() => _controller.userPlay();
   void pause() => _controller.userPause();
 
-  /// Restart the loaded clip from the beginning ("Về đầu"). Mirrors [play] as
-  /// an explicit user action: it seeks to 0 and plays. Only meaningful when a
-  /// clip is loaded; on an empty engine it's a harmless no-op.
-  void replay() {
-    _engine.seek(Duration.zero);
-    _engine.play();
-  }
+  /// Tua về đầu rồi phát (nếu chính sách cho phép).
+  AudioIntentResult replay() => _controller.userReplay();
+
+  void seek(Duration position) => _controller.userSeek(position);
 
   @override
   void dispose() {
