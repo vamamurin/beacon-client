@@ -43,7 +43,7 @@ Future<
     engine: engine,
     headphones: hp,
     uriResolver: _resolve,
-    language: 'vi',
+    language: () => 'vi',
     onChime: () => chimes++,
   );
   return (ctrl: ctrl, engine: engine, hp: hp, repo: repo);
@@ -62,7 +62,7 @@ Future<({TourAudioController ctrl, FakeAudioEngine engine, int Function() chimes
     engine: engine,
     headphones: hp,
     uriResolver: _resolve,
-    language: 'vi',
+    language: () => 'vi',
     onChime: () => chimes++,
   );
   return (ctrl: ctrl, engine: engine, chimes: () => chimes);

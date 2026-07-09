@@ -56,6 +56,7 @@ enum AudioIntentResult {
 /// same controller works over MockZoneRepository (asset/file) and the real
 /// LocalBundleZoneRepository (file on disk) without knowing which.
 typedef AudioUriResolver = Uri Function(String bundleRelativePath);
+typedef LanguageResolver = String Function();
 
 class TourAudioController {
   // Bench-test qua loa ngoài, không cần tai nghe:
@@ -69,7 +70,7 @@ class TourAudioController {
     required IAudioEngine engine,
     required IHeadphoneMonitor headphones,
     required AudioUriResolver uriResolver,
-    required String language,
+    required LanguageResolver language,
     required void Function() onChime,
   })  : _repo = repository,
         _engine = engine,
@@ -86,7 +87,7 @@ class TourAudioController {
   final IAudioEngine _engine;
   final IHeadphoneMonitor _headphones;
   final AudioUriResolver _resolveUri;
-  final String _language;
+  final LanguageResolver _language;
   final void Function() _onChime;
 
   late final StreamSubscription<AudioTrackRef> _completedSub;
@@ -213,7 +214,7 @@ class TourAudioController {
   }
 
   void _loadIntro(ZoneInfo zone, {required bool play}) {
-    final resolved = zone.introAudio.resolve(_language, _fallback);
+    final resolved = zone.introAudio.resolve(_language(), _fallback);
     if (resolved == null) return;
     _autoIndex = 0; // exhibits start after the intro
     _engine.load(
@@ -257,7 +258,7 @@ class TourAudioController {
     if (idx < 0) return AudioIntentResult.notFound;
 
     final exhibit = zone.exhibits[idx];
-    final resolved = exhibit.audio.resolve(_language, _fallback);
+    final resolved = exhibit.audio.resolve(_language(), _fallback);
     if (resolved == null) return AudioIntentResult.notFound;
 
     // Chỉ nối tiếp auto-tour khi tap nằm TRONG zone vật lý hiện tại. Tap vào
@@ -334,7 +335,7 @@ void _onClipCompleted(AudioTrackRef ref) {
       return; // tour of this zone complete; go quiet, await tap or zone change
     }
     final exhibit = zone.exhibits[index];
-    final resolved = exhibit.audio.resolve(_language, _fallback);
+    final resolved = exhibit.audio.resolve(_language(), _fallback);
     if (resolved == null) {
       // Skip a clip that failed to resolve; keep the tour moving.
       _autoIndex = index + 1;
@@ -378,7 +379,7 @@ void _onClipCompleted(AudioTrackRef ref) {
 
   void resetVisitedZones() => _visitedZones.clear();
 
-  String get _fallback => _config?.fallbackLanguage ?? _language;
+  String get _fallback => _config?.fallbackLanguage ?? _language();
 
   Future<void> dispose() async {
     await _completedSub.cancel();

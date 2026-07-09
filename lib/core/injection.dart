@@ -240,7 +240,11 @@ abstract final class Injection {
       engine: engine,
       headphones: headphones,
       uriResolver: _uriResolver(repository),
-      language: cfg?.fallbackLanguage ?? 'vi',
+      // Đọc từ repository (không phải biến `cfg` đã snapshot ở trên), nên một
+      // lần re-warm sau sync sẽ được nhìn thấy. Khi Settings ra đời, dòng này
+      // thành `() => settings.language` — không cần restart graph.
+      language: () => repository.config?.fallbackLanguage ?? 'vi',
+
       onChime: chime.play,
     );
 
