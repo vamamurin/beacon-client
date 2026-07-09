@@ -24,6 +24,8 @@ import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
 
 class ZoneScreen extends StatelessWidget {
+  const ZoneScreen({super.key});
+  
   @override
   Widget build(BuildContext context) {
     final zone = context.watch<ZoneProvider>().currentZone;

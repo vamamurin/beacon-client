@@ -18,10 +18,13 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/presentation/app/app.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
-import 'package:beacon_client/presentation/providers/audio_provider.dart';
-import 'package:beacon_client/presentation/providers/session_provider.dart';
-import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/providers/zone_provider.dart';
+import 'package:beacon_client/presentation/providers/audio_provider.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/session_provider.dart';
+import 'package:beacon_client/presentation/providers/startup_provider.dart';
+import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,17 +87,50 @@ class _BootstrapHostState extends State<_BootstrapHost> {
         final graph = snap.data!;
         return MultiProvider(
           providers: [
-            Provider<AppGraph>.value(value: graph),
-            Provider<AppRestarter>.value(value: AppRestarter(_restart)),
+            // `create:` chứ không `.value(...)`: FutureBuilder.builder chạy lại
+            // mỗi rebuild, và Provider.value không sở hữu giá trị — nó sẽ dựng
+            // lại object mỗi frame và đánh dirty mọi widget đang đọc nó.
+            // `create` chạy đúng một lần cho vòng đời của element này.
+            Provider<AppRestarter>(create: (_) => AppRestarter(_restart)),
+
+            // ── nội dung: "hiển thị chữ nào, ảnh nào?" (màn 2, 3, 4)
+            ChangeNotifierProvider<ContentProvider>(
+              create: (_) => ContentProvider(
+                repository: graph.repository,
+                imagePathResolver: graph.imagePathResolver,
+              ),
+            ),
+
+            // ── hiện diện beacon: "hiện vật nào đang nghe thấy?" (màn 3)
+            Provider<ExhibitPresenceProvider>(
+              create: (_) => ExhibitPresenceProvider(graph.exhibitPresence),
+            ),
+
+            // ── khởi động: "đã sẵn sàng bàn giao máy chưa?" (màn 1)
+            Provider<StartupProvider>(
+              create: (_) => StartupProvider(
+                repository: graph.repository,
+                bleStatus: graph.bleStatus,
+                retryBluetooth: graph.retryBluetooth,
+                refreshBluetoothOnResume: graph.refreshBluetoothOnResume,
+                openBluetoothSettings: graph.bluetoothGate.openSettings,
+                runSync: graph.runSync,
+              ),
+            ),
+
+            ChangeNotifierProvider(create: (_) => SessionProvider(graph.session)),
             ChangeNotifierProvider(
-                create: (_) => SessionProvider(graph.session)),
+              create: (_) => ZoneProvider(
+                status: graph.presence.status,
+                initial: graph.presence.currentStatus,
+              ),
+            ),
             ChangeNotifierProvider(
-                create: (_) => ZoneProvider(graph.presence)),
-            ChangeNotifierProvider(
-                create: (_) => AudioProvider(
-                      engine: graph.audioEngine,
-                      controller: graph.audioController,
-                    )),
+              create: (_) => AudioProvider(
+                engine: graph.audioEngine,
+                controller: graph.audioController,
+              ),
+            ),
           ],
           child: const MuseumApp(),
         );

@@ -14,7 +14,7 @@
 // CONTENT source — name/thumb/audio still come from it).
 //
 // ZONE STILL FROZEN: the `major` comes from route arguments and the ZoneInfo is
-// read from the repository once. What's LIVE is only the SUBSET of that zone's
+// read from the ContentProvider once. What's LIVE is only the SUBSET of that zone's
 // exhibits shown. If the arbiter switches zones underneath, this screen keeps
 // its frozen `major` (Phase-1 rule); only screen 2 follows the arbiter.
 //
@@ -41,16 +41,31 @@ import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
-class ExhibitListScreen extends StatelessWidget {
+class ExhibitListScreen extends StatefulWidget {
   /// Fixed zone identity from route arguments — the freeze anchor.
   final int major;
 
   const ExhibitListScreen({super.key, required this.major});
 
   @override
+  State<ExhibitListScreen> createState() => _ExhibitListScreenState();
+}
+
+class _ExhibitListScreenState extends State<ExhibitListScreen> {
+  late final Stream<Set<int>> _presenceStream;
+
+  @override
+  void initState() {
+    super.initState();
+    // Đọc Provider đúng 1 lần (listen: false) và lưu Stream lại
+    final presence = context.read<ExhibitPresenceProvider>();
+    _presenceStream = presence.watchMajor(widget.major);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final content = context.watch<ContentProvider>();
-    final zone = content.zoneByMajor(major);
+    final zone = content.zoneByMajor(widget.major);
 
     if (zone == null) {
       // Unknown major (stale route after a bundle swap) — graceful, not a crash.
@@ -73,8 +88,8 @@ class ExhibitListScreen extends StatelessWidget {
           // Live subset: rebuilds only when the set of heard minors changes.
           Expanded(
             child: StreamBuilder<Set<int>>(
-              initialData: presence.currentPresent(major), 
-              stream: presence.watchMajor(major),
+              initialData: presence.currentPresent(widget.major), 
+              stream: _presenceStream,
               builder: (context, snap) {
                 final present = snap.data ?? const <int>{};
 
@@ -114,14 +129,15 @@ class ExhibitListScreen extends StatelessWidget {
     // Rule 2a: tap là yêu cầu tường minh -> interrupt & play (hoặc load-for-
     // transcript trong reading mode). `major` là zone ĐÓNG BĂNG của màn hình
     // này, không phải zone hiện tại của arbiter.
+    // Cố ý gọi trước pushNamed để Snackbar nổi trên màn hình Chi tiết (detail screen) sắp mở. Đừng đổi thứ tự.
     final r = context
         .read<AudioProvider>()
-        .tapExhibit(major: major, minor: exhibit.minor);
+        .tapExhibit(major: widget.major, minor: exhibit.minor);
     showAudioFeedback(context, r);
 
     Navigator.of(context).pushNamed(
       AppRouter.exhibitDetailRoute,
-      arguments: ExhibitDetailArgs(major: major, minor: exhibit.minor),
+      arguments: ExhibitDetailArgs(major: widget.major, minor: exhibit.minor),
     );
   }
 }

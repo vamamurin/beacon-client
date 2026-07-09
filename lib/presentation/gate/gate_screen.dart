@@ -20,13 +20,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/core/injection.dart';
-import 'package:beacon_client/domain/models/startup_status.dart';
-import 'package:beacon_client/presentation/app/app_restarter.dart';
-import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
+import 'package:beacon_client/presentation/app/app_restarter.dart';
 import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/providers/session_provider.dart';
+import 'package:beacon_client/presentation/providers/startup_provider.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
 
 class GateScreen extends StatefulWidget {
   const GateScreen({super.key});
@@ -53,18 +54,18 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     // Returning to the app (e.g. after granting permission in Settings):
     // re-derive BLE readiness without prompting. Flips to Start if now ready.
     if (state == AppLifecycleState.resumed && mounted) {
-      context.read<AppGraph>().refreshBluetoothOnResume();
+      context.read<StartupProvider>().refreshBluetoothOnResume();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final session = context.watch<SessionProvider>();
-    final graph = context.read<AppGraph>();
+    final startup = context.read<StartupProvider>();
+    final content = context.watch<ContentProvider>();
 
-    final museumName = graph.repository.config?.museumName;
-    final lang = graph.repository.config?.fallbackLanguage ?? 'vi';
-    final needsSync = graph.repository.lastError != null;
+    final museumName = content.textOrNull(content.museumName) ?? 'Bảo tàng';
+    final needsSync = startup.needsSync;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -87,7 +88,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                   child: Align(
                     alignment: Alignment.topLeft,
                     child: Text(
-                      museumName?.resolve(lang, lang) ?? 'Bảo tàng',
+                      museumName,
                       style: AppText.wordmark,
                     ),
                   ),
@@ -132,9 +133,9 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
                   child: ValueListenableBuilder<StartupStatus>(
-                    valueListenable: graph.bleStatus,
+                    valueListenable: startup.bleStatus,
                     builder: (context, bleStatus, _) =>
-                        _buildAction(context, graph, session, bleStatus, needsSync),
+                        _buildAction(context, startup, session, bleStatus, needsSync),
                   ),
                 ),
               ],
@@ -145,14 +146,14 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildAction(BuildContext context, AppGraph graph,
+  Widget _buildAction(BuildContext context, StartupProvider startup,
       SessionProvider session, StartupStatus bleStatus, bool needsSync) {
     // BLE not ready takes precedence — no tour possible without scanning.
     if (bleStatus != StartupStatus.ready) {
-      return _BleNotReady(status: bleStatus, graph: graph);
+      return _BleNotReady(status: bleStatus, startup: startup);
     }
     if (needsSync) {
-      return _SyncNotice(graph: graph);
+      return _SyncNotice(startup: startup);
     }
     return _StartButton(
       enabled: session.isAtGate,
@@ -200,8 +201,8 @@ class _StartButton extends StatelessWidget {
 /// successful sync arms an in-app restart (the pipeline was built without a
 /// config and must be rebuilt to pick up the just-synced beacon UUID / params).
 class _SyncNotice extends StatefulWidget {
-  final AppGraph graph;
-  const _SyncNotice({required this.graph});
+  final StartupProvider startup;
+  const _SyncNotice({required this.startup});
 
   @override
   State<_SyncNotice> createState() => _SyncNoticeState();
@@ -220,28 +221,26 @@ class _SyncNoticeState extends State<_SyncNotice> {
       _message = null;
       _readyToRestart = false;
     });
-    final res = await widget.graph.runSync(
-      onProgress: (p) => setState(() => _progress = p),
+    
+    final report = await widget.startup.runSync(
+      onProgress: (p) {
+        if (!mounted) return;
+        setState(() => _progress = p);
+      },
     );
     if (!mounted) return;
-    if (res == null) {
-      setState(() {
-        _syncing = false;
-        _message = 'Chế độ mock — không có server.';
-      });
-      return;
-    }
-    final ok = res.outcome.name == 'updated' || res.outcome.name == 'upToDate';
     setState(() {
       _syncing = false;
-      _readyToRestart = ok;
-      _message = switch (res.outcome.name) {
-        'updated' =>
-          'Đã tải nội dung ${res.version}. Nhấn để khởi động lại và bắt đầu.',
-        'upToDate' =>
-          'Nội dung đã là bản mới nhất (${res.version}). Nhấn để khởi động lại.',
-        'noConnectivity' => 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
-        _ => 'Đồng bộ thất bại: ${res.error ?? ""}',
+      _readyToRestart = report.readyToRestart;
+      _message = switch (report.status) {
+        SyncStatus.updated =>
+          'Đã tải nội dung ${report.version}. Nhấn để khởi động lại và bắt đầu.',
+        SyncStatus.upToDate =>
+          'Nội dung đã là bản mới nhất (${report.version}). Nhấn để khởi động lại.',
+        SyncStatus.noConnectivity =>
+          'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
+        SyncStatus.failed => 'Đồng bộ thất bại: ${report.error ?? ""}',
+        SyncStatus.mockMode => 'Chế độ mock — không có server.',
       };
     });
   }
@@ -295,8 +294,8 @@ class _SyncNoticeState extends State<_SyncNotice> {
 /// (no restart) — and returning from Settings auto-rechecks on resume.
 class _BleNotReady extends StatefulWidget {
   final StartupStatus status;
-  final AppGraph graph;
-  const _BleNotReady({required this.status, required this.graph});
+  final StartupProvider startup;
+  const _BleNotReady({required this.status, required this.startup});
 
   @override
   State<_BleNotReady> createState() => _BleNotReadyState();
@@ -350,15 +349,12 @@ class _BleNotReadyState extends State<_BleNotReady> {
   Future<void> _act() async {
     final c = _copy;
     setState(() => _busy = true);
+
     if (c.opensSettings) {
-      // Open settings; the Gate's resume handler re-checks when we come back.
-      await widget.graph.bluetoothGate.openSettings();
+      await widget.startup.openBluetoothSettings();
     } else {
-      // Request/re-check now. On success, graph.bleStatus flips and this whole
-      // widget is replaced by the Start button.
-      await widget.graph.retryBluetooth();
+      await widget.startup.retryBluetooth();
     }
-    if (mounted) setState(() => _busy = false);
   }
 
   @override
