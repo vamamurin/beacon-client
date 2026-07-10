@@ -12,13 +12,17 @@
 // AppRestarter -> _restart(), which disposes the current graph and re-runs
 // Injection.build().
 
+import 'package:beacon_client/data/settings/prefs_settings_store.dart';
+import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/presentation/app/app.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
@@ -26,9 +30,28 @@ import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const _BootstrapHost());
+
+  // Đọc preference TRƯỚC runApp: vài mili giây, đổi lại không có cú nháy từ
+  // dark sang light ở frame đầu tiên.
+  final settings = await PrefsSettingsStore.create();
+
+  runApp(
+    MultiProvider(
+      providers: [
+        // .value ở đây LÀ ĐÚNG: `settings` là object đã tồn tại trước build,
+        // không phải thứ provider tự dựng lại mỗi frame.
+        Provider<ISettingsStore>.value(value: settings),
+
+        // Nằm NGOÀI _BootstrapHost, nên AppRestarter (remount subtree) không
+        // thổi bay lựa chọn theme. Theme là preference của THIẾT BỊ; graph là
+        // state của pipeline. Cái trước phải sống lâu hơn cái sau.
+        ChangeNotifierProvider(create: (_) => ThemeController(store: settings)),
+      ],
+      child: const _BootstrapHost(),
+    ),
+  );
 }
 
 /// Owns the graph lifecycle. Runs Injection.build(), swaps the splash for the
@@ -145,18 +168,15 @@ class _SplashApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: AppColors.background,
+      theme: context.watch<ThemeController>().theme,
+      home: const Scaffold(
         body: Center(
           child: SizedBox(
             width: 22,
             height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 1.5,
-              color: AppColors.white,
-            ),
+            child: CircularProgressIndicator(strokeWidth: 1.5),
           ),
         ),
       ),
@@ -164,8 +184,6 @@ class _SplashApp extends StatelessWidget {
   }
 }
 
-/// Shown if bootstrap itself throws (not for a missing bundle — that path still
-/// builds the app and surfaces via the Gate).
 class _ErrorApp extends StatelessWidget {
   final String message;
   const _ErrorApp({required this.message});
@@ -174,15 +192,17 @@ class _ErrorApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: AppColors.background,
-        body: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Center(
-            child: Text(
-              'Không khởi động được ứng dụng.\n$message',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.muted, fontSize: 13),
+      theme: context.watch<ThemeController>().theme,
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Center(
+              child: Text(
+                'Không khởi động được ứng dụng.\n$message',
+                textAlign: TextAlign.center,
+                style: AppText.body.copyWith(color: context.tokens.inkMuted),
+              ),
             ),
           ),
         ),

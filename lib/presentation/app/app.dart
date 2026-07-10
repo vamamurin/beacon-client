@@ -23,8 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/theme/app_theme.dart';
 
 /// Global route observer, available for any RouteAware screen that wants to
 /// pause work while obscured. Registered on the Navigator so it's ready; the
@@ -53,17 +52,22 @@ class _MuseumAppState extends State<MuseumApp> {
   Widget build(BuildContext context) {
     // Rebuilds only when the session state changes (rare: phase transitions).
     final phase = context.watch<SessionProvider>().phase;
+    final themeCtrl = context.watch<ThemeController>();
     _syncNavigation(phase);
 
     return MaterialApp(
       title: 'Museum Guide',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navKey,
-      theme: _buildTheme(),
+      theme: themeCtrl.theme,
       initialRoute: AppRouter.initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
       onUnknownRoute: AppRouter.onUnknownRoute,
       navigatorObservers: [routeObserver],
+      builder: (context, child) => MediaQuery.withClampedTextScaling(
+        maxScaleFactor: 1.6,
+        child: child!,
+      ),
     );
   }
 
@@ -85,25 +89,5 @@ class _MuseumAppState extends State<MuseumApp> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _navKey.currentState?.pushNamedAndRemoveUntil(target, (_) => false);
     });
-  }
-
-  ThemeData _buildTheme() {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      scaffoldBackgroundColor: AppColors.background,
-      fontFamily: AppFonts.sans,
-      colorScheme: const ColorScheme.dark(
-        surface: AppColors.surface,
-        primary: AppColors.white,
-        onPrimary: AppColors.black,
-        onSurface: AppColors.text,
-      ),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: AppColors.background,
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-      ),
-    );
   }
 }

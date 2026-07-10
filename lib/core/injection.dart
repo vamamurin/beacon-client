@@ -309,9 +309,7 @@ abstract final class Injection {
     String? imagePathResolver(String bundleRelativePath) {
       if (repository is LocalBundleZoneRepository) {
         try {
-          return (repository as LocalBundleZoneRepository)
-              .resolveAsset(bundleRelativePath)
-              .toFilePath();
+          return repository.resolveAsset(bundleRelativePath).toFilePath();
         } catch (_) {
           return null;
         }

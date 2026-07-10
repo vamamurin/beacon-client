@@ -11,7 +11,8 @@ import 'package:beacon_client/presentation/exhibits/exhibit_list_screen.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart';
 import 'package:beacon_client/presentation/zone/zone_screen.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/settings/settings_screen.dart';
 
 /// Route-argument contract between the exhibit list (screen 3) and the exhibit
 /// detail (screen 4). Both identifiers are needed: minor alone is only unique
@@ -27,6 +28,7 @@ abstract final class AppRouter {
   static const String zoneRoute = '/zone'; // Screen 2: current zone card / radar
   static const String exhibitListRoute = '/exhibits'; // Screen 3
   static const String exhibitDetailRoute = '/exhibit'; // Screen 4
+  static const String settingsRoute = '/settings'; // setting screen
   static const String initialRoute = gateRoute;
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
@@ -52,6 +54,8 @@ abstract final class AppRouter {
           ExhibitDetailScreen(major: args.major, minor: args.minor),
           settings,
         );
+      case settingsRoute:
+        return _page(const SettingsScreen(), settings);
       default:
         return _error(settings, 'Unknown route: "${settings.name}".');
     }
@@ -77,13 +81,15 @@ class _Stub extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: t.surface,
       body: Center(
         child: Text(label,
             textAlign: TextAlign.center,
-            style: AppText.meta.copyWith(color: AppColors.muted)),
+            style: AppText.meta.copyWith(color: t.inkMuted)),
       ),
     );
   }
 }
+

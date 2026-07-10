@@ -1,33 +1,46 @@
 // Destination: lib/presentation/gate/gate_screen.dart
 //
-// Screen 1 — welcome / session gate. Matches giaodien.html screen 1 1:1:
-// full-bleed hero image + veil, wordmark top, welcome block bottom, white
-// "Bắt đầu tham quan" button. Wired to SessionProvider, StartupProvider + ContentProvider.
+// Screen 1 — welcome / session gate. Full-bleed hero image + veil, wordmark
+// top, welcome block bottom, CTA button. Wired to SessionProvider,
+// StartupProvider + ContentProvider.
 //
 // Navigation is owned by the root (MuseumApp): pressing Start just calls
 // session.startTour(); the root moves the stack when touring begins/ends.
 //
 // Real state it handles (in priority order):
-//   • BLE not ready -> staff status + retry/settings. REACTIVE: it listens to
-//     graph.bleStatus, and re-checks readiness when the app resumes (returning
-//     from Settings), so granting permission flips the screen to Start WITHOUT
-//     an app restart.
-//   • fresh device (repository.lastError set) -> staff "needs sync" notice. A
-//     successful sync requires a rebuild (the pipeline was built with no
-//     config), so the notice offers a real in-app "Khởi động lại" button.
+//   • BLE not ready -> staff status + retry/settings. REACTIVE: listens to
+//     startup.bleStatus and re-checks readiness on resume (returning from
+//     Settings), so granting permission flips to Start WITHOUT a restart.
+//   • fresh device (needsSync) -> staff "needs sync" notice. A successful sync
+//     requires a rebuild (the pipeline was built with no config), so the notice
+//     offers a real in-app "Khởi động lại" button.
 //   • otherwise -> Start button, enabled only when the session is at the gate.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// THIS ENTIRE SCREEN IS ON-IMAGE
+// ═══════════════════════════════════════════════════════════════════════════
+// The root is a Stack whose first child is HeroImage. Wordmark, welcome copy,
+// Start button, sync notice and BLE notice ALL sit on top of it. So every
+// colour here comes from the on-image family (inkOnImage, mutedOnImage,
+// lineOnImage, ctaOnImage*), which does not follow the theme.
+//
+// Consequence, and it is correct: the Gate stays dark even in light theme. The
+// photograph doesn't brighten, so neither can the text on it. Reaching for
+// t.ink here would print #141414 on a dark gradient in light mode — the whole
+// welcome screen would disappear.
 
+import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
-import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
-import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/presentation/theme/hero_image.dart';
+import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 
 class GateScreen extends StatefulWidget {
   const GateScreen({super.key});
@@ -60,6 +73,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final session = context.watch<SessionProvider>();
     final startup = context.read<StartupProvider>();
     final content = context.watch<ContentProvider>();
@@ -68,14 +82,14 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     final needsSync = startup.needsSync;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: t.surface,
       body: Stack(
         fit: StackFit.expand,
         children: [
           // Full-bleed hero (bundle image later; gradient fallback for now).
-          const HeroImage(
+          HeroImage(
             filePath: null, // Screen 1 has no zone image; use fallback tone.
-            veil: AppColors.welcomeVeil,
+            veil: t.welcomeVeil,
           ),
 
           SafeArea(
@@ -85,15 +99,34 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                 // Wordmark, top-left.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
-                  child: Align(
-                    alignment: Alignment.topLeft,
-                    child: Text(
-                      museumName,
-                      style: AppText.wordmark,
-                    ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          museumName,
+                          style:
+                              AppText.wordmark.copyWith(color: t.inkOnImage),
+                        ),
+                      ),
+                      // Nằm trên HeroImage -> họ on-image, không phải t.ink.
+                      // mutedOnImage chứ không inkOnImage: đây là chức năng
+                      // phụ, không được cạnh tranh thị giác với wordmark.
+                      Semantics(
+                        button: true,
+                        label: 'Cài đặt',
+                        child: IconButton(
+                          icon: Icon(Icons.settings_outlined,
+                              color: t.mutedOnImage, size: 22),
+                          // IconButton mặc định đã 48x48 — đủ tap target.
+                          tooltip: 'Cài đặt',
+                          onPressed: () => Navigator.of(context)
+                              .pushNamed(AppRouter.settingsRoute),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-
                 const Spacer(),
 
                 // Welcome text block, bottom.
@@ -104,22 +137,18 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text('Hướng dẫn tham quan tự động'.toUpperCase(),
-                          style: AppText.kicker),
+                          style: AppText.kicker.copyWith(color: t.mutedOnImage)),
                       const SizedBox(height: 6),
-                      const Text('Chào mừng\nquý khách',
-                          style: AppText.heroTitle),
+                      Text('Chào mừng\nquý khách',
+                          style:
+                              AppText.heroTitle.copyWith(color: t.inkOnImage)),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Ứng dụng tự nhận biết khu trưng bày quanh bạn qua '
                         'sóng beacon — không cần tìm kiếm. Cắm tai nghe để '
                         'nghe thuyết minh.',
-                        style: TextStyle(
-                          fontFamily: AppFonts.sans,
-                          fontWeight: FontWeight.w300,
-                          fontSize: 11,
-                          height: 1.6,
-                          color: AppColors.onImageText,
-                        ),
+                        style: AppText.guidance
+                            .copyWith(color: t.mutedOnImage, height: 1.6),
                       ),
                     ],
                   ),
@@ -134,8 +163,8 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
                   child: ValueListenableBuilder<StartupStatus>(
                     valueListenable: startup.bleStatus,
-                    builder: (context, bleStatus, _) =>
-                        _buildAction(context, startup, session, bleStatus, needsSync),
+                    builder: (context, bleStatus, _) => _buildAction(
+                        context, startup, session, bleStatus, needsSync),
                   ),
                 ),
               ],
@@ -162,7 +191,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
   }
 }
 
-/// White uppercase CTA, matching .startbtn.
+/// Visitor CTA, on the image: white fill, dark label, at every theme.
 class _StartButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onPressed;
@@ -170,19 +199,21 @@ class _StartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Semantics(
       button: true,
       label: 'Bắt đầu tham quan',
       child: Material(
-        color: enabled ? AppColors.white : AppColors.buttonDisabled,
-        borderRadius: BorderRadius.circular(2),
+        color: enabled ? t.ctaOnImageFill.withValues(alpha: 0.35) : t.ctaDisabled,
+        borderRadius: t.sharpAll,
         child: InkWell(
           onTap: enabled ? onPressed : null,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: t.sharpAll,
           child: Container(
             height: 48, // >= 48dp tap target (accessibility)
             alignment: Alignment.center,
-            child: Text('Bắt đầu tham quan'.toUpperCase(), style: AppText.button),
+            child: Text('Bắt đầu tham quan'.toUpperCase(),
+                style: AppText.button.copyWith(color: t.ctaOnImageInk)),
           ),
         ),
       ),
@@ -214,8 +245,10 @@ class _SyncNoticeState extends State<_SyncNotice> {
       _message = null;
       _readyToRestart = false;
     });
-    
+
     final report = await widget.startup.runSync(
+      // mounted check inside the callback too: sync is the longest-running
+      // operation in the app, and progress ticks keep arriving after a pop.
       onProgress: (p) {
         if (!mounted) return;
         setState(() => _progress = p);
@@ -240,30 +273,25 @@ class _SyncNoticeState extends State<_SyncNotice> {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: t.lineOnImage),
+        borderRadius: t.sharpAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           Text((_readyToRestart ? 'Đã tải xong' : 'Chưa sẵn sàng').toUpperCase(),
-              style: AppText.kicker.copyWith(color: AppColors.white)),
+              style: AppText.kicker.copyWith(color: t.inkOnImage)),
           const SizedBox(height: 6),
           Text(
             _message ??
                 'Thiết bị chưa có nội dung tham quan. Nhấn Đồng bộ để tải '
                     'dữ liệu trước khi bàn giao cho khách.',
-            style: const TextStyle(
-              fontFamily: AppFonts.sans,
-              fontWeight: FontWeight.w300,
-              fontSize: 11,
-              height: 1.5,
-              color: AppColors.grey,
-            ),
+            style: AppText.guidance.copyWith(color: t.mutedOnImage),
           ),
           const SizedBox(height: 12),
           if (_syncing)
@@ -348,32 +376,27 @@ class _BleNotReadyState extends State<_BleNotReady> {
     } else {
       await widget.startup.retryBluetooth();
     }
+    // The widget may be replaced by _StartButton once bleStatus flips.
+    if (mounted) setState(() => _busy = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final c = _copy;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: AppColors.line),
-        borderRadius: BorderRadius.circular(2),
+        border: Border.all(color: t.lineOnImage),
+        borderRadius: t.sharpAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(c.title,
-              style: AppText.kicker.copyWith(color: AppColors.white)),
+          Text(c.title, style: AppText.kicker.copyWith(color: t.inkOnImage)),
           const SizedBox(height: 6),
-          Text(c.body,
-              style: const TextStyle(
-                fontFamily: AppFonts.sans,
-                fontWeight: FontWeight.w300,
-                fontSize: 11,
-                height: 1.5,
-                color: AppColors.grey,
-              )),
+          Text(c.body, style: AppText.guidance.copyWith(color: t.mutedOnImage)),
           if (c.cta.isNotEmpty) ...[
             const SizedBox(height: 12),
             _busy
@@ -386,7 +409,8 @@ class _BleNotReadyState extends State<_BleNotReady> {
   }
 }
 
-/// Bordered staff button (distinct from the white visitor CTA).
+/// Bordered staff button — visually distinct from the filled visitor CTA, so a
+/// visitor never mistakes "Đồng bộ nội dung" for "start my tour".
 class _StaffButton extends StatelessWidget {
   final String label;
   final VoidCallback onPressed;
@@ -394,24 +418,25 @@ class _StaffButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Semantics(
       button: true,
       label: label,
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(2),
+        borderRadius: t.sharpAll,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(2),
+          borderRadius: t.sharpAll,
           child: Container(
             height: 44,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: AppColors.grey),
-              borderRadius: BorderRadius.circular(2),
+              border: Border.all(color: t.lineOnImage),
+              borderRadius: t.sharpAll,
             ),
             child: Text(label.toUpperCase(),
-                style: AppText.button.copyWith(color: AppColors.white)),
+                style: AppText.button.copyWith(color: t.inkOnImage)),
           ),
         ),
       ),
@@ -419,31 +444,31 @@ class _StaffButton extends StatelessWidget {
   }
 }
 
-/// Indeterminate or progress line during sync / retry.
+/// Indeterminate or determinate progress line during sync / retry.
 class _ProgressLine extends StatelessWidget {
   final double? progress;
   const _ProgressLine({required this.progress});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Row(
       children: [
         Expanded(
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: t.sharpAll,
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 3,
-              backgroundColor: AppColors.line,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(AppColors.white),
+              backgroundColor: t.lineOnImage,
+              valueColor: AlwaysStoppedAnimation<Color>(t.inkOnImage),
             ),
           ),
         ),
         if (progress != null) ...[
           const SizedBox(width: 10),
           Text('${(progress! * 100).round()}%',
-              style: AppText.timeCode.copyWith(color: AppColors.grey)),
+              style: AppText.timeCode.copyWith(color: t.mutedOnImage)),
         ],
       ],
     );

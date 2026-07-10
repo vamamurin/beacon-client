@@ -1,45 +1,39 @@
 // Destination: lib/presentation/exhibits/exhibit_list_screen.dart
 //
-// Screen 3 — the exhibit list of ONE zone. Matches giaodien.html screen 3:
-// 250px tour-hero (image + heroVeil + back button + serif h2 + meta), a white
-// hint bar "Chọn theo số ghi trên nhãn", then .stop rows: 26px circled number
-// + 40x40 thumb + serif name + grey meta, hairline separators.
+// Screen 3 — the exhibit list of ONE zone.
 //
 // PRESENCE-DRIVEN LIST (Phase-4 change, confirmed with product): the list shows
 // ONLY exhibits whose minor beacon is currently being heard over the air — not
-// the full manifest. A visitor at the front of the room hears the nearest
-// exhibits; the far ones simply aren't in the list until they walk closer.
-// Consequence accepted by product: a dead-battery beacon removes its exhibit
-// from the list (the manifest is no longer the visibility source, only the
-// CONTENT source — name/thumb/audio still come from it).
+// the full manifest. Consequence accepted by product: a dead-battery beacon
+// removes its exhibit from the list (the manifest is no longer the visibility
+// source, only the CONTENT source — name/thumb/audio still come from it).
 //
-// ZONE STILL FROZEN: the `major` comes from route arguments and the ZoneInfo is
-// read from the ContentProvider once. What's LIVE is only the SUBSET of that zone's
-// exhibits shown. If the arbiter switches zones underneath, this screen keeps
-// its frozen `major` (Phase-1 rule); only screen 2 follows the arbiter.
+// ZONE STILL FROZEN: `major` comes from route arguments; only the SUBSET shown
+// is live. If the arbiter switches zones underneath, this screen keeps its
+// frozen `major` (Phase-1 rule); only screen 2 follows the arbiter.
 //
-// NO RANKING / NO FLICKER: rows are NOT sorted by signal strength (no distance
-// heuristic here, per product). Visible rows keep MANIFEST ORDER, so nothing
-// reorders as RSSI wobbles. The present set arrives already debounced and
-// change-gated from ExhibitPresenceTracker (appears instantly, disappears only
-// after sustained silence), so the list doesn't blink step-to-step.
+// NO RANKING / NO FLICKER: visible rows keep MANIFEST ORDER. The present set is
+// already debounced and change-gated by ExhibitPresenceTracker.
 //
-// Tapping a row = rule 2a: interrupt + play that exhibit (tapExhibit), then
-// open its detail screen.
+// TOKEN FAMILIES: only the 250px hero is ON the image (inkOnImage /
+// mutedOnImage — fixed across themes, because the photograph doesn't brighten
+// in light mode). Everything below it — hint bar, rows, empty state — sits on
+// `surface` and follows the theme. The 40x40 thumbnail is an image, but the row
+// text sits BESIDE it, not on it: that row is surface. Easiest place to slip.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
+import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/audio_feedback.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/hero_image.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
+import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/presentation/theme/hero_image.dart';
+import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 
 class ExhibitListScreen extends StatefulWidget {
   /// Fixed zone identity from route arguments — the freeze anchor.
@@ -52,43 +46,46 @@ class ExhibitListScreen extends StatefulWidget {
 }
 
 class _ExhibitListScreenState extends State<ExhibitListScreen> {
+  late final ExhibitPresenceProvider _presence;
   late final Stream<Set<int>> _presenceStream;
 
   @override
   void initState() {
     super.initState();
-    // Đọc Provider đúng 1 lần (listen: false) và lưu Stream lại
-    final presence = context.read<ExhibitPresenceProvider>();
-    _presenceStream = presence.watchMajor(widget.major);
+    // Resolve once. Calling watchMajor() inside build() would hand StreamBuilder
+    // a fresh Stream object on every rebuild; it survives today only because
+    // _ControllerStream overrides ==, which is a dart:async implementation
+    // detail we shouldn't depend on.
+    _presence = context.read<ExhibitPresenceProvider>();
+    _presenceStream = _presence.watchMajor(widget.major);
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final content = context.watch<ContentProvider>();
     final zone = content.zoneByMajor(widget.major);
 
     if (zone == null) {
       // Unknown major (stale route after a bundle swap) — graceful, not a crash.
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: t.surface,
         body: Center(
           child: Text('Không tìm thấy khu trưng bày',
-              style: AppText.meta.copyWith(color: AppColors.muted)),
+              style: AppText.meta.copyWith(color: t.inkMuted)),
         ),
       );
     }
 
-    final presence = context.read<ExhibitPresenceProvider>();
-
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: t.surface,
       body: Column(
         children: [
           _ZoneHero(zone: zone, content: content),
           // Live subset: rebuilds only when the set of heard minors changes.
           Expanded(
             child: StreamBuilder<Set<int>>(
-              initialData: presence.currentPresent(widget.major), 
+              initialData: _presence.currentPresent(widget.major),
               stream: _presenceStream,
               builder: (context, snap) {
                 final present = snap.data ?? const <int>{};
@@ -129,7 +126,10 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
     // Rule 2a: tap là yêu cầu tường minh -> interrupt & play (hoặc load-for-
     // transcript trong reading mode). `major` là zone ĐÓNG BĂNG của màn hình
     // này, không phải zone hiện tại của arbiter.
-    // Cố ý gọi trước pushNamed để Snackbar nổi trên màn hình Chi tiết (detail screen) sắp mở. Đừng đổi thứ tự. Nếu cần đổi hãy ib
+    //
+    // Cố ý gọi showAudioFeedback TRƯỚC pushNamed: ScaffoldMessenger resolve tới
+    // messenger của MaterialApp, nên snackbar nổi trên màn Chi tiết vừa mở —
+    // đúng nơi visitor đang tự hỏi vì sao không có tiếng. Đừng đảo thứ tự.
     final r = context
         .read<AudioProvider>()
         .tapExhibit(major: widget.major, minor: exhibit.minor);
@@ -143,6 +143,7 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
 }
 
 /// 250px hero: zone image + heroVeil + back button + serif title + meta.
+/// Everything in here is ON the image.
 class _ZoneHero extends StatelessWidget {
   final ZoneInfo zone;
   final ContentProvider content;
@@ -151,6 +152,7 @@ class _ZoneHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final name = content.text(zone.name);
 
     return SizedBox(
@@ -160,7 +162,7 @@ class _ZoneHero extends StatelessWidget {
         children: [
           HeroImage(
             filePath: content.imagePath(zone.heroImagePath),
-            veil: AppColors.heroVeil,
+            veil: t.heroVeil,
             cacheWidth: 900,
           ),
           // Back button, safe-area top-left.
@@ -171,16 +173,16 @@ class _ZoneHero extends StatelessWidget {
               button: true,
               label: 'Quay lại',
               child: Material(
-                color: AppColors.scrimBack,
+                color: t.scrimBack,
                 shape: const CircleBorder(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: () => Navigator.of(context).pop(),
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 48,
                     height: 48,
                     child: Icon(Icons.chevron_left,
-                        color: AppColors.white, size: 26),
+                        color: t.inkOnImage, size: 26),
                   ),
                 ),
               ),
@@ -197,16 +199,12 @@ class _ZoneHero extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(name, style: AppText.heroTitle),
+                Text(name,
+                    style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
                 const SizedBox(height: 5),
-                const Text(
+                Text(
                   'Hiện vật quanh bạn · chọn theo số trên nhãn',
-                  style: TextStyle(
-                    fontFamily: AppFonts.sans,
-                    fontWeight: FontWeight.w300,
-                    fontSize: 11,
-                    color: AppColors.onImageText,
-                  ),
+                  style: AppText.meta.copyWith(color: t.mutedOnImage),
                 ),
               ],
             ),
@@ -217,22 +215,24 @@ class _ZoneHero extends StatelessWidget {
   }
 }
 
-/// White uppercase hint bar (same visual as .startbtn, but static — a label).
+/// Uppercase hint bar. Same fill as the visitor CTA, but static — a label.
 class _HintBar extends StatelessWidget {
   final String text;
   const _HintBar({required this.text});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Container(
       margin: const EdgeInsets.fromLTRB(18, 14, 18, 6),
       padding: const EdgeInsets.symmetric(vertical: 13),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(2),
+        color: t.ctaFill,
+        borderRadius: t.sharpAll,
       ),
       alignment: Alignment.center,
-      child: Text(text.toUpperCase(), style: AppText.button),
+      child: Text(text.toUpperCase(),
+          style: AppText.button.copyWith(color: t.ctaLabel)),
     );
   }
 }
@@ -244,28 +244,23 @@ class _NoneNearby extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.travel_explore, color: AppColors.greyDark, size: 34),
+            Icon(Icons.travel_explore, color: t.inkFaint, size: 34),
             const SizedBox(height: 16),
-            Text('CHƯA CÓ HIỆN VẬT NÀO Ở GẦN'.toUpperCase(),
-                style: AppText.kicker.copyWith(color: AppColors.white)),
+            Text('CHƯA CÓ HIỆN VẬT NÀO Ở GẦN',
+                style: AppText.kicker.copyWith(color: t.ink)),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Hãy tiến lại gần một tủ trưng bày. Hiện vật sẽ tự xuất hiện '
               'trong danh sách khi bạn tới đủ gần.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontFamily: AppFonts.sans,
-                fontWeight: FontWeight.w300,
-                fontSize: 12,
-                height: 1.5,
-                color: AppColors.grey,
-              ),
+              style: AppText.guidance.copyWith(color: t.inkFaint),
             ),
           ],
         ),
@@ -275,6 +270,7 @@ class _NoneNearby extends StatelessWidget {
 }
 
 /// One .stop row: circled MINOR + 40x40 thumb + serif name + grey meta.
+/// The thumbnail is an image, but the text sits BESIDE it: this row is surface.
 class _StopRow extends StatelessWidget {
   final ExhibitInfo exhibit;
   final ContentProvider content;
@@ -286,19 +282,17 @@ class _StopRow extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Meta line: spec values joined " · " (matches the mockup's "Liên Xô ·
-  /// 1944 · 7.62mm"); falls back to the one-line summary when no specs.
+  /// Meta line: spec values joined " · "; falls back to the one-line summary.
   String _metaLine() {
     if (exhibit.specs.isNotEmpty) {
-      return exhibit.specs
-          .map((s) => content.text(s.value))
-          .join(' · ');
+      return exhibit.specs.map((s) => content.text(s.value)).join(' · ');
     }
     return content.text(exhibit.summary);
   }
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final name = content.text(exhibit.name);
 
     return Semantics(
@@ -310,8 +304,8 @@ class _StopRow extends StatelessWidget {
           onTap: onTap,
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 11),
-            decoration: const BoxDecoration(
-              border: Border(bottom: BorderSide(color: AppColors.line)),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: t.line)),
             ),
             child: Row(
               children: [
@@ -321,23 +315,21 @@ class _StopRow extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.white),
+                    border: Border.all(color: t.ink),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     '${exhibit.minor}',
-                    style: const TextStyle(
-                      fontFamily: AppFonts.sans,
-                      fontSize: 11,
+                    style: AppText.meta.copyWith(
+                      color: t.ink,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.white,
                     ),
                   ),
                 ),
                 const SizedBox(width: 13),
                 // 40x40 thumbnail.
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: t.sharpAll,
                   child: SizedBox(
                     width: 40,
                     height: 40,
@@ -353,14 +345,17 @@ class _StopRow extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(name,
-                          maxLines: 1,
+                          // maxLines 2: at 1.6x text scale a single line
+                          // ellipsises the exhibit's name away. Losing the name
+                          // is worse than spending 16px.
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.stopName),
+                          style: AppText.stopName.copyWith(color: t.ink)),
                       const SizedBox(height: 2),
                       Text(_metaLine(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppText.stopMeta),
+                          style: AppText.stopMeta.copyWith(color: t.inkMuted)),
                     ],
                   ),
                 ),

@@ -1,15 +1,10 @@
 // Destination: lib/presentation/exhibits/exhibit_detail_screen.dart
 //
-// Screen 4 — exhibit detail + audio player. Matches giaodien.html screen 4:
-// full-bleed exhibit image + playerVeil, top (back + minor numbadge), info
-// (kicker "Khu · Hiện vật số N" + serif name + italic artist line), controls
-// (progress track + times + begin/play/next), then below the fold: summary,
-// meaning, specs.
+// Screen 4 — exhibit detail + audio player.
 //
-// CONTROLS SEMANTICS (Phase-4 Step 7, coherent with the auto-advance tour):
+// CONTROLS SEMANTICS (coherent with the auto-advance tour):
 //   • begin (left, "Về đầu"): restart THIS exhibit from 0. If it isn't the
-//     loaded clip yet, load+play it from the start (tapExhibit). Always "play
-//     this from the beginning".
+//     loaded clip yet, load+play it from the start (tapExhibit).
 //   • play/pause (centre): toggle THIS exhibit; if it isn't loaded, load+play.
 //   • next (right, "Tiếp"): advance to the NEXT exhibit in tour order — play it
 //     (rule 2a: an explicit tap) and pushReplacement its detail. Disabled on
@@ -17,26 +12,30 @@
 //
 // PERFORMANCE — the key rule: the progress bar advances several times/second.
 // Only a small StreamBuilder bound to AudioProvider.position rebuilds for it;
-// the rest of the screen rebuilds solely on AudioQueueState changes (clip /
-// play-pause), exactly the Phase-2 discipline (position excluded from state
-// equality). Never route the position stream through the whole tree.
+// the rest rebuilds solely on AudioQueueState changes (clip / play-pause).
 //
-// FREEZE-BY-DESIGN like screen 3: takes fixed {major, minor} from route args,
-// reads the exhibit once from the repository, and does NOT follow the arbiter.
+// FREEZE-BY-DESIGN like screen 3: fixed {major, minor} from route args, read
+// once from ContentProvider, does NOT follow the arbiter.
+//
+// TOKEN FAMILIES — the screen is split in two:
+//   • _PlayerPane fills the first viewport and sits ON the exhibit photograph.
+//     EVERYTHING inside it — kicker, title, artist, timecodes, track bar, play
+//     button, round icons, num badge — uses the on-image family.
+//   • _DetailBody scrolls up over `surface` and uses ink / inkMuted / inkFaint.
+// Getting this backwards is invisible in dark theme and destroys light theme.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
-import 'package:beacon_client/presentation/audio_feedback.dart';
+import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/hero_image.dart';
-import 'package:beacon_client/presentation/theme/museum_palette.dart';
+import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
-
+import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/presentation/theme/hero_image.dart';
+import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 
 class ExhibitDetailScreen extends StatelessWidget {
   final int major;
@@ -50,34 +49,30 @@ class ExhibitDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final content = context.watch<ContentProvider>();
     final zone = content.zoneByMajor(major);
     final exhibit = content.exhibitAt(major, minor);
-    
 
     if (zone == null || exhibit == null) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: t.surface,
         body: Center(
           child: Text('Không tìm thấy hiện vật',
-              style: AppText.meta.copyWith(color: AppColors.muted)),
+              style: AppText.meta.copyWith(color: t.inkMuted)),
         ),
       );
     }
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: t.surface,
       body: CustomScrollView(
         slivers: [
           // The player fills the first viewport; details scroll below.
           SliverToBoxAdapter(
             child: SizedBox(
               height: MediaQuery.of(context).size.height,
-              child: _PlayerPane(
-                zone: zone,
-                exhibit: exhibit,
-                content: content,
-              ),
+              child: _PlayerPane(zone: zone, exhibit: exhibit, content: content),
             ),
           ),
           SliverToBoxAdapter(
@@ -89,7 +84,7 @@ class ExhibitDetailScreen extends StatelessWidget {
   }
 }
 
-/// The full-screen player (image + veil + info + controls).
+/// The full-screen player (image + veil + info + controls). ALL on-image.
 class _PlayerPane extends StatelessWidget {
   final ZoneInfo zone;
   final ExhibitInfo exhibit;
@@ -103,6 +98,7 @@ class _PlayerPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final zoneName = content.text(zone.name);
     final name = content.text(exhibit.name);
     final artistLine = _artistLine();
@@ -112,7 +108,7 @@ class _PlayerPane extends StatelessWidget {
       children: [
         HeroImage(
           filePath: content.imagePath(exhibit.imagePath),
-          veil: AppColors.playerVeil,
+          veil: t.playerVeil,
           cacheWidth: 1000,
         ),
         SafeArea(
@@ -141,13 +137,19 @@ class _PlayerPane extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('$zoneName · Hiện vật số ${exhibit.minor}'.toUpperCase(),
-                        style: AppText.kicker),
+                    Text(
+                      '$zoneName · Hiện vật số ${exhibit.minor}'.toUpperCase(),
+                      style: AppText.kicker.copyWith(color: t.mutedOnImage),
+                    ),
                     const SizedBox(height: 6),
-                    Text(name, style: AppText.playerTitle),
+                    Text(name,
+                        style:
+                            AppText.playerTitle.copyWith(color: t.inkOnImage)),
                     if (artistLine != null) ...[
                       const SizedBox(height: 5),
-                      Text(artistLine, style: AppText.artist),
+                      Text(artistLine,
+                          style:
+                              AppText.artist.copyWith(color: t.artistOnImage)),
                     ],
                   ],
                 ),
@@ -156,8 +158,7 @@ class _PlayerPane extends StatelessWidget {
               _Controls(zone: zone, exhibit: exhibit),
               const SizedBox(height: 4),
               // Scroll affordance.
-              const Icon(Icons.keyboard_arrow_down,
-                  color: AppColors.grey, size: 20),
+              Icon(Icons.keyboard_arrow_down, color: t.mutedOnImage, size: 20),
               const SizedBox(height: 6),
             ],
           ),
@@ -181,6 +182,7 @@ class _Controls extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final audio = context.watch<AudioProvider>(); // rebuilds on state change
     final state = audio.state;
     final major = zone.major;
@@ -217,8 +219,11 @@ class _Controls extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(_fmt(isThis ? pos : Duration.zero),
-                          style: AppText.timeCode),
-                      Text(_fmt(duration), style: AppText.timeCode),
+                          style:
+                              AppText.timeCode.copyWith(color: t.mutedOnImage)),
+                      Text(_fmt(duration),
+                          style:
+                              AppText.timeCode.copyWith(color: t.mutedOnImage)),
                     ],
                   ),
                 ],
@@ -247,7 +252,7 @@ class _Controls extends StatelessWidget {
                   if (isThis && state.isPlaying) {
                     audio.pause();
                     return;
-                  } 
+                  }
                   final r = isThis
                       ? audio.play()
                       : audio.tapExhibit(major: major, minor: exhibit.minor);
@@ -290,12 +295,19 @@ class _Controls extends StatelessWidget {
   }
 }
 
+/// Progress rail + fill + knob. On the image.
+///
+/// The knob reads as "drag me" but nothing here handles a gesture yet. Either
+/// wire seek (userSeek exists on the controller) or drop the knob — a control
+/// that promises interaction and refuses it is worse than a plain indicator.
 class _TrackBar extends StatelessWidget {
   final double fraction;
   const _TrackBar({required this.fraction});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
+
     return LayoutBuilder(
       builder: (context, c) {
         final w = c.maxWidth;
@@ -310,7 +322,7 @@ class _TrackBar extends StatelessWidget {
                 child: Container(
                   height: 2,
                   decoration: BoxDecoration(
-                    color: AppColors.greyDark,
+                    color: t.lineOnImage,
                     borderRadius: BorderRadius.circular(1),
                   ),
                 ),
@@ -321,7 +333,7 @@ class _TrackBar extends StatelessWidget {
                 child: Container(
                   height: 2,
                   width: w * fraction,
-                  color: AppColors.white,
+                  color: t.inkOnImage,
                 ),
               ),
               // Knob.
@@ -331,8 +343,8 @@ class _TrackBar extends StatelessWidget {
                 child: Container(
                   width: 10,
                   height: 10,
-                  decoration: const BoxDecoration(
-                    color: AppColors.white,
+                  decoration: BoxDecoration(
+                    color: t.inkOnImage,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -352,11 +364,12 @@ class _PlayButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Semantics(
       button: true,
       label: playing ? 'Tạm dừng' : 'Phát',
       child: Material(
-        color: AppColors.white,
+        color: t.ctaOnImageFill,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -365,7 +378,7 @@ class _PlayButton extends StatelessWidget {
             width: 60,
             height: 60,
             child: Icon(playing ? Icons.pause : Icons.play_arrow,
-                color: AppColors.black, size: 26),
+                color: t.ctaOnImageInk, size: 26),
           ),
         ),
       ),
@@ -388,6 +401,7 @@ class _SkipButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final enabled = onTap != null;
     return Semantics(
       button: true,
@@ -403,8 +417,7 @@ class _SkipButton extends StatelessWidget {
             width: 48,
             height: 48,
             child: Icon(icon,
-                color: AppColors.white
-                    .withValues(alpha: enabled ? 0.85 : 0.3),
+                color: t.inkOnImage.withValues(alpha: enabled ? 0.85 : 0.3),
                 size: 24),
           ),
         ),
@@ -422,11 +435,12 @@ class _RoundIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Semantics(
       button: true,
       label: label,
       child: Material(
-        color: AppColors.scrimBack,
+        color: t.scrimBack,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -434,7 +448,7 @@ class _RoundIcon extends StatelessWidget {
           child: SizedBox(
             width: 48,
             height: 48,
-            child: Icon(icon, color: AppColors.white, size: 26),
+            child: Icon(icon, color: t.inkOnImage, size: 26),
           ),
         ),
       ),
@@ -448,56 +462,57 @@ class _NumBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     return Container(
       width: 34,
       height: 34,
-      decoration: const BoxDecoration(
-        color: AppColors.white,
+      decoration: BoxDecoration(
+        color: t.ctaOnImageFill,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
       child: Text('$minor',
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: AppFonts.serif,
             fontWeight: FontWeight.w700,
             fontSize: 13,
-            color: AppColors.black,
+            color: t.ctaOnImageInk,
           )),
     );
   }
 }
 
-/// Below-the-fold: summary, meaning, specs. The "more info".
+/// Below-the-fold: summary, meaning, specs. Sits on `surface`, follows theme.
 class _DetailBody extends StatelessWidget {
   final ExhibitInfo exhibit;
   final ContentProvider content;
 
-  const _DetailBody(
-      {required this.exhibit, required this.content});
+  const _DetailBody({required this.exhibit, required this.content});
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final summary = content.text(exhibit.summary);
     final meaning = content.textOrNull(exhibit.meaning);
 
     return Container(
-      color: AppColors.background,
+      color: t.surface,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel('Giới thiệu'),
+          _sectionLabel(context, 'Giới thiệu'),
           const SizedBox(height: 8),
-          Text(summary, style: _bodyStyle),
+          Text(summary, style: AppText.body.copyWith(color: t.inkMuted)),
           if (meaning != null) ...[
             const SizedBox(height: 24),
-            _sectionLabel('Ý nghĩa'),
+            _sectionLabel(context, 'Ý nghĩa'),
             const SizedBox(height: 8),
-            Text(meaning, style: _bodyStyle),
+            Text(meaning, style: AppText.body.copyWith(color: t.inkMuted)),
           ],
           if (exhibit.specs.isNotEmpty) ...[
             const SizedBox(height: 24),
-            _sectionLabel('Thông số'),
+            _sectionLabel(context, 'Thông số'),
             const SizedBox(height: 10),
             ...exhibit.specs.map((s) => Padding(
                   padding: const EdgeInsets.only(bottom: 8),
@@ -507,11 +522,13 @@ class _DetailBody extends StatelessWidget {
                       SizedBox(
                         width: 120,
                         child: Text(content.text(s.label),
-                            style: AppText.stopMeta),
+                            style:
+                                AppText.stopMeta.copyWith(color: t.inkFaint)),
                       ),
                       Expanded(
                         child: Text(content.text(s.value),
-                            style: _bodyStyle.copyWith(fontSize: 12)),
+                            style: AppText.body
+                                .copyWith(color: t.inkMuted, fontSize: 12)),
                       ),
                     ],
                   ),
@@ -522,16 +539,8 @@ class _DetailBody extends StatelessWidget {
     );
   }
 
-  Widget _sectionLabel(String text) => Text(
+  Widget _sectionLabel(BuildContext context, String text) => Text(
         text.toUpperCase(),
-        style: AppText.kicker.copyWith(color: AppColors.white),
+        style: AppText.kicker.copyWith(color: context.tokens.ink),
       );
-
-  static const TextStyle _bodyStyle = TextStyle(
-    fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
-    fontSize: 13,
-    height: 1.7,
-    color: AppColors.subText,
-  );
 }

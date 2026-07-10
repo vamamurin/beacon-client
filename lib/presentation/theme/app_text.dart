@@ -1,15 +1,35 @@
-// Destination: lib/presentation/theme/app_text.dart
+// Destination: lib/presentation/theme/app_text.dart (REPLACES current)
 //
-// Typography matching giaodien.html: Playfair Display (serif) for titles,
-// Inter (sans) for body. Font files are bundled as assets (see pubspec block in
-// the Step 1 notes) rather than fetched, so there is no network dependency and
-// the tour works fully offline.
+// ═══════════════════════════════════════════════════════════════════════════
+// KHÔNG STYLE NÀO KHAI BÁO `color`
+// ═══════════════════════════════════════════════════════════════════════════
 //
-// Sizes/weights mirror the mockup's CSS rules so the Flutter build reads 1:1.
+// Màu đến từ MuseumTokens, và mỗi call site phải tự chọn giữa hai họ:
+//
+//   Text(name, style: AppText.cardTitle.copyWith(color: t.inkOnImage))  // trên ảnh
+//   Text(title, style: AppText.sheetTitle.copyWith(color: t.ink))       // trên nền
+//
+// Trông ồn hơn `AppText.cardTitle`, nhưng đó là ý đồ: light theme làm cho hai
+// trường hợp trên KHÁC nhau, và compiler không thể chọn hộ. Một style mang sẵn
+// màu sẽ âm thầm sai ở một trong hai chỗ.
+//
+// Với `Text` không copyWith, màu chảy xuống từ ThemeData.textTheme qua
+// TextStyle.inherit — đó là màu `ink` mặc định của theme.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// CỠ CHỮ — đã sửa (xem commit "fix(a11y)")
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Bản trước lấy px từ mockup HTML nguyên xi: kicker 8.5, timeCode 9, stopMeta
+// 9.5, zone-card meta 10. CSS px trên màn hình desktop cách mắt 60cm KHÔNG
+// tương đương logical px trên điện thoại cầm cách mắt 30cm. Ngưỡng khuyến nghị
+// cho chữ phụ là ~12sp, và khách bảo tàng có tỉ trọng người lớn tuổi cao.
+//
+// `height` của các tiêu đề serif cũng đã nới (1.02 -> 1.10). Ở textScaler 1.3x,
+// Playfair 28px với height 1.02 cắt mất phần trên của dấu tiếng Việt (ấ, ầ, ế).
+// Đây là bug thật, chỉ thấy khi bật cỡ chữ lớn của hệ thống.
 
 import 'package:flutter/material.dart';
-
-import 'museum_palette.dart';
 
 abstract final class AppFonts {
   static const String serif = 'PlayfairDisplay';
@@ -17,109 +37,130 @@ abstract final class AppFonts {
 }
 
 abstract final class AppText {
-  // ── serif titles (Playfair Display) ──
+  // ── serif titles (Playfair Display) ──────────────────────────────────────
 
-  /// wordmark / big welcome (h2 in tour-hero, 28px 600)
+  /// Welcome / hero title. height nới từ 1.02 để dấu tiếng Việt không bị cắt
+  /// khi hệ thống phóng chữ.
   static const TextStyle heroTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 28,
-    height: 1.02,
-    color: AppColors.white,
+    height: 1.10,
   );
 
-  /// zone card title (h3, 20px 600)
+  /// Zone card title.
   static const TextStyle cardTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 20,
-    color: AppColors.white,
+    height: 1.15,
   );
 
-  /// sheet title (26px 600)
+  /// Sheet title ("Khu vực của bạn").
   static const TextStyle sheetTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 26,
-    color: AppColors.white,
+    height: 1.15,
   );
 
-  /// player exhibit name (26px 600)
+  /// Player exhibit name.
   static const TextStyle playerTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 26,
-    height: 1.05,
-    color: AppColors.white,
+    height: 1.12,
   );
 
-  /// exhibit-list row name (15px 600 serif)
+  /// Exhibit-list row name.
   static const TextStyle stopName = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 15,
-    color: AppColors.white,
+    height: 1.2,
   );
 
-  /// numeric badges / wordmark (30px 700)
+  /// Museum wordmark. height 0.92 -> 1.0: dưới 1.0 là ascender bị xén.
   static const TextStyle wordmark = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w700,
     fontSize: 30,
-    height: 0.92,
-    color: AppColors.white,
+    height: 1.0,
   );
 
-  // ── sans body (Inter) ──
+  // ── sans body (Inter) ────────────────────────────────────────────────────
 
-  /// uppercase kicker (8.5px, .22em tracking)
+  /// Uppercase kicker. 8.5 -> 11. letterSpacing giữ tỉ lệ .22em.
   static const TextStyle kicker = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w500,
-    fontSize: 8.5,
-    letterSpacing: 1.87, // ~.22em at 8.5px
-    color: AppColors.kicker,
+    fontSize: 11,
+    letterSpacing: 2.42,
   );
 
-  /// card / hero meta line (11px 300)
+  /// Meta line trên card/hero. 11 -> 12.
   static const TextStyle meta = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w300,
-    fontSize: 11,
-    color: AppColors.subText,
+    fontSize: 12,
+    height: 1.3,
   );
 
-  /// exhibit-list row sub (9.5px 300 grey)
+  /// Mô tả phụ dưới tiêu đề màn hình. Gom từ 3 TextStyle inline giống nhau.
+  static const TextStyle sheetSub = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w300,
+    fontSize: 12,
+    height: 1.4,
+  );
+
+  /// Đoạn hướng dẫn / trạng thái nhiều dòng (empty state, sync notice).
+  static const TextStyle guidance = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w300,
+    fontSize: 12,
+    height: 1.5,
+  );
+
+  /// Thân bài các mục dưới fold. Gom từ _bodyStyle private ở màn 4.
+  static const TextStyle body = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w300,
+    fontSize: 13,
+    height: 1.7,
+  );
+
+  /// Exhibit-list row sub. 9.5 -> 12.
   static const TextStyle stopMeta = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w300,
-    fontSize: 9.5,
-    color: AppColors.grey,
+    fontSize: 12,
+    height: 1.3,
   );
 
-  /// player artist line (11px 300 italic)
+  /// Player artist line.  11 -> 12.
   static const TextStyle artist = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w300,
     fontStyle: FontStyle.italic,
-    fontSize: 11,
-    color: AppColors.artistText,
+    fontSize: 12,
+    height: 1.3,
   );
 
-  /// start button label (12px 600 uppercase, .08em)
+  /// CTA label (uppercase).
   static const TextStyle button = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w600,
     fontSize: 12,
     letterSpacing: 0.96,
-    color: AppColors.black,
   );
 
-  /// player time codes (9px grey)
+  /// Player time codes. 9 -> 12. Chúng là chữ số dày đặc, cỡ 9 gần như không
+  /// đọc nổi khi cầm máy đi bộ.
   static const TextStyle timeCode = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w400,
-    fontSize: 9,
-    color: AppColors.grey,
+    fontSize: 12,
+    fontFeatures: [FontFeature.tabularFigures()],
   );
 }
