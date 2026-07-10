@@ -70,8 +70,9 @@ abstract final class ManifestParser {
           'fallbackLanguage "$fallbackLanguage" not in languages $languages');
     }
 
-    final museumName = _reqLocalized(
-        _reqMap(root, 'museum', 'root'), 'name', 'museum', fallbackLanguage);
+    final museum = _reqMap(root, 'museum', 'root');
+    final museumName = _reqLocalized(museum, 'name', 'museum', fallbackLanguage);
+    final welcomeImagePath = _optPath(museum, 'welcomeImage', 'museum');
 
     final beacon = _reqMap(root, 'beacon', 'root');
     final beaconUuid = _reqString(beacon, 'uuid', 'beacon').toLowerCase();
@@ -124,6 +125,7 @@ abstract final class ManifestParser {
       config: MuseumConfig(
         bundleVersion: bundleVersion,
         museumName: museumName,
+        welcomeImagePath: welcomeImagePath,
         languages: List.unmodifiable(languages),
         fallbackLanguage: fallbackLanguage,
         beaconUuid: beaconUuid,
@@ -358,6 +360,11 @@ abstract final class ManifestParser {
           '$ctx: "$key" is not a safe bundle-relative path: $v');
     }
     return v;
+  }
+
+  static String? _optPath(Map<String, dynamic> m, String key, String ctx) {
+    if (!m.containsKey(key) || m[key] == null) return null;
+    return _reqPath(m, key, ctx);
   }
 
   static LocalizedText _localized(

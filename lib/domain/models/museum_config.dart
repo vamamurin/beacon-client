@@ -138,6 +138,8 @@ class MuseumConfig {
   final String bundleVersion;
   final LocalizedText museumName;
 
+  final String? welcomeImagePath;
+
   /// Available narration languages, e.g. ["vi", "en"]. Gate screen options.
   final List<String> languages;
   final String fallbackLanguage;
@@ -156,6 +158,7 @@ class MuseumConfig {
   const MuseumConfig({
     required this.bundleVersion,
     required this.museumName,
+    this.welcomeImagePath,
     required this.languages,
     required this.fallbackLanguage,
     required this.beaconUuid,
@@ -170,6 +173,7 @@ class MuseumConfig {
     return other is MuseumConfig &&
         other.bundleVersion == bundleVersion &&
         other.museumName == museumName &&
+        other.welcomeImagePath == welcomeImagePath &&
         listEquals(other.languages, languages) &&
         other.fallbackLanguage == fallbackLanguage &&
         other.beaconUuid == beaconUuid &&
@@ -182,6 +186,7 @@ class MuseumConfig {
   int get hashCode => Object.hash(
         bundleVersion,
         museumName,
+        welcomeImagePath,
         Object.hashAll(languages),
         fallbackLanguage,
         beaconUuid,

@@ -88,7 +88,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
         children: [
           // Full-bleed hero (bundle image later; gradient fallback for now).
           HeroImage(
-            filePath: null, // Screen 1 has no zone image; use fallback tone.
+            filePath: content.welcomeImagePath, // Screen 1 has no zone image; use fallback tone.
             veil: t.welcomeVeil,
           ),
 
@@ -213,7 +213,7 @@ class _StartButton extends StatelessWidget {
             height: 48, // >= 48dp tap target (accessibility)
             alignment: Alignment.center,
             child: Text('Bắt đầu tham quan'.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ctaOnImageInk)),
+                style: AppText.button.copyWith(color: t.ctaOnImageFill)),
           ),
         ),
       ),

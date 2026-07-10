@@ -63,7 +63,7 @@ class TourAudioController {
   //   flutter run --dart-define=ASSUME_HEADPHONES=true
   // Mặc định false ở MỌI nơi khác: test suite, CI, và release build.
   static const bool kDebugAssumeHeadphones =
-      bool.fromEnvironment('ASSUME_HEADPHONES', defaultValue: false);
+      bool.fromEnvironment('ASSUME_HEADPHONES', defaultValue: true);
 
   TourAudioController({
     required IZoneRepository repository,

@@ -91,4 +91,9 @@ class ContentProvider extends ChangeNotifier {
 
   /// Đường dẫn file tuyệt đối, hoặc null → HeroImage tự vẽ gradient fallback.
   String? imagePath(String bundleRelativePath) => _imagePath(bundleRelativePath);
+
+  String? get welcomeImagePath {
+    final rel = _repo.config?.welcomeImagePath;
+    return rel == null ? null : _imagePath(rel);
+  }
 }
