@@ -6,6 +6,15 @@
 // TourAudioController; letting the plugin auto-advance a playlist would move
 // that logic out of our control. The engine "just plays" one clip and reports.
 //
+// FIX B7 (đợt 1) — GENERATION TOKEN: changeZone gọi stop() (không await) rồi
+// load() ngay trên cùng một AudioPlayer. Hai coroutine interleave: phần đuôi
+// của stop() (`_emit(idle)` sau khi await _player.stop()) chạy SAU khi load()
+// đã emit `loading` với ref mới → UI nhận chuỗi loading(mới) → idle → playing,
+// tức một nháy "idle/current=null" giữa hai zone. Sửa: mỗi lệnh load/stop nhận
+// một số thế hệ tăng đơn điệu; mọi emit/side-effect nằm SAU một `await` phải
+// kiểm tra thế hệ còn hiện hành — lệnh mới nhất luôn thắng, phần đuôi của lệnh
+// đã bị vượt mặt bị nuốt trong im lặng. Không đổi gì ở tầng controller.
+//
 // Background playback, notification and lock-screen controls come from
 // audio_service wiring (see MuseumAudioHandler note at the bottom / Phase-4
 // app wiring). audio_session is configured for SPEECH, not music, so a phone
@@ -40,6 +49,10 @@ class JustAudioEngine implements IAudioEngine {
   AudioQueueState _state = AudioQueueState.idle;
   bool _completedSignalled = false;
 
+  /// B7: thế hệ lệnh hiện hành. Mỗi load()/stop() bump nó lên; code chạy sau
+  /// một `await` chỉ được emit/side-effect nếu thế hệ nó giữ vẫn là mới nhất.
+  int _generation = 0;
+
   final _stateCtrl = StreamController<AudioQueueState>.broadcast();
   final _completedCtrl = StreamController<AudioTrackRef>.broadcast();
 
@@ -58,7 +71,7 @@ class JustAudioEngine implements IAudioEngine {
   }
 
   void _onPlayerState(PlayerState ps) {
-    final status = switch (ps.processingState) {
+    var status = switch (ps.processingState) {
       ProcessingState.idle => PlaybackStatus.idle,
       ProcessingState.loading ||
       ProcessingState.buffering =>
@@ -69,6 +82,14 @@ class JustAudioEngine implements IAudioEngine {
       // paused and fire onCompleted exactly once so the controller advances.
       ProcessingState.completed => PlaybackStatus.paused,
     };
+
+    // B7: player báo idle trong lúc một clip đang được nạp (đuôi của
+    // _player.stop() thuộc lệnh cũ chen giữa) — với ref còn sống, đây là
+    // artifact của transition, không phải trạng thái thật. Trình bày là
+    // loading để UI không nháy "idle nhưng có current".
+    if (status == PlaybackStatus.idle && _currentRef != null) {
+      status = PlaybackStatus.loading;
+    }
 
     _emit(_state.copyWith(
       status: status,
@@ -112,6 +133,7 @@ class JustAudioEngine implements IAudioEngine {
   @override
   Future<void> load(AudioTrackRef ref, Uri source,
       {Duration? durationHint}) async {
+    final int gen = ++_generation; // B7: lệnh này là mới nhất kể từ đây
     _currentRef = ref;
     _durationHint = durationHint;
     _completedSignalled = false;
@@ -126,12 +148,12 @@ class JustAudioEngine implements IAudioEngine {
       await _player.setAudioSource(AudioSource.uri(source));
     } on PlayerException catch (e) {
       if (kDebugMode) debugPrint('[JustAudioEngine] load error: $e');
-      _emit(AudioQueueState.idle);
+      if (gen == _generation) _emit(AudioQueueState.idle);
     } on PlayerInterruptedException {
       // A newer load() superseded this one — expected, ignore.
     } catch (e) {
       if (kDebugMode) debugPrint('[JustAudioEngine] load failed: $e');
-      _emit(AudioQueueState.idle);
+      if (gen == _generation) _emit(AudioQueueState.idle);
     }
   }
 
@@ -159,11 +181,14 @@ class JustAudioEngine implements IAudioEngine {
 
   @override
   Future<void> stop() async {
+    final int gen = ++_generation; // B7
     _currentRef = null;
     _durationHint = null;
     _completedSignalled = false;
     await _player.stop();
-    _emit(AudioQueueState.idle);
+    // B7: nếu một load() đã vượt mặt trong lúc await, phần đuôi này KHÔNG
+    // được phép đè trạng thái loading của clip mới bằng idle.
+    if (gen == _generation) _emit(AudioQueueState.idle);
   }
 
   @override

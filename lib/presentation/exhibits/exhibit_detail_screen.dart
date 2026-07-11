@@ -155,7 +155,7 @@ class _PlayerPane extends StatelessWidget {
                 ),
               ),
               // Controls (progress + times + buttons).
-              _Controls(zone: zone, exhibit: exhibit),
+              _Controls(zone: zone, exhibit: exhibit, content: content),
               const SizedBox(height: 4),
               // Scroll affordance.
               Icon(Icons.keyboard_arrow_down, color: t.mutedOnImage, size: 20),
@@ -178,7 +178,12 @@ class _PlayerPane extends StatelessWidget {
 class _Controls extends StatelessWidget {
   final ZoneInfo zone;
   final ExhibitInfo exhibit;
-  const _Controls({required this.zone, required this.exhibit});
+  final ContentProvider content;
+  const _Controls({
+    required this.zone,
+    required this.exhibit,
+    required this.content,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +197,18 @@ class _Controls extends StatelessWidget {
     // exhibit with the same number in a different zone.
     final isThis = state.current?.zoneMajor == major &&
         state.current?.exhibitMinor == exhibit.minor;
-    final duration = state.duration ?? Duration.zero;
+    // FIX B8: timecode tổng phải là thời lượng của CHÍNH hiện vật đang xem.
+    // state.duration là của clip đang load trong engine — khi khách mở detail
+    // hiện vật B trong lúc clip A còn load, dùng state.duration sẽ hiện tổng
+    // thời gian của A. Manifest của mỗi hiện vật đã mang durationSec sẵn.
+    final ownResolved =
+        exhibit.audio.resolve(content.language, content.fallbackLanguage);
+    final ownDuration = ownResolved == null
+        ? Duration.zero
+        : Duration(
+            milliseconds: (ownResolved.track.durationSec * 1000).round());
+    final duration =
+        isThis ? (state.duration ?? ownDuration) : ownDuration;
 
     // Next exhibit in tour order (manifest order), if any.
     final curIdx = zone.tourIndexOf(exhibit.minor);

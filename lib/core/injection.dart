@@ -9,7 +9,8 @@
 //            ├─> registry ─> arbiter ─> ZonePresenceService ─┬─> ZoneEvents
 //   (uuid) ──┘                                               ├─> ZoneStatus
 //   repository(bundle) ─> TourAudioController <── engine,headphones, uriResolver│
-//   power ─> SessionController <── zoneEvents, presenceTicks, TourAudioSink     │
+//   power ─> SessionController <── zoneEvents, deskStable(stream),              │
+//                                   lastBeaconAt(poll), TourAudioSink           │
 //   registry.signals ─> ExhibitPresenceTracker <────────────────────────────────┘
 //
 // Mode switch (mock vs real) mirrors the old injection: mock for desktop/dev,
@@ -252,18 +253,19 @@ abstract final class Injection {
     final IPowerMonitor power = BatteryPlusPowerMonitor();
     await power.start();
 
-    // The session needs presence ticks (deskStable + lastBeaconAt). Derive a
-    // PresenceTick stream from the arbiter's presence stream.
-    final presenceTicks = arbiter.presence.map((pz) => PresenceTick(
-          deskStable: pz.deskStable,
-          lastBeaconAt: pz.lastBeaconAt,
-        ));
-
+    // P1-1: hai tín hiệu presence đi hai đường ĐÚNG BẢN CHẤT của chúng —
+    //   • deskStable là tín hiệu dạng CẠNH → stream (derive từ status, distinct
+    //     vì ZoneStatus change-gate trên cặp (zone, deskStable) nên deskStable
+    //     đơn lẻ vẫn có thể lặp giá trị khi zone đổi).
+    //   • lastBeaconAt là dữ liệu dạng POLL → callback; sweep 1 Hz của session
+    //     tự đọc, không phụ thuộc việc presence có đổi giá trị hay không.
     final session = SessionController(
       zoneEvents: presence.events,
       chargingChanges: power.onChargingChanged,
       initialCharging: power.isCharging,
-      presenceTicks: presenceTicks,
+      deskStableChanges:
+          presence.status.map((s) => s.deskStable).distinct(),
+      lastBeaconAt: () => presence.lastBeaconAt,
       audioSink: TourAudioSinkAdapter(audioController),
       sessionSilence:
           cfg?.arbitration.sessionSilence ?? const Duration(minutes: 30),

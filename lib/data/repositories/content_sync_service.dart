@@ -69,16 +69,39 @@ class ContentSyncService {
   final BundleLayout _layout;
   final SyncTransport _transport;
 
+  /// P1-2: file .part được GIỮ qua các lần khởi động — kịch bản cần resume
+  /// nhất chính là "đang tải bundle lớn thì app bị kill / mất điện"; xóa .part
+  /// lúc boot là vô hiệu hóa toàn bộ cơ chế HTTP Range của transport. Chỉ dọn
+  /// .part đã quá cũ (server nhiều khả năng đã đổi version; sha256 sau download
+  /// vẫn là chốt chặn cuối nếu resume nhầm file).
+  static const Duration _partMaxAge = Duration(days: 7);
+
   /// Boot-time housekeeping: delete every stray dir/file that isn't the active
-  /// bundle — leftover .tmp unpacks, .part downloads, and (single-copy policy)
-  /// any non-active version dir. Call once at startup.
+  /// bundle — leftover .tmp unpacks and (single-copy policy) any non-active
+  /// version dir. In-progress downloads (.part) are preserved for resume
+  /// unless older than [_partMaxAge]. Call once at startup.
   Future<void> cleanupOnBoot() async {
     await _layout.ensureRoot();
     final active = await _layout.activeVersion();
+    final now = DateTime.now();
     await for (final entity in _layout.rootDir.list()) {
       final name = p.basename(entity.path);
       if (name == 'active') continue;
       if (active != null && name == active) continue; // keep the live bundle
+
+      // Keep resumable downloads (see _partMaxAge note above).
+      if (name.endsWith('.part')) {
+        try {
+          final stat = await entity.stat();
+          if (now.difference(stat.modified) <= _partMaxAge) {
+            if (kDebugMode) debugPrint('[Sync] GC kept resumable $name');
+            continue;
+          }
+        } catch (_) {
+          // stat failed — fall through and delete the unreadable leftover.
+        }
+      }
+
       try {
         await entity.delete(recursive: true);
         if (kDebugMode) debugPrint('[Sync] GC removed $name');

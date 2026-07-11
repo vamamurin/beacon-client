@@ -134,6 +134,12 @@ class ZonePresenceService {
 
   ZoneStatus get currentStatus => _lastStatus;
 
+  /// Wall-clock của gói beacon mới nhất (mọi major, kể cả desk) mà arbiter đã
+  /// nghe — hoặc null khi chưa nghe gì từ lúc pipeline khởi động. POLL bởi
+  /// SessionController mỗi sweep 1 Hz (P1-1): arbiter luôn giữ giá trị tươi
+  /// trong `current` kể cả khi presence không đổi nên không emit.
+  DateTime? get lastBeaconAt => _arbiter.current.lastBeaconAt;
+
   /// Warm the catalog once, then start. Mirrors BeaconService.initialize.
   Future<void> initialize() async {
     await _repo.preWarm();

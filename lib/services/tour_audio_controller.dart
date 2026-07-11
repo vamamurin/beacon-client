@@ -59,11 +59,15 @@ typedef AudioUriResolver = Uri Function(String bundleRelativePath);
 typedef LanguageResolver = String Function();
 
 class TourAudioController {
-  // Bench-test qua loa ngoài, không cần tai nghe:
-  //   flutter run --dart-define=ASSUME_HEADPHONES=true
-  // Mặc định false ở MỌI nơi khác: test suite, CI, và release build.
+  // Bench-test / demo qua loa ngoài, không cần tai nghe:
+  //   flutter run   --dart-define=ASSUME_HEADPHONES=true
+  //   flutter build apk --dart-define=ASSUME_HEADPHONES=true   (bản demo)
+  // FIX A4: defaultValue PHẢI là false — bản release chính thức (build không
+  // truyền define) mà nhận true sẽ vô hiệu toàn bộ chính sách tai nghe
+  // (reading mode chết, rút tai nghe không pause). Muốn demo loa ngoài thì
+  // truyền define tường minh như trên, không sửa hằng số này.
   static const bool kDebugAssumeHeadphones =
-      bool.fromEnvironment('ASSUME_HEADPHONES', defaultValue: true);
+      bool.fromEnvironment('ASSUME_HEADPHONES', defaultValue: false);
 
   TourAudioController({
     required IZoneRepository repository,
@@ -170,7 +174,7 @@ class TourAudioController {
     _flushQueue(); // stop + unload old zone's queue (supreme physical sync)
     _activeZoneMajor = major;
     _autoIndex = 0;
-    _onChime(); // zone change always chimes
+    _chime(); // zone change always chimes (trừ reading mode — cấm mọi tiếng)
 
     _beginZoneAudio(zone, chime: false, forcePlay: wasPlaying, alreadyChimed: true);
   }
@@ -194,7 +198,7 @@ class TourAudioController {
   }) {
     final bool revisit = _visitedZones.contains(zone.major);
 
-    if (chime && !alreadyChimed) _onChime();
+    if (chime && !alreadyChimed) _chime();
 
     // Rule 5: revisiting a seen zone -> chime only (chime already handled by
     // caller for change; enterZone passes chime:false), no intro, wait for tap.
@@ -206,11 +210,19 @@ class TourAudioController {
     _visitedZones.add(zone.major);
 
     // Decide whether to actually START sound.
+    //
+    // FIX B5: forcePlay là mệnh lệnh "khách ĐANG nghe khi đổi zone → intro mới
+    // phát tiếp" (rule 3+4). Bản cũ AND thêm _autoplayAllowed nên forcePlay
+    // chỉ phủ quyết được, không ép được — khách nghe qua loa (bảo tàng cho
+    // phép) sang zone mới bị im lặng khó hiểu. Giờ forcePlay đi thẳng vào
+    // _loadIntro; cổng cuối cùng vẫn là _tryPlay (reading mode phủ quyết
+    // TUYỆT ĐỐI mọi đường phát tiếng — bất khả kháng vật lý, không phải
+    // preference).
     final bool shouldPlay = forcePlay ?? _autoplayAllowed;
 
     // Load the intro either way (so a paused visitor can press play, and so
     // reading mode has a "current" ref to show the transcript for).
-    _loadIntro(zone, play: shouldPlay && _autoplayAllowed);
+    _loadIntro(zone, play: shouldPlay);
   }
 
   void _loadIntro(ZoneInfo zone, {required bool play}) {
@@ -237,6 +249,15 @@ class TourAudioController {
     if (_readingMode) return false;
     _engine.play();
     return true;
+  }
+
+  /// B6: chime cũng là ÂM THANH — reading mode cấm mọi tiếng ra loa, kể cả
+  /// tiếng "ting" đổi zone. Mọi call site dùng wrapper này, không gọi thẳng
+  /// _onChime. (Cổng riêng thay vì gộp vào _tryPlay vì chime không đi qua
+  /// engine thuyết minh — nó có player riêng.)
+  void _chime() {
+    if (_readingMode) return;
+    _onChime();
   }
 
   // ========================================================================

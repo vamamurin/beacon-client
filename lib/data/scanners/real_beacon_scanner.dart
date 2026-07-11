@@ -1,4 +1,22 @@
 // FILE: /lib/data/scanners/real_beacon_scanner.dart
+//
+// FIX P0-2 (đợt 1): flutter_blue_plus phát danh sách TÍCH LŨY — mỗi lần bất kỳ
+// thiết bị nào cập nhật, cả danh sách (kể cả beacon đã ngừng phát) được emit
+// lại. Bản cũ đóng timestamp bằng DateTime.now() tại lúc parse, nên một beacon
+// đã chết vẫn được "làm tươi" mãi → staleness/eviction/zoneSilence của toàn
+// pipeline không bao giờ kích hoạt trên máy thật.
+//
+// Sửa bằng HAI lớp:
+//   (1) DEDUPE theo ScanResult.timeStamp: mỗi entry chỉ được xử lý MỘT lần cho
+//       mỗi gói sóng thật. Entry cũ bị re-emit trong danh sách tích lũy có
+//       timeStamp không đổi → bỏ qua, không parse lại, không log lại.
+//   (2) BeaconReading.timestamp = ScanResult.timeStamp (thời điểm phần cứng
+//       nhận gói), KHÔNG phải DateTime.now() lúc parse. Registry so tuổi gói
+//       bằng đúng đồng hồ tường như trước, nhưng giờ mốc là gói sóng thật.
+//
+// Dùng onScanResults thay cho scanResults: onScanResults xóa kết quả giữa các
+// phiên scan, nên một chu kỳ stop→start không phát lại danh sách của phiên cũ.
+// Dedupe (1) vẫn giữ như dây an toàn thứ hai.
 
 // MARK: - 1. IMPORTS & DEPENDENCIES (Khai báo thư viện)
 // ============================================================================
@@ -13,12 +31,21 @@ import 'package:beacon_client/domain/models/beacon_reading.dart';
 class RealBeaconScanner implements IBeaconScanner {
   RealBeaconScanner({this.scanMode = AndroidScanMode.lowLatency});
 
-  
   // MARK: - 2. STATE VARIABLES & GETTERS (Biến nội bộ & Cổng truy xuất)
   // ============================================================================
   final AndroidScanMode scanMode;
   final _controller = StreamController<BeaconReading>.broadcast();
   StreamSubscription<List<ScanResult>>? _scanSub;
+
+  /// P0-2: mốc thời gian gói MỚI NHẤT đã xử lý, theo từng thiết bị. Entry
+  /// trong danh sách tích lũy có timeStamp không nhích lên = gói cũ bị phát
+  /// lại → bỏ qua. Reset mỗi start/stop.
+  final Map<String, DateTime> _lastProcessed = {};
+
+  /// Trần phòng thủ cho map dedupe ở môi trường cực đông thiết bị BLE lạ
+  /// (hội chợ). Vượt trần → xóa trắng; giá phải trả chỉ là parse lặp một
+  /// lượt, không sai logic (dedupe là tối ưu, không phải điều kiện đúng đắn).
+  static const int _kDedupeCap = 4096;
 
   // PHASE 2: cửa sổ Measured Power hợp lệ (dBm). Ngoài vùng này coi như gói rác
   // (nhiễu sóng / bit lỗi) → drop thẳng tay theo Strict Mode. Biên bao gồm 2 đầu.
@@ -41,6 +68,7 @@ class RealBeaconScanner implements IBeaconScanner {
     // nếu startScan() bị gọi lặp mà chưa qua stopScan().
     await _scanSub?.cancel();
     _scanSub = null;
+    _lastProcessed.clear(); // phiên scan mới → dedupe mới
 
     await FlutterBluePlus.startScan(
       continuousUpdates: true,
@@ -48,20 +76,42 @@ class RealBeaconScanner implements IBeaconScanner {
       androidScanMode: scanMode,
     );
 
-    _scanSub = FlutterBluePlus.scanResults.listen(_onScanResults);
+    // onScanResults (không phải scanResults): kết quả được xóa giữa các phiên
+    // scan → stop/start không phát lại danh sách phiên trước. onError bắt lỗi
+    // scan bất đồng bộ (adapter tắt giữa chừng) thay vì để rơi vào zone handler.
+    _scanSub = FlutterBluePlus.onScanResults.listen(
+      _onScanResults,
+      onError: (Object e, StackTrace st) {
+        if (kDebugMode) debugPrint('[iBeacon] scan stream error: $e');
+      },
+    );
   }
 
   @override
   Future<void> stopScan() async {
     await _scanSub?.cancel();
     _scanSub = null;
+    _lastProcessed.clear();
     await FlutterBluePlus.stopScan();
   }
 
   // MARK: - 4. DATA STREAM HANDLING (Hứng và Lọc luồng dữ liệu)
   // ============================================================================
   void _onScanResults(List<ScanResult> results) {
+    if (_controller.isClosed) return;
+
+    if (_lastProcessed.length > _kDedupeCap) _lastProcessed.clear();
+
     for (final result in results) {
+      final id = result.device.remoteId.str;
+      final ts = result.timeStamp;
+
+      // P0-2 lớp (1): gói này đã xử lý rồi (danh sách tích lũy phát lại entry
+      // cũ) → bỏ qua. Chỉ timeStamp NHÍCH LÊN mới là gói sóng mới.
+      final prev = _lastProcessed[id];
+      if (prev != null && !ts.isAfter(prev)) continue;
+      _lastProcessed[id] = ts;
+
       final reading = _tryParseIBeacon(result);
       if (reading != null && !_controller.isClosed) {
         _controller.add(reading);
@@ -72,7 +122,8 @@ class RealBeaconScanner implements IBeaconScanner {
   // MARK: - 5. iBEACON DECODING LOGIC (Giải mã Byte nhị phân chuẩn Apple)
   // ============================================================================
   /// Parse iBeacon từ ScanResult. Trả null nếu không phải iBeacon hợp lệ.
-  /// Log chi tiết lý do thất bại để dễ debug qua `flutter logs`.
+  /// Log chi tiết lý do thất bại để dễ debug qua `flutter logs`. Nhờ dedupe ở
+  /// tầng trên, mỗi gói sóng thật chỉ log đúng một lần.
   BeaconReading? _tryParseIBeacon(ScanResult result) {
     final id = result.device.remoteId.str;
     final mfgData = result.advertisementData.manufacturerData;
@@ -82,19 +133,6 @@ class RealBeaconScanner implements IBeaconScanner {
         debugPrint('[iBeacon] $id — bỏ qua: không có manufacturer data');
       }
       return null;
-    }
-
-    // Log tất cả company ID tìm thấy để so sánh
-    if (kDebugMode) {
-      for (final entry in mfgData.entries) {
-        final companyHex =
-            '0x${entry.key.toRadixString(16).padLeft(4, '0').toUpperCase()}';
-        final hex = entry.value
-            .map((b) => b.toRadixString(16).padLeft(2, '0').toUpperCase())
-            .join(' ');
-        debugPrint(
-            '[iBeacon] $id — CompanyID=$companyHex (${entry.key}) len=${entry.value.length}b → $hex');
-      }
     }
 
     // Apple Inc. company ID = 0x004C = 76
@@ -175,7 +213,9 @@ class RealBeaconScanner implements IBeaconScanner {
       minor: minor,
       rssi: result.rssi,
       measuredPower: measuredPower, // PHASE 2: per-beacon calibration từ phần cứng
-      timestamp: DateTime.now(),
+      // P0-2 lớp (2): mốc thời gian của GÓI SÓNG (phần cứng nhận), không phải
+      // lúc parse. Staleness 3s / eviction 12s / zoneSilence giờ đo tuổi thật.
+      timestamp: result.timeStamp,
     );
   }
 
@@ -193,6 +233,7 @@ class RealBeaconScanner implements IBeaconScanner {
   void dispose() {
     _scanSub?.cancel();
     _scanSub = null;
+    _lastProcessed.clear();
     FlutterBluePlus.stopScan();
     if (!_controller.isClosed) _controller.close();
   }

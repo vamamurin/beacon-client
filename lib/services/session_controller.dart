@@ -1,10 +1,26 @@
 // Destination: lib/services/session_controller.dart
 //
 // The session lifecycle owner. Converges THREE signal sources — zone events
-// (ZonePresenceService), charging (IPowerMonitor), and deskStable/lastBeaconAt
-// (via the presence status) — into the atDesk/gate/touring/ending machine, and
-// orchestrates cleanup (stop audio, wipe visited memory) as one atomic step
-// because ending a session is a single business action.
+// (ZonePresenceService), charging (IPowerMonitor), and desk/silence presence —
+// into the atDesk/gate/touring/ending machine, and orchestrates cleanup (stop
+// audio, wipe visited memory) as one atomic step because ending a session is a
+// single business action.
+//
+// FIX P1-1 (đợt 1): lastBeaconAt trước đây đến qua một stream đã CHANGE-GATED
+// (arbiter chỉ emit khi presence đổi giá trị) — trong khi bản chất nó là dữ
+// liệu POLL. Hậu quả: giá trị đóng băng tại lần đổi presence gần nhất, và
+// (a) khách đứng lâu trong một zone có thể bị kết thúc phiên oan sau
+//     sessionSilence dù sóng vẫn đầy;
+// (b) máy bỏ quên ở biên hai zone không bao giờ timeout vì candidate flicker
+//     reset đồng hồ mãi.
+// Sửa: sweep 1 Hz sẵn có tự ĐỌC lastBeaconAt qua callback được inject
+// (`() => presence.lastBeaconAt` — arbiter luôn giữ giá trị tươi trong
+// `current` kể cả khi không emit). deskStable vẫn là tín hiệu dạng CẠNH nên
+// giữ nguyên đường stream (đổi sang Stream<bool> gọn hơn PresenceTick cũ).
+//
+// Mốc im lặng được neo bởi max(lastBeaconAt, _touringSince): một phiên vừa
+// bắt đầu không bao giờ bị giết bởi timestamp cũ còn sót từ phiên trước, và
+// một tour không nghe được beacon nào vẫn tự đóng sau sessionSilence.
 //
 // Confirmed rules:
 //  (1) atDesk -> gate ONLY on unplug. Zone signals never start a tour.
@@ -18,7 +34,7 @@
 //      fresh session).
 //  (5) ending -> cleanup(stop audio, wipe visited) -> atDesk.
 //
-// Time is injected; silence is checked on a 1 Hz sweep against lastBeaconAt.
+// Time is injected; silence is checked on a 1 Hz sweep.
 
 import 'dart:async';
 
@@ -38,34 +54,35 @@ abstract interface class TourAudioSink {
   void resetSessionMemory();
 }
 
-/// Signals the controller needs from the presence layer each tick. Fed from
-/// ZonePresenceService: [deskStable] from ZoneStatus, [lastBeaconAt] tracked by
-/// the arbiter and surfaced for silence detection.
-class PresenceTick {
-  final bool deskStable;
-  final DateTime? lastBeaconAt;
-  const PresenceTick({required this.deskStable, required this.lastBeaconAt});
-}
-
 class SessionController {
   SessionController({
     required Stream<ZoneEvent> zoneEvents,
     required Stream<bool> chargingChanges,
     required bool initialCharging,
-    required Stream<PresenceTick> presenceTicks,
+
+    /// Rising/falling edges of "desk beacon dominates" — event-shaped, so a
+    /// stream is the right transport (derived from ZoneStatus in injection).
+    required Stream<bool> deskStableChanges,
+
+    /// POLLED each sweep: wall-clock of the newest beacon packet the arbiter
+    /// has seen (any major), or null when nothing was heard yet. Injected as a
+    /// callback — NOT a stream — because freshness must be read against real
+    /// time, not against "when did presence last change".
+    required DateTime? Function() lastBeaconAt,
     required TourAudioSink audioSink,
     required Duration sessionSilence,
     Duration startGraceTimeout = const Duration(seconds: 20),
     DateTime Function()? now,
     Duration sweepInterval = const Duration(seconds: 1),
   })  : _audio = audioSink,
+        _lastBeaconAt = lastBeaconAt,
         _sessionSilence = sessionSilence,
         _startGraceTimeout = startGraceTimeout,
         _now = now ?? DateTime.now,
         _sweepInterval = sweepInterval {
     _zoneSub = zoneEvents.listen(_onZoneEvent);
     _chargeSub = chargingChanges.listen(_onChargingChanged);
-    _presenceSub = presenceTicks.listen(_onPresenceTick);
+    _deskSub = deskStableChanges.listen(_onDeskStableChanged);
 
     // Initial phase reflects the dock state at startup: charging => resting on
     // the dock (atDesk); not charging => already in someone's hand, so wake to
@@ -76,6 +93,7 @@ class SessionController {
   }
 
   final TourAudioSink _audio;
+  final DateTime? Function() _lastBeaconAt;
   final Duration _sessionSilence;
 
   /// Safety cap on the start-grace window in case the visitor never reaches a
@@ -86,18 +104,21 @@ class SessionController {
 
   late final StreamSubscription<ZoneEvent> _zoneSub;
   late final StreamSubscription<bool> _chargeSub;
-  late final StreamSubscription<PresenceTick> _presenceSub;
+  late final StreamSubscription<bool> _deskSub;
   Timer? _sweepTimer;
 
   final _stateCtrl = StreamController<SessionState>.broadcast();
   SessionState _state = SessionState.initial;
 
-  // Latest presence signals (updated each tick).
+  /// Latest desk edge (updated by the desk stream).
   bool _deskStable = false;
-  DateTime? _lastBeaconAt;
 
   // Grace bookkeeping.
   DateTime? _graceStartedAt;
+
+  /// When the current tour started (anchor for silence — see header). Null
+  /// outside touring.
+  DateTime? _touringSince;
 
   Stream<SessionState> get state => _stateCtrl.stream;
   SessionState get current => _state;
@@ -112,7 +133,9 @@ class SessionController {
   /// Visitor pressed "Start" at the gate. gate -> touring, opens start grace.
   void userStartedTour() {
     if (_state.phase != SessionPhase.gate) return;
-    _graceStartedAt = _now();
+    final now = _now();
+    _graceStartedAt = now;
+    _touringSince = now;
     _setState(_state.copyWith(
       phase: SessionPhase.touring,
       inStartGrace: true,
@@ -161,20 +184,18 @@ class SessionController {
     }
   }
 
-  void _onPresenceTick(PresenceTick t) {
-    _deskStable = t.deskStable;
-    _lastBeaconAt = t.lastBeaconAt;
-    // React to desk immediately (don't wait for the sweep) when not in grace.
-    if (_state.phase == SessionPhase.touring &&
-        _deskStable &&
-        !_inGrace()) {
+  void _onDeskStableChanged(bool stable) {
+    _deskStable = stable;
+    // React to the rising edge immediately (don't wait for the sweep) when
+    // not in grace.
+    if (_state.phase == SessionPhase.touring && _deskStable && !_inGrace()) {
       _endSession(SessionEndReason.desk);
     }
   }
 
   // ------------------------------------------------------------------- sweep
 
-  /// 1 Hz: expire the grace timeout and check radio silence.
+  /// 1 Hz: expire the grace timeout, re-check desk, and check radio silence.
   void _sweep() {
     if (_state.phase != SessionPhase.touring) return;
     final now = _now();
@@ -187,10 +208,23 @@ class SessionController {
       _setState(_state.copyWith(inStartGrace: false));
     }
 
-    // Priority: charging is handled in its own event (instant). Desk handled in
-    // presence tick. Here we handle silence (P3), lowest priority.
-    if (_lastBeaconAt != null &&
-        now.difference(_lastBeaconAt!) > _sessionSilence) {
+    // Desk may have been stable SINCE BEFORE grace ended (edge arrived during
+    // grace and was ignored; the change-gated stream won't re-emit). Re-check
+    // the level here so leaving grace next to the desk still ends the tour.
+    if (_deskStable && !_inGrace()) {
+      _endSession(SessionEndReason.desk);
+      return;
+    }
+
+    // Silence (P3, lowest priority). POLL the arbiter's freshness — see
+    // header. Anchored to _touringSince so a stale timestamp inherited from a
+    // previous session can never kill a fresh one, and a tour that never hears
+    // a single beacon still times out after sessionSilence.
+    final DateTime? heard = _lastBeaconAt();
+    final DateTime started = _touringSince ?? now;
+    final DateTime anchor =
+        (heard != null && heard.isAfter(started)) ? heard : started;
+    if (now.difference(anchor) > _sessionSilence) {
       _endSession(SessionEndReason.silence);
     }
   }
@@ -209,8 +243,8 @@ class SessionController {
     _audio.stopAll();
     _audio.resetSessionMemory();
     _graceStartedAt = null;
+    _touringSince = null;
     _deskStable = false;
-    _lastBeaconAt = null;
 
     // Settle to atDesk. Keep endReason for the end screen / analytics until the
     // next tour starts (cleared in userStartedTour).
@@ -230,7 +264,7 @@ class SessionController {
     _sweepTimer = null;
     await _zoneSub.cancel();
     await _chargeSub.cancel();
-    await _presenceSub.cancel();
+    await _deskSub.cancel();
     if (!_stateCtrl.isClosed) await _stateCtrl.close();
   }
 
