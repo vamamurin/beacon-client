@@ -87,6 +87,11 @@ abstract final class ManifestParser {
       deskDwellSeconds: _reqNum(arb, 'deskDwellSeconds', 'arbitration'),
       sessionSilenceMinutes:
           _reqNum(arb, 'sessionSilenceMinutes', 'arbitration'),
+      // C1 — OPTIONAL (bundle cũ chưa có 3 trường này vẫn hợp lệ; default
+      // 5/8/2.5 áp tại clamped). Tinh chỉnh tại hiện trường qua CMS.
+      engageAtMeters: _optNum(arb, 'engageAtMeters', 5),
+      releaseAtMeters: _optNum(arb, 'releaseAtMeters', 8),
+      pathLossExponent: _optNum(arb, 'pathLossExponent', 2.5),
     );
 
     final pol = _reqMap(root, 'policies', 'root');
@@ -335,6 +340,14 @@ abstract final class ManifestParser {
     final v = m[key];
     if (v is num) return v.toDouble();
     throw BundleValidationException('$ctx: "$key" missing or not a number');
+  }
+
+  /// C1 — số TÙY CHỌN: thiếu hoặc sai kiểu ⇒ dùng [fallback] (không fail
+  /// bundle). Dành cho các trường thêm sau schemaVersion hiện hành để bundle
+  /// cũ trên máy vẫn parse được sau khi cập nhật app.
+  static double _optNum(Map<String, dynamic> m, String key, double fallback) {
+    final v = m[key];
+    return v is num ? v.toDouble() : fallback;
   }
 
   static bool _reqBool(Map<String, dynamic> m, String key, String ctx) {

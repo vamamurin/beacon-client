@@ -34,6 +34,11 @@ class BeaconTracker {
   double _smoothedRssi = double.negativeInfinity;
   late DateTime _lastSeen;
 
+  /// C1 — Measured Power mới nhất beacon này tự khai (Phase 2 đã validate ở
+  /// Scanner). Về lý thuyết là hằng số của phần cứng; lấy theo gói mới nhất
+  /// để đổi pin/đổi cấu hình beacon có hiệu lực ngay không cần restart app.
+  int _measuredPower = -59;
+
   BeaconTracker(BeaconReading initial)
       : key = packKey(initial.major, initial.minor),
         major = initial.major,
@@ -47,12 +52,16 @@ class BeaconTracker {
 
   DateTime get lastSeen => _lastSeen;
 
+  /// C1 — hiệu chuẩn @1m của chính beacon này (xem [_measuredPower]).
+  int get measuredPower => _measuredPower;
+
   /// HOT PATH — feed one packet. O(1): a single Kalman step.
   /// [lastSeen] is stamped from the packet's own timestamp so the registry
   /// sweep detects signal loss against its injected clock.
   void update(BeaconReading reading) {
     _smoothedRssi = _filter.update(reading.rssi.toDouble());
     _lastSeen = reading.timestamp;
+    _measuredPower = reading.measuredPower;
   }
 
   /// True when (now − lastSeen) exceeds [limit].

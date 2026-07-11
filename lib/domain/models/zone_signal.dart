@@ -1,5 +1,7 @@
 // Destination: lib/domain/models/zone_signal.dart
 
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 /// Aggregated radio signal for ONE zone (one iBeacon major) at one instant —
@@ -28,12 +30,30 @@ class ZoneSignal {
   /// Wall-clock of the newest packet from any beacon of this major.
   final DateTime lastSeenAt;
 
+  /// C1 — Measured Power (RSSI hiệu chỉnh @1m) của CHÍNH beacon mạnh nhất
+  /// đang đại diện cho zone này (cùng nguồn với [rssiDb]). Mỗi beacon tự khai
+  /// giá trị của nó trong gói iBeacon (Phase 2), nên so sánh khoảng cách giữa
+  /// các zone dùng đúng hiệu chuẩn của từng phần cứng, không dùng hằng chung.
+  /// Default -59 dBm (chuẩn công nghiệp) giữ tương thích cho test/mocks cũ.
+  final int measuredPowerDbm;
+
   const ZoneSignal({
     required this.major,
     required this.rssiDb,
     required this.rssiByMinor,
     required this.lastSeenAt,
+    this.measuredPowerDbm = -59,
   });
+
+  /// C1 — Khoảng cách ƯỚC LƯỢNG (mét) theo mô hình log-distance path loss:
+  ///   d = 10 ^ ((measuredPower − rssi) / (10 · n))
+  /// với n = [pathLossExponent] (≈2.0 không vật cản, 2.5–3.5 trong nhà có tủ
+  /// kính/người che). CHỈ dùng để phân TẦNG (engage/release có hysteresis) và
+  /// hiển thị debug — sai số trong nhà ±30–50%, KHÔNG được coi là thước đo.
+  /// Đầu vào là RSSI đã qua Kalman nên ước lượng ổn định theo thời gian.
+  double estimatedDistanceMeters(double pathLossExponent) => math
+      .pow(10, (measuredPowerDbm - rssiDb) / (10 * pathLossExponent))
+      .toDouble();
 
   Iterable<int> get minorsHeard => rssiByMinor.keys;
 

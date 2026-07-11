@@ -32,6 +32,21 @@ class ArbitrationParams {
   /// (device left the exhibition area entirely).
   final Duration sessionSilence;
 
+  /// C1 — TẦNG KÍCH HOẠT: một zone chỉ được trở thành "khu vực hiện tại"
+  /// (intro phát, hiện vật vào hàng chờ) khi khoảng cách ước lượng ≤ ngưỡng
+  /// này. Zone nghe thấy nhưng xa hơn chỉ nằm ở TẦNG HIỂN THỊ (ranking UI).
+  final double engageAtMeters;
+
+  /// C1 — NGƯỠNG NHẢ (hysteresis): zone hiện tại chỉ bị nhả về standby khi
+  /// đi ra XA HƠN ngưỡng này (duy trì đủ `dwell`). Khoảng đệm
+  /// release − engage nuốt sai số ±30–50% của ước lượng RSSI→mét trong nhà,
+  /// chống nhấp nháy ở biên. Bất biến: release ≥ engage + 1 m (ép ở clamped).
+  final double releaseAtMeters;
+
+  /// C1 — hệ số suy hao môi trường n của mô hình log-distance (2.0 thoáng,
+  /// 2.5–3.5 trong nhà nhiều vật cản). Tinh chỉnh tại hiện trường qua CMS.
+  final double pathLossExponent;
+
   const ArbitrationParams({
     required this.minDeltaDb,
     required this.dwell,
@@ -39,6 +54,9 @@ class ArbitrationParams {
     required this.zoneSilence,
     required this.deskDwell,
     required this.sessionSilence,
+    required this.engageAtMeters,
+    required this.releaseAtMeters,
+    required this.pathLossExponent,
   });
 
   /// Clamp ranges mirror manifest.schema.json (single source documented in
@@ -51,9 +69,19 @@ class ArbitrationParams {
     required double zoneSilenceSeconds,
     required double deskDwellSeconds,
     required double sessionSilenceMinutes,
+    double engageAtMeters = 5,
+    double releaseAtMeters = 8,
+    double pathLossExponent = 2.5,
   }) {
     Duration secs(double v, double lo, double hi) =>
         Duration(milliseconds: (v.clamp(lo, hi) * 1000).round());
+
+    // C1: clamp từng ngưỡng, rồi ÉP bất biến hysteresis release ≥ engage + 1m.
+    // CMS gõ nhầm release < engage sẽ tự nắn thành dải hợp lệ thay vì tạo ra
+    // một máy trạng thái vào-ra cùng một điểm (nhấp nháy vô hạn).
+    final double engage = engageAtMeters.clamp(1.0, 30.0);
+    final double release =
+        releaseAtMeters.clamp(2.0, 50.0).clamp(engage + 1.0, 50.0);
 
     return ArbitrationParams(
       minDeltaDb: minDeltaDb.clamp(3.0, 20.0),
@@ -64,6 +92,9 @@ class ArbitrationParams {
       sessionSilence: Duration(
         milliseconds: (sessionSilenceMinutes.clamp(2.0, 60.0) * 60000).round(),
       ),
+      engageAtMeters: engage,
+      releaseAtMeters: release,
+      pathLossExponent: pathLossExponent.clamp(1.5, 4.5),
     );
   }
 
@@ -87,12 +118,16 @@ class ArbitrationParams {
         other.lockout == lockout &&
         other.zoneSilence == zoneSilence &&
         other.deskDwell == deskDwell &&
-        other.sessionSilence == sessionSilence;
+        other.sessionSilence == sessionSilence &&
+        other.engageAtMeters == engageAtMeters &&
+        other.releaseAtMeters == releaseAtMeters &&
+        other.pathLossExponent == pathLossExponent;
   }
 
   @override
-  int get hashCode => Object.hash(
-      minDeltaDb, dwell, lockout, zoneSilence, deskDwell, sessionSilence);
+  int get hashCode => Object.hash(minDeltaDb, dwell, lockout, zoneSilence,
+      deskDwell, sessionSilence, engageAtMeters, releaseAtMeters,
+      pathLossExponent);
 }
 
 /// Museum-wide audio policies — signed off by the museum, shipped in the

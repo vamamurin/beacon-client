@@ -12,8 +12,15 @@
 //   (3) After a switch, LOCKOUT: for `lockout` no takeover is considered, and
 //       silence does NOT drop us to standby. A calm screen (12 s frozen) beats
 //       flicker, and it lets the welcome narration play through.
-//   (4) STANDBY on silence applies only AFTER lockout: current zone unheard
-//       for `zoneSilence` -> currentMajor = null (radar screen).
+//   (4) STANDBY applies only AFTER lockout, on EITHER condition: current zone
+//       unheard for `zoneSilence` (radio loss), OR — C1 — heard but estimated
+//       BEYOND releaseAtMeters continuously for `dwell` (visitor walked away
+//       while weak signal still reaches them). Both -> currentMajor = null.
+//   (4b) C1 — ENGAGE GATE: a zone may only BECOME current (instant entry or
+//       takeover) when its estimated distance <= engageAtMeters. Zones merely
+//       heard farther away are DISPLAY-tier only (ranking UI), never audio.
+//       engage < release by >= 1 m (enforced) = hysteresis dead band that
+//       swallows the ±30–50% indoor error of the RSSI→metres model.
 //   (5) DESK (major 99) is arbitrated with the SAME delta rule: it must beat
 //       every exhibition zone by minDeltaDb and hold for `deskDwell` to raise
 //       deskStable. It NEVER touches currentMajor — ending the session is the
@@ -60,6 +67,16 @@ class ZoneArbiter {
 
   /// End of the active lockout window; null when not locked out.
   DateTime? _lockoutUntil;
+
+  /// C1 — when the current zone FIRST measured beyond releaseAtMeters
+  /// (sustained-far release measured from here; any dip back inside resets).
+  DateTime? _currentFarSince;
+
+  // ---- C1 distance helpers ----
+  double _distanceM(ZoneSignal z) =>
+      z.estimatedDistanceMeters(_p.pathLossExponent);
+  bool _withinEngage(ZoneSignal z) => _distanceM(z) <= _p.engageAtMeters;
+  bool _beyondRelease(ZoneSignal z) => _distanceM(z) > _p.releaseAtMeters;
 
   // ---- takeover candidate (exhibition zones) ----
   int? _candidateMajor;
@@ -113,10 +130,14 @@ class ZoneArbiter {
         : _firstWhereOrNull(zones, (z) => z.major == _currentMajor);
     if (currentSignal != null) _currentLastHeard = now;
 
-    // --- no current zone: instant entry (rule 1) ---
+    // --- no current zone: instant entry (rule 1) GATED by engage (rule 4b).
+    // Strongest-first order stands in for nearest-first; the engage check per
+    // candidate corrects the rare case where the loudest zone is calibrated
+    // "far" (per-beacon measuredPower) while a quieter one is truly close.
     if (_currentMajor == null) {
-      if (zones.isNotEmpty) {
-        _enterZone(zones.first.major, now, lockout: false);
+      final ZoneSignal? entry = _firstWhereOrNull(zones, _withinEngage);
+      if (entry != null) {
+        _enterZone(entry.major, now, lockout: false);
       }
       _clearCandidate();
       return;
@@ -124,13 +145,23 @@ class ZoneArbiter {
 
     // --- inside lockout: freeze. No takeover, no standby (rule 3) ---
     if (lockedOut) {
+      _currentFarSince = null; // rule 3: the far clock doesn't run either
       _clearCandidate();
       return;
     }
 
-    // --- strongest challenger (not the current zone) ---
-    final ZoneSignal? challenger =
-        _firstWhereOrNull(zones, (z) => z.major != _currentMajor);
+    // --- C1: track "current zone heard but too far" (release condition) ---
+    if (currentSignal == null) {
+      _currentFarSince = null; // unheard -> the zoneSilence path owns this
+    } else if (_beyondRelease(currentSignal)) {
+      _currentFarSince ??= now;
+    } else {
+      _currentFarSince = null; // dipped back inside -> reset (anti-flicker)
+    }
+
+    // --- strongest challenger (not the current zone), engage-gated (4b) ---
+    final ZoneSignal? challenger = _firstWhereOrNull(
+        zones, (z) => z.major != _currentMajor && _withinEngage(z));
 
     final double currentRssi = currentSignal?.rssiDb ?? double.negativeInfinity;
     final bool challengerLeads = challenger != null &&
@@ -153,7 +184,20 @@ class ZoneArbiter {
       _clearCandidate();
     }
 
-    // --- post-lockout silence -> standby (rule 4) ---
+    // --- C1: sustained beyond release -> standby (rule 4, distance arm).
+    // Evaluated AFTER takeover so walking from A toward B switches (better)
+    // instead of dropping to standby first. Reuses `dwell` as the sustain
+    // window — same anti-flicker role, no extra knob.
+    if (_currentFarSince != null &&
+        now.difference(_currentFarSince!) >= _p.dwell) {
+      _currentMajor = null;
+      _currentLastHeard = null;
+      _currentFarSince = null;
+      _clearCandidate();
+      return;
+    }
+
+    // --- post-lockout silence -> standby (rule 4, radio-loss arm) ---
     if (currentSignal == null &&
         _currentLastHeard != null &&
         now.difference(_currentLastHeard!) > _p.zoneSilence) {
@@ -166,6 +210,7 @@ class ZoneArbiter {
   void _enterZone(int major, DateTime now, {required bool lockout}) {
     _currentMajor = major;
     _currentLastHeard = now;
+    _currentFarSince = null;
     _lockoutUntil = lockout ? now.add(_p.lockout) : null;
   }
 

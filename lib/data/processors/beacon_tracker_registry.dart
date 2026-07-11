@@ -134,7 +134,13 @@ class BeaconTrackerRegistry {
       if (t.isStaleAt(now, _stalenessThreshold)) continue; // silent ⇒ no vote
       final agg = byMajor.putIfAbsent(t.major, () => _MajorAgg());
       agg.rssiByMinor[t.minor] = t.smoothedRssi;
-      if (t.smoothedRssi > agg.maxRssi) agg.maxRssi = t.smoothedRssi;
+      if (t.smoothedRssi > agg.maxRssi) {
+        agg.maxRssi = t.smoothedRssi;
+        // C1: measuredPower đi CẶP với rssiDb — cùng lấy từ beacon mạnh nhất,
+        // để phép ước lượng khoảng cách downstream dùng đúng hiệu chuẩn của
+        // chính phần cứng đang đại diện cho zone.
+        agg.measuredPower = t.measuredPower;
+      }
       if (agg.lastSeen == null || t.lastSeen.isAfter(agg.lastSeen!)) {
         agg.lastSeen = t.lastSeen;
       }
@@ -147,6 +153,7 @@ class BeaconTrackerRegistry {
           rssiDb: e.value.maxRssi,
           rssiByMinor: Map.unmodifiable(e.value.rssiByMinor),
           lastSeenAt: e.value.lastSeen!,
+          measuredPowerDbm: e.value.measuredPower,
         ),
     ]..sort((a, b) => b.rssiDb.compareTo(a.rssiDb)); // strongest first
 
@@ -171,6 +178,7 @@ class BeaconTrackerRegistry {
 /// Mutable scratch cell used only inside one _emitSnapshot pass.
 class _MajorAgg {
   double maxRssi = double.negativeInfinity;
+  int measuredPower = -59; // C1: của minor mạnh nhất, cập nhật cùng maxRssi
   final Map<int, double> rssiByMinor = {};
   DateTime? lastSeen;
 }
