@@ -1,5 +1,10 @@
 // Destination: test/session_controller_test.dart
 // Run with: flutter test test/session_controller_test.dart
+//
+// Cập nhật theo chữ ký SessionController mới (P1-1):
+//   • deskStable  -> Stream<bool> (tín hiệu dạng cạnh) thay cho PresenceTick.
+//   • lastBeaconAt -> hàm poll `() => rig.lastBeaconAt`; test set biến
+//     `rig.lastBeaconAt` rồi để sweep 1 Hz tự đọc, KHÔNG add vào stream nữa.
 
 import 'dart:async';
 
@@ -25,7 +30,14 @@ class _FakeAudioSink implements TourAudioSink {
 class Rig {
   final zones = StreamController<ZoneEvent>.broadcast();
   final charging = StreamController<bool>.broadcast();
-  final presence = StreamController<PresenceTick>.broadcast();
+
+  /// Desk edges (was the `deskStable` field of the old PresenceTick).
+  final desk = StreamController<bool>.broadcast();
+
+  /// Polled freshness (was the `lastBeaconAt` field of PresenceTick). Tests
+  /// set this, then let the sweep read it. Null = nothing heard yet.
+  DateTime? lastBeaconAt;
+
   final audio = _FakeAudioSink();
   late final SessionController ctrl;
   final DateTime Function() now;
@@ -35,7 +47,8 @@ class Rig {
       zoneEvents: zones.stream,
       chargingChanges: charging.stream,
       initialCharging: initialCharging,
-      presenceTicks: presence.stream,
+      deskStableChanges: desk.stream,
+      lastBeaconAt: () => lastBeaconAt,
       audioSink: audio,
       sessionSilence: silence ?? const Duration(seconds: 5),
       startGraceTimeout: const Duration(seconds: 20),
@@ -47,7 +60,7 @@ class Rig {
     ctrl.dispose();
     zones.close();
     charging.close();
-    presence.close();
+    desk.close();
   }
 }
 
@@ -156,8 +169,7 @@ void main() {
       fakeAsync((async) {
         final rig = Rig(() => DateTime(2026).add(async.elapsed));
         toTouring(rig, async); // grace already closed by EnteredZone
-        rig.presence.add(PresenceTick(
-            deskStable: true, lastBeaconAt: DateTime(2026).add(async.elapsed)));
+        rig.desk.add(true);
         async.flushMicrotasks();
         expect(rig.ctrl.current.phase, SessionPhase.atDesk);
         expect(rig.ctrl.current.endReason, SessionEndReason.desk);
@@ -172,8 +184,7 @@ void main() {
         rig.charging.add(false);
         async.flushMicrotasks();
         rig.ctrl.userStartedTour(); // grace open, NO EnteredZone yet
-        rig.presence.add(PresenceTick(
-            deskStable: true, lastBeaconAt: DateTime(2026).add(async.elapsed)));
+        rig.desk.add(true);
         async.flushMicrotasks();
         expect(rig.ctrl.current.phase, SessionPhase.touring); // survived
         rig.dispose();
@@ -199,10 +210,8 @@ void main() {
         final rig = Rig(() => DateTime(2026).add(async.elapsed),
             silence: const Duration(seconds: 5));
         toTouring(rig, async);
-        // Last beacon heard now; then go silent.
-        rig.presence.add(PresenceTick(
-            deskStable: false,
-            lastBeaconAt: DateTime(2026).add(async.elapsed)));
+        // Last beacon heard now; then go silent (stop updating lastBeaconAt).
+        rig.lastBeaconAt = DateTime(2026).add(async.elapsed);
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 6)); // > 5 s silence
         async.flushMicrotasks();
@@ -217,11 +226,28 @@ void main() {
         final rig = Rig(() => DateTime(2026).add(async.elapsed),
             silence: const Duration(seconds: 5));
         toTouring(rig, async);
-        rig.presence.add(PresenceTick(
-            deskStable: false,
-            lastBeaconAt: DateTime(2026).add(async.elapsed)));
+        rig.lastBeaconAt = DateTime(2026).add(async.elapsed);
         async.flushMicrotasks();
         async.elapse(const Duration(seconds: 3));
+        async.flushMicrotasks();
+        expect(rig.ctrl.current.phase, SessionPhase.touring);
+        rig.dispose();
+      });
+    });
+
+    test('a fresh beacon keeps the tour alive past the silence window', () {
+      fakeAsync((async) {
+        final rig = Rig(() => DateTime(2026).add(async.elapsed),
+            silence: const Duration(seconds: 5));
+        toTouring(rig, async);
+        // Keep the poll fresh across a span longer than the silence window by
+        // advancing lastBeaconAt each second — proves silence reads live time,
+        // not a frozen presence value (the whole point of P1-1).
+        rig.lastBeaconAt = DateTime(2026).add(async.elapsed);
+        for (var i = 0; i < 8; i++) {
+          async.elapse(const Duration(seconds: 1));
+          rig.lastBeaconAt = DateTime(2026).add(async.elapsed);
+        }
         async.flushMicrotasks();
         expect(rig.ctrl.current.phase, SessionPhase.touring);
         rig.dispose();
@@ -254,9 +280,8 @@ void main() {
 
         rig.charging.add(true); // ends: charging
         async.flushMicrotasks();
-        // A trailing desk tick must not re-end or change the reason.
-        rig.presence.add(PresenceTick(
-            deskStable: true, lastBeaconAt: DateTime(2026).add(async.elapsed)));
+        // A trailing desk edge must not re-end or change the reason.
+        rig.desk.add(true);
         async.flushMicrotasks();
         expect(rig.ctrl.current.endReason, SessionEndReason.charging);
         expect(rig.audio.stops, 1); // cleanup ran exactly once
