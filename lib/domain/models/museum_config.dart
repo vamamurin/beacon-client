@@ -190,6 +190,11 @@ class MuseumConfig {
   final ArbitrationParams arbitration;
   final AudioPolicies policies;
 
+  /// D — ngưỡng tự-đồng-bộ (giờ) do SERVER đề xuất cho cả đội máy. Optional:
+  /// bundle cũ không có ⇒ null ⇒ SyncConfig lùi về mặc định. Staff vẫn có thể
+  /// ghi đè từng máy qua Settings (ưu tiên cao hơn giá trị này).
+  final double? autoSyncHours;
+
   const MuseumConfig({
     required this.bundleVersion,
     required this.museumName,
@@ -200,6 +205,7 @@ class MuseumConfig {
     required this.deskMajor,
     required this.arbitration,
     required this.policies,
+    this.autoSyncHours,
   });
 
   @override
@@ -214,7 +220,8 @@ class MuseumConfig {
         other.beaconUuid == beaconUuid &&
         other.deskMajor == deskMajor &&
         other.arbitration == arbitration &&
-        other.policies == policies;
+        other.policies == policies &&
+        other.autoSyncHours == autoSyncHours;
   }
 
   @override
@@ -228,5 +235,6 @@ class MuseumConfig {
         deskMajor,
         arbitration,
         policies,
+        autoSyncHours,
       );
 }

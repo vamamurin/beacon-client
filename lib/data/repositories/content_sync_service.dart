@@ -233,6 +233,7 @@ class _UnpackArgs {
 /// and writes entries under [destPath] — REJECTING any entry whose resolved
 /// path escapes destPath (path-traversal guard for malicious archives).
 void _unpackTarGz(_UnpackArgs args) {
+  // ignore: prefer_const_constructors — GZipDecoder() is not const-constructible.
   final tarBytes = GZipDecoder().decodeBytes(args.bytes);
   final archive = TarDecoder().decodeBytes(tarBytes);
 

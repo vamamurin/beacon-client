@@ -25,13 +25,31 @@ import 'package:beacon_client/data/repositories/content_sync_service.dart';
 
 class HttpSyncTransport implements SyncTransport {
   HttpSyncTransport({
-    required this.baseUrl,
+    required String Function() baseUrl,
     HttpClient? client,
-  }) : _client = client ?? HttpClient();
+    Duration connectTimeout = const Duration(seconds: 10),
+    Duration idleTimeout = const Duration(seconds: 30),
+  })  : _baseUrl = baseUrl,
+        _connectTimeout = connectTimeout,
+        _idleTimeout = idleTimeout,
+        _client = client ?? HttpClient() {
+    // Timeout khi mạng nội bộ treo: không để nút Đồng bộ quay vô hạn. Áp cho
+    // giai đoạn thiết lập kết nối; đọc dữ liệu dùng idle timeout riêng bên dưới.
+    _client.connectionTimeout = _connectTimeout;
+  }
 
-  /// e.g. https://content.museum.local/tour  (no trailing slash).
-  final String baseUrl;
+  /// D — đọc URL TẠI THỜI ĐIỂM GỌI (không chốt cứng lúc khởi tạo), nên đổi URL
+  /// trong Settings có hiệu lực ngay lần Đồng bộ kế tiếp, không cần restart.
+  /// Trailing slash được cắt để ghép path an toàn.
+  final String Function() _baseUrl;
+  final Duration _connectTimeout;
+  final Duration _idleTimeout;
   final HttpClient _client;
+
+  String get _base {
+    final u = _baseUrl().trim();
+    return u.endsWith('/') ? u.substring(0, u.length - 1) : u;
+  }
 
   /// ETag of the archive from the last version.json, used with If-Range so a
   /// resume aborts cleanly if the server's file changed.
@@ -39,9 +57,9 @@ class HttpSyncTransport implements SyncTransport {
 
   @override
   Future<Map<String, dynamic>> fetchVersionInfo() async {
-    final uri = Uri.parse('$baseUrl/version.json');
+    final uri = Uri.parse('$_base/version.json');
     final req = await _client.getUrl(uri);
-    final res = await req.close();
+    final res = await req.close().timeout(_idleTimeout);
     if (res.statusCode != HttpStatus.ok) {
       throw HttpException('version.json HTTP ${res.statusCode}', uri: uri);
     }
@@ -57,7 +75,7 @@ class HttpSyncTransport implements SyncTransport {
     File dest, {
     void Function(double progress)? onProgress,
   }) async {
-    final uri = Uri.parse('$baseUrl/bundle-$version.tar.gz');
+    final uri = Uri.parse('$_base/bundle-$version.tar.gz');
 
     // How much do we already have on disk?
     int existing = 0;
@@ -73,7 +91,7 @@ class HttpSyncTransport implements SyncTransport {
       }
     }
 
-    final res = await req.close();
+    final res = await req.close().timeout(_idleTimeout);
 
     IOSink sink;
     int totalExpected;

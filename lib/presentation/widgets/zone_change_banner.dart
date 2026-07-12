@@ -112,7 +112,7 @@ class _BannerCard extends StatelessWidget {
                 foregroundColor: t.ctaLabel,
               ),
               onPressed: onConfirm,
-              child: Text('Chuyển', style: AppText.button),
+              child: const Text('Chuyển', style: AppText.button),
             ),
           ],
         ),

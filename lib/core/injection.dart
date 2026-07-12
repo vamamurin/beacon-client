@@ -31,6 +31,9 @@ import 'package:beacon_client/data/processors/beacon_tracker_registry.dart';
 import 'package:beacon_client/data/processors/zone_arbiter.dart';
 import 'package:beacon_client/data/repositories/bundle_layout.dart';
 import 'package:beacon_client/data/repositories/content_sync_service.dart';
+import 'package:beacon_client/data/repositories/sync_config.dart';
+import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
+import 'package:beacon_client/services/auto_sync_scheduler.dart';
 import 'package:beacon_client/data/repositories/http_sync_transport.dart';
 import 'package:beacon_client/data/repositories/local_bundle_zone_repository.dart';
 import 'package:beacon_client/data/repositories/mock_zone_repository.dart';
@@ -77,6 +80,9 @@ class AppGraph {
   /// C3 — display-tier zone ranking for screen 2 (nearest-first, hysteresis).
   final NearbyZonesTracker nearbyZones;
 
+  /// D — docked auto-sync scheduler ("charging = sync"). Null in mock mode.
+  final AutoSyncScheduler? autoSync;
+
   /// Bluetooth readiness gate (permission + adapter). The Gate screen shows
   /// its status and lets staff retry / open settings.
   final IBluetoothGate bluetoothGate;
@@ -115,6 +121,7 @@ class AppGraph {
     required this.zoneChanges,
     required this.exhibitPresence,
     required this.nearbyZones,
+    required this.autoSync,
     required this.bluetoothGate,
     required StartupStatus startupStatus,
     required this.imagePathResolver,
@@ -164,6 +171,7 @@ class AppGraph {
     await presence.dispose();
     exhibitPresence.dispose();
     nearbyZones.dispose();
+    await autoSync?.dispose();
     await audioController.dispose();
     await audioEngine.dispose();
     await _power.dispose();
@@ -179,12 +187,17 @@ abstract final class Injection {
 
   /// Internal content server base (Phase-0: general protocol; adapt when the
   /// real server lands). TODO(config): move to --dart-define.
-  static const String syncBaseUrl = 'http://192.168.1.8:8000';
+  /// D — the hard-coded dev server is gone. URL now resolves at call time via
+  /// SyncConfig (Settings override -> --dart-define=SYNC_BASE_URL -> fallback).
 
   /// Builds and wires everything. Async because it warms the bundle and reads
   /// the dock/documents dir. Safe to call once at startup (and again on a
   /// full restart — a fresh graph is returned each time).
-  static Future<AppGraph> build() async {
+  static Future<AppGraph> build({ISettingsStore? settings}) async {
+    // D — settings store may be null in mock mode / tests; fall back so URL
+    // resolution still works off --dart-define + hard fallback.
+    final ISettingsStore settingsStore = settings ?? _EphemeralSettings();
+
     // ── repository (+ optional sync in real mode) ──
     final IZoneRepository repository;
     ContentSyncService? sync;
@@ -199,7 +212,12 @@ abstract final class Injection {
             BundleLayout(Directory(p.join(docs.path, 'bundles')));
         sync = ContentSyncService(
           layout: layout,
-          transport: HttpSyncTransport(baseUrl: syncBaseUrl),
+          // D — URL read at CALL TIME via SyncConfig (Settings override ->
+          // --dart-define -> hard fallback). Changing it in Settings takes
+          // effect next sync, no restart.
+          transport: HttpSyncTransport(
+            baseUrl: () => SyncConfig.baseUrl(settingsStore),
+          ),
         );
         await sync.cleanupOnBoot(); // GC crash leftovers before reading
         repository = LocalBundleZoneRepository(layout);
@@ -343,6 +361,23 @@ abstract final class Injection {
       return null;
     }
 
+    // D — docked auto-sync ("charging = sync"). Only when a real sync exists.
+    // Reads threshold at decision time (Settings override -> manifest -> default)
+    // and only fires while atDesk + charging, never mid-tour.
+    AutoSyncScheduler? autoSync;
+    if (sync != null) {
+      final syncRef = sync;
+      autoSync = AutoSyncScheduler(
+        sessionState: session.state,
+        chargingChanges: power.onChargingChanged,
+        initialCharging: power.isCharging,
+        settings: settingsStore,
+        manifestAutoSyncHours: () => repository.config?.autoSyncHours,
+        runSync: () => syncRef.syncIfNeeded(),
+      );
+      autoSync.kick(); // device may boot already docked
+    }
+
     return AppGraph._(
       repository: repository,
       presence: presence,
@@ -354,6 +389,7 @@ abstract final class Injection {
       zoneChanges: zoneChanges,
       exhibitPresence: exhibitPresence,
       nearbyZones: nearbyZones,
+      autoSync: autoSync,
       bluetoothGate: bluetoothGate,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,
@@ -374,4 +410,36 @@ abstract final class Injection {
     // on desktop, which is fine for UI dev. Return a stable dummy URI.
     return (path) => Uri.parse('asset:///$path');
   }
+}
+/// D — in-memory ISettingsStore used only when build() is called without one
+/// (mock mode / tests). Persists nothing; URL resolution then relies on
+/// --dart-define + hard fallback, and auto-sync uses defaults.
+class _EphemeralSettings implements ISettingsStore {
+  String? _theme;
+  bool _dist = false;
+  String? _url;
+  double? _hours;
+  DateTime? _lastSync;
+
+  @override
+  String? get themeId => _theme;
+  @override
+  Future<void> setThemeId(String id) async => _theme = id;
+  @override
+  bool get showDistanceDebug => _dist;
+  @override
+  Future<void> setShowDistanceDebug(bool value) async => _dist = value;
+  @override
+  String? get syncBaseUrlOverride => _url;
+  @override
+  Future<void> setSyncBaseUrlOverride(String? value) async => _url = value;
+  @override
+  double? get autoSyncHoursOverride => _hours;
+  @override
+  Future<void> setAutoSyncHoursOverride(double? value) async => _hours = value;
+  @override
+  DateTime? get lastSuccessfulSyncAt => _lastSync;
+  @override
+  Future<void> setLastSuccessfulSyncAt(DateTime value) async =>
+      _lastSync = value;
 }

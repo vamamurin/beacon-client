@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Destination: android/app/src/main/res/xml/network_security_config.xml
+
+  D — Android 9+ (API 28) blocks cleartext HTTP by default. The content server
+  runs on a museum LAN over plain http://, so we must explicitly allow cleartext.
+
+  SCOPING: we do NOT enable cleartext globally. Only private/LAN ranges are
+  allowed; the public internet stays HTTPS-only. If your server's IP falls
+  outside these ranges, add its exact host below (a <domain> entry), don't widen
+  to a global cleartextTrafficPermitted="true".
+
+  Common private ranges are covered by listing the frequent gateway hosts. For a
+  fixed server IP, prefer pinning that one host:
+      <domain includeSubdomains="false">192.168.1.8</domain>
+
+  After adding this file, reference it in AndroidManifest.xml on <application>:
+      android:networkSecurityConfig="@xml/network_security_config"
+  (see the snippet in NETWORK_SETUP.md shipped alongside this file).
+-->
+<network-security-config>
+    <!-- LAN server(s): allow cleartext for the private hosts you deploy to.
+         Replace / extend these with your actual content-server host(s). -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
+        <!-- Exact dev server from the previous hard-coded default: -->
+        <domain includeSubdomains="false">192.168.1.8</domain>
+        <!-- Android emulator host loopback (host machine's localhost): -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+
+    <!-- Everything else: cleartext stays BLOCKED (public internet = HTTPS). -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -82,6 +82,9 @@ class FakeSettingsStore implements ISettingsStore {
   FakeSettingsStore({this.showDistance = false});
   String? _themeId;
   bool showDistance;
+  String? _url;
+  double? _hours;
+  DateTime? _lastSync;
 
   @override
   String? get themeId => _themeId;
@@ -91,6 +94,21 @@ class FakeSettingsStore implements ISettingsStore {
   bool get showDistanceDebug => showDistance;
   @override
   Future<void> setShowDistanceDebug(bool value) async => showDistance = value;
+
+  // Nhóm D — cấu hình server + auto-sync (màn 2 không dùng, chỉ cần thoả interface).
+  @override
+  String? get syncBaseUrlOverride => _url;
+  @override
+  Future<void> setSyncBaseUrlOverride(String? value) async => _url = value;
+  @override
+  double? get autoSyncHoursOverride => _hours;
+  @override
+  Future<void> setAutoSyncHoursOverride(double? value) async => _hours = value;
+  @override
+  DateTime? get lastSuccessfulSyncAt => _lastSync;
+  @override
+  Future<void> setLastSuccessfulSyncAt(DateTime value) async =>
+      _lastSync = value;
 }
 
 /// Zone tối thiểu. `exhibits: const []` — màn 2 chỉ đọc `.length`.

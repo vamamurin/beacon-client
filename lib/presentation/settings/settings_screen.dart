@@ -68,9 +68,131 @@ class SettingsScreen extends StatelessWidget {
             'lượng trên màn khu vực. Tắt trước khi giao máy cho khách.',
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
+          const SizedBox(height: 32),
+          Text('MÁY CHỦ NỘI DUNG',
+              style: AppText.kicker.copyWith(color: t.inkFaint)),
+          const SizedBox(height: 12),
+          const _ServerSection(),
         ],
       ),
     );
+  }
+}
+
+/// Content-server URL override + manual "sync now". Staff-only (this screen is
+/// reached by long-pressing the Gate wordmark).
+class _ServerSection extends StatefulWidget {
+  const _ServerSection();
+
+  @override
+  State<_ServerSection> createState() => _ServerSectionState();
+}
+
+class _ServerSectionState extends State<_ServerSection> {
+  late final TextEditingController _urlCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _urlCtrl = TextEditingController(
+        text: context.read<SettingsProvider>().baseUrlOverride);
+  }
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  String _syncLabel(ManualSyncState s) => switch (s) {
+        ManualSyncState.running => 'Đang đồng bộ…',
+        ManualSyncState.updated => 'Đã cập nhật nội dung mới',
+        ManualSyncState.upToDate => 'Đã là bản mới nhất',
+        ManualSyncState.noServer => 'Không gọi được máy chủ',
+        ManualSyncState.failed => 'Đồng bộ thất bại',
+        ManualSyncState.mock => 'Chế độ thử — không có máy chủ',
+        ManualSyncState.idle => '',
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final settings = context.watch<SettingsProvider>();
+    final last = settings.lastSuccessfulSyncAt;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        TextField(
+          controller: _urlCtrl,
+          keyboardType: TextInputType.url,
+          autocorrect: false,
+          enableSuggestions: false,
+          style: AppText.sheetSub.copyWith(color: t.ink),
+          decoration: InputDecoration(
+            labelText: 'Địa chỉ máy chủ',
+            hintText: 'http://192.168.1.8:8000',
+            labelStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
+            hintStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
+            enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: t.line)),
+            focusedBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: t.ctaFill)),
+          ),
+          onSubmitted: settings.setBaseUrlOverride,
+          onEditingComplete: () =>
+              settings.setBaseUrlOverride(_urlCtrl.text),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Để trống để dùng địa chỉ mặc định của bản cài. Đổi tại đây có hiệu '
+          'lực ngay lần đồng bộ kế tiếp, không cần cài lại app.',
+          style: AppText.stopMeta.copyWith(color: t.inkFaint),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: t.ctaFill,
+                  foregroundColor: t.ctaLabel,
+                ),
+                onPressed: settings.isSyncing
+                    ? null
+                    : () {
+                        // Commit any typed URL before syncing.
+                        settings.setBaseUrlOverride(_urlCtrl.text);
+                        settings.syncNow();
+                      },
+                child: Text(
+                  settings.isSyncing ? 'ĐANG ĐỒNG BỘ…' : 'ĐỒNG BỘ NGAY',
+                  style: AppText.button,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (settings.syncState != ManualSyncState.idle) ...[
+          const SizedBox(height: 10),
+          Text(_syncLabel(settings.syncState),
+              style: AppText.sheetSub.copyWith(color: t.ink)),
+        ],
+        if (last != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Lần đồng bộ gần nhất: ${_fmt(last)}',
+            style: AppText.stopMeta.copyWith(color: t.inkFaint),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String _fmt(DateTime dt) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
+        '${two(dt.hour)}:${two(dt.minute)}';
   }
 }
 
@@ -87,7 +209,7 @@ class _DistanceToggle extends StatelessWidget {
         contentPadding: EdgeInsets.zero,
         value: settings.showDistanceDebug,
         onChanged: settings.setShowDistanceDebug,
-        activeColor: t.ctaFill,
+        activeThumbColor: t.ctaFill,
         title: Text('Hiện khoảng cách ước lượng',
             style: AppText.sheetSub.copyWith(color: t.ink)),
       ),

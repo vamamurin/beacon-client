@@ -53,7 +53,7 @@ Future<void> main() async {
         ChangeNotifierProvider(
             create: (_) => SettingsProvider(store: settings)),
       ],
-      child: const _BootstrapHost(),
+      child: _BootstrapHost(settings: settings),
     ),
   );
 }
@@ -61,7 +61,8 @@ Future<void> main() async {
 /// Owns the graph lifecycle. Runs Injection.build(), swaps the splash for the
 /// app when ready, and can rebuild the whole graph on request (restart).
 class _BootstrapHost extends StatefulWidget {
-  const _BootstrapHost();
+  const _BootstrapHost({required this.settings});
+  final ISettingsStore settings;
 
   @override
   State<_BootstrapHost> createState() => _BootstrapHostState();
@@ -79,7 +80,7 @@ class _BootstrapHostState extends State<_BootstrapHost> {
   AppGraph? _built;
 
   Future<AppGraph> _boot() async {
-    final g = await Injection.build();
+    final g = await Injection.build(settings: widget.settings);
     _built = g;
     return g;
   }
@@ -112,6 +113,11 @@ class _BootstrapHostState extends State<_BootstrapHost> {
           return _ErrorApp(message: '${snap.error}');
         }
         final graph = snap.data!;
+        // D — bind the manual "Đồng bộ ngay" action to this graph's sync path.
+        // SettingsProvider lives above _BootstrapHost (survives restart), so we
+        // rebind on each successful boot. read() is safe here: the provider is
+        // an ancestor of this FutureBuilder.
+        context.read<SettingsProvider>().bindRunSync(() => graph.runSync());
         return MultiProvider(
           providers: [
             // `create:` chứ không `.value(...)`: FutureBuilder.builder chạy lại
