@@ -58,6 +58,12 @@ enum AudioIntentResult {
 typedef AudioUriResolver = Uri Function(String bundleRelativePath);
 typedef LanguageResolver = String Function();
 
+/// C3-fix — trả về tập minor của [major] đang CÓ SÓNG ngay lúc này (cùng nguồn
+/// nuôi màn 3: ExhibitPresenceTracker). Auto-tour dùng nó để BỎ QUA các hiện
+/// vật không nghe thấy, thay vì đọc tuần tự toàn bộ manifest. Trả tập rỗng khi
+/// chưa nghe thấy hiện vật nào (auto-tour dừng sau intro, chờ tap).
+typedef PresentMinorsResolver = Set<int> Function(int major);
+
 class TourAudioController {
   // Bench-test / demo qua loa ngoài, không cần tai nghe:
   //   flutter run   --dart-define=ASSUME_HEADPHONES=true
@@ -76,12 +82,14 @@ class TourAudioController {
     required AudioUriResolver uriResolver,
     required LanguageResolver language,
     required void Function() onChime,
+    required PresentMinorsResolver presentMinors,
   })  : _repo = repository,
         _engine = engine,
         _headphones = headphones,
         _resolveUri = uriResolver,
         _language = language,
-        _onChime = onChime {
+        _onChime = onChime,
+        _presentMinors = presentMinors {
     _completedSub = _engine.onCompleted.listen(_onClipCompleted);
     _headphoneSub =
         _headphones.onConnectionChanged.listen(_onHeadphoneChanged);
@@ -93,6 +101,7 @@ class TourAudioController {
   final AudioUriResolver _resolveUri;
   final LanguageResolver _language;
   final void Function() _onChime;
+  final PresentMinorsResolver _presentMinors;
 
   late final StreamSubscription<AudioTrackRef> _completedSub;
   late final StreamSubscription<bool> _headphoneSub;
@@ -161,22 +170,28 @@ class TourAudioController {
   }
 
   /// Visitor moved from one zone to another. Rules 3+4 (+5 for revisits).
-  /// ALWAYS interrupt + flush + chime; autoplay-vs-silent depends on the
-  /// engine's status at THIS instant.
-  void changeZone(int major) {
+  /// ALWAYS interrupt + flush + chime.
+  ///
+  /// [forcePlay]: null (mặc định, đường auto-switch khi hết 20s) → phát-hay-im
+  /// theo trạng thái engine tại thời điểm này (wasPlaying). true (khách BẤM
+  /// "Chuyển" trên banner) → luôn phát intro B: bấm nút là mệnh lệnh phát, chỉ
+  /// reading-mode mới chặn được. false thì để dành, chưa dùng.
+  void changeZone(int major, {bool? forcePlay}) {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
 
     // Judge intent BEFORE we tear anything down (confirmed: state at the
     // instant the change event arrives).
     final bool wasPlaying = _engine.state.status == PlaybackStatus.playing;
+    final bool shouldPlayIntro = forcePlay ?? wasPlaying;
 
     _flushQueue(); // stop + unload old zone's queue (supreme physical sync)
     _activeZoneMajor = major;
     _autoIndex = 0;
     _chime(); // zone change always chimes (trừ reading mode — cấm mọi tiếng)
 
-    _beginZoneAudio(zone, chime: false, forcePlay: wasPlaying, alreadyChimed: true);
+    _beginZoneAudio(zone,
+        chime: false, forcePlay: shouldPlayIntro, alreadyChimed: true);
   }
 
   /// Radio dropped to standby (Phase 1 rule 4). Stop audio; keep visited memory.
@@ -335,7 +350,7 @@ class TourAudioController {
   // ========================================================================
 
   /// A clip finished naturally -> advance the queue.
-void _onClipCompleted(AudioTrackRef ref) {
+  void _onClipCompleted(AudioTrackRef ref) {
     final major = _activeZoneMajor;
     if (major == null) return;
 
@@ -348,33 +363,37 @@ void _onClipCompleted(AudioTrackRef ref) {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
     if (!_autoplayAllowed) return;
-    _playExhibitAt(zone, _autoIndex);
+    _playNextPresentFrom(zone, _autoIndex);
   }
 
-  void _playExhibitAt(ZoneInfo zone, int index) {
-    if (index < 0 || index >= zone.exhibits.length) {
-      return; // tour of this zone complete; go quiet, await tap or zone change
-    }
-    final exhibit = zone.exhibits[index];
-    final resolved = exhibit.audio.resolve(_language(), _fallback);
-    if (resolved == null) {
-      // Skip a clip that failed to resolve; keep the tour moving.
-      _autoIndex = index + 1;
-      _playExhibitAt(zone, _autoIndex);
+  /// C3-fix — auto-tour CHỈ phát những hiện vật ĐANG CÓ SÓNG (giống màn 3),
+  /// duyệt theo THỨ TỰ MANIFEST từ [startIndex]. Bỏ qua mọi hiện vật không
+  /// nghe thấy. Hết danh sách mà không còn hiện vật có sóng → im, chờ tap hoặc
+  /// đổi zone. Nguồn "có sóng" là ExhibitPresenceTracker (đã hysteresis chống
+  /// nháy), nên một beacon rớt một packet không làm nhảy cóc hiện vật.
+  void _playNextPresentFrom(ZoneInfo zone, int startIndex) {
+    final Set<int> present = _presentMinors(zone.major);
+    for (int i = startIndex; i < zone.exhibits.length; i++) {
+      final exhibit = zone.exhibits[i];
+      if (!present.contains(exhibit.minor)) continue; // không có sóng → bỏ qua
+      final resolved = exhibit.audio.resolve(_language(), _fallback);
+      if (resolved == null) continue; // không resolve được → bỏ qua, đi tiếp
+      _autoIndex = i + 1; // lần sau bắt đầu SAU hiện vật này
+      _engine.load(
+        AudioTrackRef(
+          zoneMajor: zone.major,
+          exhibitMinor: exhibit.minor,
+          clipKind: AudioClipKind.exhibitAuto,
+        ),
+        _resolveUri(resolved.track.filePath),
+        durationHint: Duration(
+            milliseconds: (resolved.track.durationSec * 1000).round()),
+      );
+      _tryPlay();
       return;
     }
-    _autoIndex = index + 1; // next up
-    _engine.load(
-      AudioTrackRef(
-        zoneMajor: zone.major,
-        exhibitMinor: exhibit.minor,
-        clipKind: AudioClipKind.exhibitAuto,
-      ),
-      _resolveUri(resolved.track.filePath),
-      durationHint: Duration(
-          milliseconds: (resolved.track.durationSec * 1000).round()),
-    );
-    _tryPlay();
+    // Không còn hiện vật có sóng phía sau → dừng auto-tour ở đây.
+    _autoIndex = zone.exhibits.length;
   }
 
   /// Headphone connection changed. Rule 6.

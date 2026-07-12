@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
+import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/widgets/zone_change_banner.dart';
 
@@ -55,6 +56,13 @@ class _MuseumAppState extends State<MuseumApp> {
     final phase = context.watch<SessionProvider>().phase;
     final themeCtrl = context.watch<ThemeController>();
     _syncNavigation(phase);
+
+    // C2/C3-fix: after the visitor CONFIRMS a zone switch (banner "Chuyển"),
+    // route to screen 3 (exhibit list) of the new zone — so a visitor who was
+    // deep in zone A's exhibits lands in zone B's, matching the audio switch.
+    // App owns stack reshaping; the provider only reports the target.
+    final navTarget = context.watch<PendingZoneChangeProvider>().confirmedNavTarget;
+    if (navTarget != null) _syncConfirmedNav(context, navTarget);
 
     return MaterialApp(
       title: 'Museum Guide',
@@ -102,6 +110,22 @@ class _MuseumAppState extends State<MuseumApp> {
     final target = enteringTour ? AppRouter.zoneRoute : AppRouter.gateRoute;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _navKey.currentState?.pushNamedAndRemoveUntil(target, (_) => false);
+    });
+  }
+
+  /// After a CONFIRMED zone switch, rebuild the stack as [Zone, ExhibitList(B)]
+  /// so Back from the new exhibit list returns to the zone card (screen 2),
+  /// consistent with the normal forward flow. Post-frame + one-shot consume so
+  /// a later rebuild doesn't re-navigate.
+  void _syncConfirmedNav(BuildContext context, int major) {
+    final provider = context.read<PendingZoneChangeProvider>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final nav = _navKey.currentState;
+      if (nav != null) {
+        nav.pushNamedAndRemoveUntil(AppRouter.zoneRoute, (_) => false);
+        nav.pushNamed(AppRouter.exhibitListRoute, arguments: major);
+      }
+      provider.consumeConfirmedNavTarget();
     });
   }
 }

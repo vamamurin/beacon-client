@@ -249,6 +249,8 @@ abstract final class Injection {
       language: () => repository.config?.fallbackLanguage ?? 'vi',
 
       onChime: chime.play,
+      // C3-fix — auto-tour chỉ phát hiện vật đang có sóng (cùng nguồn màn 3).
+      presentMinors: exhibitPresence.currentPresent,
     );
 
     // ── session ──

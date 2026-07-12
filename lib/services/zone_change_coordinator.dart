@@ -158,14 +158,15 @@ class ZoneChangeCoordinator {
     _emitPending();
   }
 
-  /// Visitor tapped "Chuyển sang B". Performs the deferred switch now, reading
-  /// engine state at THIS instant so rule 3+4 holds.
+  /// Visitor tapped "Chuyển sang B". Performs the deferred switch now. Bấm nút
+  /// là MỆNH LỆNH PHÁT: forcePlay:true ép intro B phát kể cả khi audio A đã
+  /// nghe xong (không còn "playing") — chỉ reading-mode chặn được.
   void confirm() {
     final p = _pending;
     if (p == null) return;
     final target = p.toMajor;
     _clearPending();
-    _audio.changeZone(target);
+    _audio.changeZone(target, forcePlay: true);
   }
 
   /// Visitor tapped "Ở lại" (optional dismiss). Cancels the ask; audio A stays.
