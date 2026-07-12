@@ -24,6 +24,7 @@ import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
+import 'package:beacon_client/presentation/widgets/zone_change_banner.dart';
 
 /// Global route observer, available for any RouteAware screen that wants to
 /// pause work while obscured. Registered on the Navigator so it's ready; the
@@ -66,7 +67,20 @@ class _MuseumAppState extends State<MuseumApp> {
       navigatorObservers: [routeObserver],
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.6,
-        child: child!,
+        // C2: the confirm banner floats above EVERY screen (incl. screen 4).
+        // Directionality + the app child sit under it; the banner renders
+        // nothing when no change is pending, so this is free when idle.
+        child: Stack(
+          children: [
+            child!,
+            const Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: ZoneChangeBanner(),
+            ),
+          ],
+        ),
       ),
     );
   }

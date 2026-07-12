@@ -51,6 +51,7 @@ import 'package:beacon_client/services/exhibit_presence_tracker.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
 import 'package:beacon_client/services/tour_wiring.dart';
+import 'package:beacon_client/services/zone_change_coordinator.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 
 enum RunMode { mock, real }
@@ -64,6 +65,9 @@ class AppGraph {
   final SessionController session;
   final ChimePlayer chime;
   final ContentSyncService? sync; // null in mock mode
+
+  /// C2 — deferred zone-change coordinator (owns the confirm banner state).
+  final ZoneChangeCoordinator zoneChanges;
 
   /// Live "which exhibit minors are broadcasting right now, per zone", with
   /// anti-flicker hysteresis. Screen 3 reads this to show only nearby exhibits.
@@ -89,7 +93,6 @@ class AppGraph {
   /// Current BLE readiness value (convenience; prefer listening to [bleStatus]).
   StartupStatus get startupStatus => _ble.value;
 
-  final ZoneEventRouter _router;
   final IPowerMonitor _power;
   final IHeadphoneMonitor _headphones;
 
@@ -105,16 +108,15 @@ class AppGraph {
     required this.session,
     required this.chime,
     required this.sync,
+    required this.zoneChanges,
     required this.exhibitPresence,
     required this.bluetoothGate,
     required StartupStatus startupStatus,
     required this.imagePathResolver,
-    required ZoneEventRouter router,
     required IPowerMonitor power,
     required IHeadphoneMonitor headphones,
     required StreamSubscription<SessionState> tourStartSub,
   })  : _ble = ValueNotifier<StartupStatus>(startupStatus),
-        _router = router,
         _power = power,
         _headphones = headphones,
         _tourStartSub = tourStartSub;
@@ -152,7 +154,7 @@ class AppGraph {
 
   Future<void> dispose() async {
     await _tourStartSub.cancel();
-    await _router.dispose();
+    await zoneChanges.dispose();
     await session.dispose();
     await presence.dispose();
     exhibitPresence.dispose();
@@ -272,11 +274,16 @@ abstract final class Injection {
     );
     session.start();
 
-    // ── wire zone events -> audio (only while touring) ──
-    final router = ZoneEventRouter(
+    // ── wire zone events -> audio via the deferred coordinator (C2) ──
+    // Coordinator forwards EnteredZone/LeftToStandby immediately but DEFERS a
+    // ChangedZone behind the confirm banner. Only active while touring.
+    final zoneChanges = ZoneChangeCoordinator(
       events: presence.events,
       audio: audioController,
+      repository: repository,
       isTouring: () => session.current.isTouring,
+      confirmWindow:
+          const Duration(seconds: 20), // TODO(config): manifest later
     );
 
     // On the gate->touring edge, re-announce the current zone so a visitor who
@@ -284,8 +291,9 @@ abstract final class Injection {
     // close). The arbiter won't re-emit an unchanged presence on its own, so
     // without this the audio layer would stay dormant. At the desk the current
     // zone is null (desk major is arbitrated separately), so it's a no-op there
-    // and the dock-linger grace is preserved. The router (built above) is
-    // already listening, so the replayed EnteredZone reaches the audio.
+    // and the dock-linger grace is preserved. The coordinator (built above) is
+    // already listening, and treats a replayed EnteredZone as an immediate
+    // arrival (no banner), so the intro reaches the audio.
     SessionPhase lastPhase = session.current.phase;
     final tourStartSub = session.state.listen((s) {
       final was = lastPhase;
@@ -327,11 +335,11 @@ abstract final class Injection {
       session: session,
       chime: chime,
       sync: sync,
+      zoneChanges: zoneChanges,
       exhibitPresence: exhibitPresence,
       bluetoothGate: bluetoothGate,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,
-      router: router,
       power: power,
       headphones: headphones,
       tourStartSub: tourStartSub,

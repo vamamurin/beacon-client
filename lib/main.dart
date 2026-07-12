@@ -27,6 +27,7 @@ import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
+import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
@@ -142,6 +143,10 @@ class _BootstrapHostState extends State<_BootstrapHost> {
             ),
 
             ChangeNotifierProvider(create: (_) => SessionProvider(graph.session)),
+            // C2: pending zone-change (drives the confirm banner over all screens)
+            ChangeNotifierProvider(
+              create: (_) => PendingZoneChangeProvider(graph.zoneChanges),
+            ),
             ChangeNotifierProvider(
               create: (_) => ZoneProvider(
                 status: graph.presence.status,
