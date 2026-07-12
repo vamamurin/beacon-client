@@ -28,6 +28,7 @@ import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
@@ -49,6 +50,8 @@ Future<void> main() async {
         // thổi bay lựa chọn theme. Theme là preference của THIẾT BỊ; graph là
         // state của pipeline. Cái trước phải sống lâu hơn cái sau.
         ChangeNotifierProvider(create: (_) => ThemeController(store: settings)),
+        ChangeNotifierProvider(
+            create: (_) => SettingsProvider(store: settings)),
       ],
       child: const _BootstrapHost(),
     ),
@@ -151,6 +154,9 @@ class _BootstrapHostState extends State<_BootstrapHost> {
               create: (_) => ZoneProvider(
                 status: graph.presence.status,
                 initial: graph.presence.currentStatus,
+                ranking: graph.nearbyZones.ranking,
+                initialRanking: graph.nearbyZones.current,
+                repository: graph.repository,
               ),
             ),
             ChangeNotifierProvider(

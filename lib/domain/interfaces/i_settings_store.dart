@@ -11,4 +11,12 @@ abstract interface class ISettingsStore {
   String? get themeId;
 
   Future<void> setThemeId(String id);
+
+  /// C3 — công tắc "hiện khoảng cách ước lượng" trên màn zone (dành cho nhân
+  /// viên tinh chỉnh ngưỡng tại hiện trường). Mặc định false: khách không thấy
+  /// số mét vì sai số RF trong nhà làm nó nhảy. Bật/tắt tại quầy, không cần
+  /// build lại. Null-safe: chưa từng đặt ⇒ false.
+  bool get showDistanceDebug;
+
+  Future<void> setShowDistanceDebug(bool value);
 }

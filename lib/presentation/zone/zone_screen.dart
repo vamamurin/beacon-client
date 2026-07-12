@@ -1,24 +1,28 @@
 // Destination: lib/presentation/zone/zone_screen.dart
 //
-// Screen 2 — the current zone. Per the confirmed design it shows exactly ONE
-// .tourcard (the arbiter's currentMajor) inside a list container, so tomorrow's
-// "nearby zones" feature just adds more cards. When currentMajor is null it
-// becomes the radar/standby screen (walking a corridor between zones).
+// Screen 2 — the zone ranking. Shows the arbiter-confirmed zone pinned first
+// ("Đang ở đây"), then every other audible zone nearest-first, each a 150px
+// .tourcard. Radar/standby appears ONLY when nothing is heard at all.
 //
-// The card auto-swaps when the arbiter changes zone (no pop, no flicker —
-// hysteresis handled it upstream). Tapping the card -> exhibit list (screen 3).
+// Two tiers, by design (C1/C3): the PINNED row is the audio tier (arbiter's
+// engaged zone, drives narration); the numbered rows below are the DISPLAY tier
+// (NearbyZonesTracker, hysteresis-stable, ordered by estimated distance). Tapping
+// ANY card opens that zone's exhibit list — but only the pinned zone is playing.
 //
-// TOKEN FAMILIES: the zone card's title and meta sit ON TOP OF the hero image,
-// so they use inkOnImage / mutedOnImage — colours that do NOT follow the theme,
-// because the photograph doesn't brighten when light mode turns on. Everything
-// else on this screen (header, radar) sits on `surface` and uses ink / inkFaint.
+// Cards auto-swap/reorder as presence changes; the tracker's change-gating means
+// this rebuilds on real order changes, not 1 Hz. An optional debug distance
+// readout (staff toggle in Settings) shows metres per row for field tuning.
+//
+// TOKEN FAMILIES: the card's title/meta sit ON the hero image -> inkOnImage /
+// mutedOnImage (fixed, don't follow theme). Header/radar sit on `surface` ->
+// ink / inkFaint.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
@@ -30,56 +34,62 @@ class ZoneScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final zone = context.watch<ZoneProvider>().currentZone;
+    final zp = context.watch<ZoneProvider>();
     return Scaffold(
       backgroundColor: t.surface,
       body: SafeArea(
-        child:
-            zone == null ? const _RadarStandby() : _CurrentZoneView(zone: zone),
+        child: zp.isStandby ? const _RadarStandby() : const _ZoneRankingView(),
       ),
     );
   }
 }
 
-/// Header + single current-zone card (list-of-one, ready for future multi-zone).
-class _CurrentZoneView extends StatelessWidget {
-  final ZoneInfo zone;
-  const _CurrentZoneView({required this.zone});
+/// Header + the ranked list of zone cards (pinned current + numbered nearby).
+class _ZoneRankingView extends StatelessWidget {
+  const _ZoneRankingView();
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
     final content = context.watch<ContentProvider>();
+    final rows = context.watch<ZoneProvider>().rankedZones;
+    final showDistance =
+        context.watch<SettingsProvider>().showDistanceDebug;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // No copyWith: sheetTitle has no colour, so it inherits the theme's
-        // default ink. That's correct here — this text is on `surface`.
         const Padding(
           padding: EdgeInsets.fromLTRB(18, 16, 18, 4),
-          child: Text('Khu vực của bạn', style: AppText.sheetTitle),
+          child: Text('Khu vực quanh bạn', style: AppText.sheetTitle),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(18, 0, 18, 14),
           child: Text(
-            'Ứng dụng đã nhận diện khu trưng bày bạn đang đứng qua sóng beacon.',
+            'Ứng dụng nhận diện các khu trưng bày gần bạn qua sóng beacon.',
             style: AppText.sheetSub.copyWith(color: t.inkFaint),
           ),
         ),
-        // List container holding exactly one card today.
         Expanded(
-          child: ListView(
+          child: ListView.builder(
             padding: const EdgeInsets.only(top: 0),
-            children: [
-              _ZoneCard(
-                zone: zone,
+            itemCount: rows.length,
+            itemBuilder: (context, i) {
+              final row = rows[i];
+              // Numbered from 2 for non-current rows; the pinned current row
+              // shows no number (its label is "Đang ở đây").
+              final rank = row.isCurrent ? null : i + 1;
+              return _ZoneCard(
+                key: ValueKey(row.zone.major),
+                row: row,
+                rank: rank,
                 content: content,
+                showDistance: showDistance,
                 onTap: () => Navigator.of(context).pushNamed(
                     AppRouter.exhibitListRoute,
-                    arguments: zone.major),
-              ),
-            ],
+                    arguments: row.zone.major),
+              );
+            },
           ),
         ),
       ],
@@ -87,29 +97,48 @@ class _CurrentZoneView extends StatelessWidget {
   }
 }
 
-/// A single .tourcard (150px, veil, serif title, meta line).
+/// A single .tourcard (150px, veil, serif title, meta line). Renders both the
+/// pinned current zone ("Đang ở đây") and numbered nearby zones — same size,
+/// only the meta line differs (confirmed design).
 class _ZoneCard extends StatelessWidget {
-  final ZoneInfo zone;
+  final RankedZone row;
+  final int? rank; // null for the pinned current row
   final ContentProvider content;
+  final bool showDistance;
   final VoidCallback onTap;
 
   const _ZoneCard({
-    required this.zone,
+    super.key,
+    required this.row,
+    required this.rank,
     required this.content,
+    required this.showDistance,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final name = content.text(zone.name);
-    final count = zone.exhibits.length;
+    final name = content.text(row.zone.name);
+    final count = row.zone.exhibits.length;
+
+    // Meta line: current -> "Đang ở đây"; nearby -> just the exhibit count.
+    // Optional debug distance appended for staff field-tuning.
+    final base = row.isCurrent ? 'Đang ở đây' : '$count hiện vật';
+    final dist = (showDistance && row.distanceMeters != null)
+        ? ' · ~${row.distanceMeters!.toStringAsFixed(1)} m'
+        : '';
+    final meta = row.isCurrent ? '$count hiện vật · $base$dist' : '$base$dist';
+
+    final semantics = row.isCurrent
+        ? 'Khu $name, $count hiện vật, bạn đang ở đây'
+        : 'Khu $name, $count hiện vật, gần bạn thứ $rank';
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
       child: Semantics(
         button: true,
-        label: 'Khu $name, $count hiện vật, bạn đang ở đây',
+        label: semantics,
         child: Material(
           color: Colors.transparent,
           borderRadius: t.sharpAll,
@@ -124,11 +153,17 @@ class _ZoneCard extends StatelessWidget {
                   fit: StackFit.expand,
                   children: [
                     HeroImage(
-                      filePath: content.imagePath(zone.heroImagePath),
+                      filePath: content.imagePath(row.zone.heroImagePath),
                       veil: t.tourCardVeil,
                       cacheWidth: 800,
                     ),
-                    // Everything below sits ON the photograph.
+                    // Rank badge (numbered nearby rows only), top-left.
+                    if (rank != null)
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: _RankBadge(rank: rank!, tokens: t),
+                      ),
                     Positioned(
                       left: 16,
                       right: 16,
@@ -144,7 +179,7 @@ class _ZoneCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 3),
                           Text(
-                            '$count hiện vật · Đang ở đây',
+                            meta,
                             style:
                                 AppText.meta.copyWith(color: t.mutedOnImage),
                           ),
@@ -158,6 +193,28 @@ class _ZoneCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Small circular rank number sitting on the hero image.
+class _RankBadge extends StatelessWidget {
+  final int rank;
+  final MuseumTokens tokens;
+  const _RankBadge({required this.rank, required this.tokens});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 26,
+      height: 26,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        shape: BoxShape.circle,
+      ),
+      child: Text('$rank',
+          style: AppText.meta.copyWith(color: tokens.inkOnImage)),
     );
   }
 }

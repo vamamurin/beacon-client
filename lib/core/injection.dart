@@ -48,6 +48,7 @@ import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/services/exhibit_presence_tracker.dart';
+import 'package:beacon_client/services/nearby_zones_tracker.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
 import 'package:beacon_client/services/tour_wiring.dart';
@@ -72,6 +73,9 @@ class AppGraph {
   /// Live "which exhibit minors are broadcasting right now, per zone", with
   /// anti-flicker hysteresis. Screen 3 reads this to show only nearby exhibits.
   final ExhibitPresenceTracker exhibitPresence;
+
+  /// C3 — display-tier zone ranking for screen 2 (nearest-first, hysteresis).
+  final NearbyZonesTracker nearbyZones;
 
   /// Bluetooth readiness gate (permission + adapter). The Gate screen shows
   /// its status and lets staff retry / open settings.
@@ -110,6 +114,7 @@ class AppGraph {
     required this.sync,
     required this.zoneChanges,
     required this.exhibitPresence,
+    required this.nearbyZones,
     required this.bluetoothGate,
     required StartupStatus startupStatus,
     required this.imagePathResolver,
@@ -158,6 +163,7 @@ class AppGraph {
     await session.dispose();
     await presence.dispose();
     exhibitPresence.dispose();
+    nearbyZones.dispose();
     await audioController.dispose();
     await audioEngine.dispose();
     await _power.dispose();
@@ -229,6 +235,14 @@ abstract final class Injection {
     // registry heartbeat exposed by presence.signals and adds anti-flicker
     // hysteresis + change-gating. Independent of the arbiter/audio paths.
     final exhibitPresence = ExhibitPresenceTracker(signals: presence.signals);
+
+    // C3 — display-tier zone ranking. Same heartbeat source as the exhibit
+    // tracker, but per-ZONE with distance ordering (C1). Uses the tuned
+    // path-loss exponent so metres match the arbiter's engage/release gate.
+    final nearbyZones = NearbyZonesTracker(
+      signals: presence.signals,
+      pathLossExponent: cfg?.arbitration.pathLossExponent ?? 2.5,
+    );
 
     // ── audio ──
     final IAudioEngine engine = JustAudioEngine();
@@ -339,6 +353,7 @@ abstract final class Injection {
       sync: sync,
       zoneChanges: zoneChanges,
       exhibitPresence: exhibitPresence,
+      nearbyZones: nearbyZones,
       bluetoothGate: bluetoothGate,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,

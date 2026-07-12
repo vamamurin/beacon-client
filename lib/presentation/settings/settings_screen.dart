@@ -17,6 +17,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
@@ -57,7 +58,38 @@ class SettingsScreen extends StatelessWidget {
             'Giao diện được lưu trên thiết bị và giữ nguyên cho khách tiếp theo.',
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
+          const SizedBox(height: 32),
+          Text('CHẨN ĐOÁN', style: AppText.kicker.copyWith(color: t.inkFaint)),
+          const SizedBox(height: 12),
+          _DistanceToggle(),
+          const SizedBox(height: 12),
+          Text(
+            'Chỉ dùng khi tinh chỉnh khoảng cách tại hiện trường. Hiện số mét ước '
+            'lượng trên màn khu vực. Tắt trước khi giao máy cho khách.',
+            style: AppText.stopMeta.copyWith(color: t.inkFaint),
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Staff toggle: show estimated distance (metres) on the zone screen. Persisted
+/// via SettingsProvider -> ISettingsStore. Off by default.
+class _DistanceToggle extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final settings = context.watch<SettingsProvider>();
+    return Material(
+      color: Colors.transparent,
+      child: SwitchListTile.adaptive(
+        contentPadding: EdgeInsets.zero,
+        value: settings.showDistanceDebug,
+        onChanged: settings.setShowDistanceDebug,
+        activeColor: t.ctaFill,
+        title: Text('Hiện khoảng cách ước lượng',
+            style: AppText.sheetSub.copyWith(color: t.ink)),
       ),
     );
   }
