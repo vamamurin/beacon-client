@@ -46,6 +46,11 @@ class _MuseumAppState extends State<MuseumApp> {
   /// across rebuilds, so route state survives a MaterialApp reconfigure.
   final GlobalKey<NavigatorState> _navKey = GlobalKey<NavigatorState>();
 
+  /// Tracks the name of the route currently on top, so a confirmed zone switch
+  /// only re-navigates when the visitor is actually on screen 3 or 4 (not on
+  /// screen 2, where ZoneProvider already reflects the change in place).
+  final _RouteNameTracker _routeTracker = _RouteNameTracker();
+
   /// Last session phase we acted on, so a rebuild that didn't change phase is
   /// a no-op. Null until the first observation (initialRoute is already right).
   SessionPhase? _lastPhase;
@@ -72,7 +77,7 @@ class _MuseumAppState extends State<MuseumApp> {
       initialRoute: AppRouter.initialRoute,
       onGenerateRoute: AppRouter.onGenerateRoute,
       onUnknownRoute: AppRouter.onUnknownRoute,
-      navigatorObservers: [routeObserver],
+      navigatorObservers: [routeObserver, _routeTracker],
       builder: (context, child) => MediaQuery.withClampedTextScaling(
         maxScaleFactor: 1.6,
         // C2: the confirm banner floats above EVERY screen (incl. screen 4).
@@ -119,13 +124,48 @@ class _MuseumAppState extends State<MuseumApp> {
   /// a later rebuild doesn't re-navigate.
   void _syncConfirmedNav(BuildContext context, int major) {
     final provider = context.read<PendingZoneChangeProvider>();
+    // Only pull the visitor to zone B's exhibit list if they're currently ON
+    // screen 3 or 4. On screen 2 (zone list) the change already shows in place
+    // via ZoneProvider — yanking them into screen 3 would be unwanted. Consume
+    // the one-shot either way so it doesn't linger.
+    final current = _routeTracker.currentRouteName;
+    final onExhibitScreen = current == AppRouter.exhibitListRoute ||
+        current == AppRouter.exhibitDetailRoute;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final nav = _navKey.currentState;
-      if (nav != null) {
-        nav.pushNamedAndRemoveUntil(AppRouter.zoneRoute, (_) => false);
-        nav.pushNamed(AppRouter.exhibitListRoute, arguments: major);
+      if (onExhibitScreen) {
+        final nav = _navKey.currentState;
+        if (nav != null) {
+          nav.pushNamedAndRemoveUntil(AppRouter.zoneRoute, (_) => false);
+          nav.pushNamed(AppRouter.exhibitListRoute, arguments: major);
+        }
       }
       provider.consumeConfirmedNavTarget();
     });
+  }
+}
+/// Lightweight NavigatorObserver that remembers the name of the route on top.
+/// Used to decide whether a confirmed zone switch should re-navigate (only on
+/// screens 3/4). Does not interfere with the RouteAware [routeObserver].
+class _RouteNameTracker extends NavigatorObserver {
+  String? currentRouteName;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    currentRouteName = route.settings.name;
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    currentRouteName = previousRoute?.settings.name;
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    currentRouteName = newRoute?.settings.name;
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    currentRouteName = previousRoute?.settings.name;
   }
 }
