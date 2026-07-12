@@ -25,7 +25,12 @@ List<int> buildBundleTarGz(String manifestJson) {
   final bytes = utf8.encode(manifestJson);
   archive.addFile(ArchiveFile('manifest.json', bytes.length, bytes));
   final tar = TarEncoder().encodeBytes(archive);
-  return GZipEncoder().encodeBytes(tar)!;
+  // `encodeBytes` return type differs across `archive` versions (nullable vs
+  // non-nullable). Route through `dynamic` + List<int>.from so this compiles
+  // cleanly on either without a version-specific lint (`!` unnecessary, or a
+  // null-comparison-always-false).
+  final dynamic gz = GZipEncoder().encodeBytes(tar);
+  return List<int>.from(gz as List);
 }
 
 String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
@@ -202,11 +207,14 @@ void main() {
   });
 
   group('boot GC', () {
-    test('removes stray .tmp and .part and non-active version dirs', () async {
+    // P1-2: GC now PRESERVES a recent .part so an interrupted download can
+    // resume across an app restart. Only .tmp dirs and orphan version dirs are
+    // always removed; a stale .part (older than the max-age) is still swept.
+    test('removes stray .tmp and orphan version dirs, keeps a RECENT .part',
+        () async {
       await seedActive('v1');
-      // Simulate crash leftovers.
       await layout.tempDir('v2').create(recursive: true);
-      await layout.archiveTempFile('v3').writeAsString('partial');
+      await layout.archiveTempFile('v3').writeAsString('partial'); // fresh .part
       await layout.versionDir('v9').create(recursive: true); // orphan version
 
       await serviceWith(FakeTransport(
@@ -216,9 +224,28 @@ void main() {
       )).cleanupOnBoot();
 
       expect(await layout.tempDir('v2').exists(), isFalse);
-      expect(await layout.archiveTempFile('v3').exists(), isFalse);
       expect(await layout.versionDir('v9').exists(), isFalse);
       expect(await layout.activeVersion(), 'v1'); // active preserved
+      // The recent .part survives for resume — this is the P1-2 behaviour.
+      expect(await layout.archiveTempFile('v3').exists(), isTrue);
+    });
+
+    test('sweeps a STALE .part (older than the max-age)', () async {
+      await seedActive('v1');
+      final stale = layout.archiveTempFile('v4');
+      await stale.writeAsString('old partial');
+      // Backdate well beyond the 7-day retention so GC treats it as abandoned.
+      await stale.setLastModified(
+          DateTime.now().subtract(const Duration(days: 30)));
+
+      await serviceWith(FakeTransport(
+        version: 'v1',
+        archiveBytes: const [],
+        advertisedSha: 'x',
+      )).cleanupOnBoot();
+
+      expect(await stale.exists(), isFalse); // abandoned -> removed
+      expect(await layout.activeVersion(), 'v1');
     });
   });
 

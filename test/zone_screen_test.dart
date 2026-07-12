@@ -1,21 +1,22 @@
 // Destination: test/zone_screen_test.dart
 // Run with: flutter test test/zone_screen_test.dart
 //
-// TIÊU CHÍ NGHIỆM THU của Step 4: màn hình 2 dựng được từ hai provider giả,
+// TIÊU CHÍ NGHIỆM THU của Step 4: màn hình 2 dựng được từ các provider giả,
 // KHÔNG Bluetooth, KHÔNG audio engine, KHÔNG path_provider, KHÔNG
-// Injection.build(). Nếu bạn phải mock thêm bất cứ thứ gì, refactor CHƯA xong —
-// và thứ phải mock chính là chỗ còn rò rỉ.
+// Injection.build(). Nếu bạn phải mock thêm bất cứ thứ gì, refactor CHƯA xong.
 //
-// TỪ STEP 5, các test này còn khoá một thứ nữa: HAI HỌ TOKEN. Tiêu đề thẻ zone
-// nằm TRÊN ẢNH, nên nó phải dùng `inkOnImage`, không phải `ink`. Ở dark theme
-// hai giá trị đó trùng nhau (đều trắng), nên chọn nhầm là VÔ HÌNH. Chỉ light
-// theme mới lộ ra. Vì vậy phải có một test chạy ở light theme — nếu không, cả
-// công việc phân họ token chỉ được bảo vệ bằng trí nhớ của người viết.
+// TỪ STEP 5, các test này còn khoá HAI HỌ TOKEN. Tiêu đề thẻ zone nằm TRÊN ẢNH,
+// nên nó phải dùng `inkOnImage`, không phải `ink`. Ở dark theme hai giá trị đó
+// trùng nhau (đều trắng), nên chọn nhầm là VÔ HÌNH. Chỉ light theme mới lộ ra.
 //
-// MaterialApp BẮT BUỘC phải nhận `theme: buildMuseumTheme(...)`. Không có nó,
-// MuseumTokens extension vắng mặt và `context.tokens` sẽ ném. Đó là hành vi cố
-// ý: một màn hình không có token là lỗi cấu hình, không phải trạng thái cần xử
-// lý duyên dáng.
+// TỪ C3, màn 2 là RANKING: zone kích hoạt ghim đầu ("Đang ở đây"), các zone
+// nghe thấy khác xếp dưới đánh số theo khoảng cách (NearbyZonesTracker). Radar
+// chỉ hiện khi KHÔNG nghe thấy gì. ZoneProvider giờ nhận thêm ranking stream +
+// repository; các test dưới drive nó bằng Stream.value(<NearbyZone>[]) cho danh
+// sách gần kề (rỗng = chỉ có zone ghim, đúng hành vi "một thẻ" như trước C3).
+//
+// MaterialApp BẮT BUỘC nhận `theme: buildMuseumTheme(...)` — thiếu nó
+// context.tokens ném (cố ý: màn không token là lỗi cấu hình).
 
 import 'dart:async';
 
@@ -23,20 +24,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/audio_clip_info.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/zone/zone_screen.dart';
+import 'package:beacon_client/services/nearby_zones_tracker.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 
 // ============================================================================
-// Fakes. Tách sang test/fakes/ khi màn hình thứ hai cần dùng lại.
+// Fakes.
 // ============================================================================
 
 /// Repository trong bộ nhớ. Không I/O, không bundle, không parse.
@@ -73,9 +77,23 @@ class FakeZoneRepository implements IZoneRepository {
   List<ZoneInfo> get allZones => List.unmodifiable(_zones);
 }
 
-/// Zone tối thiểu. `exhibits: const []` cố ý — màn 2 chỉ đọc `.length`, và giữ
-/// fixture khỏi phải dựng ExhibitInfo + AudioTrack là một phần của mục tiêu:
-/// test màn 2 không được phụ thuộc vào hình dạng của tầng audio.
+/// In-memory settings store (distance-debug toggle off by default).
+class FakeSettingsStore implements ISettingsStore {
+  FakeSettingsStore({this.showDistance = false});
+  String? _themeId;
+  bool showDistance;
+
+  @override
+  String? get themeId => _themeId;
+  @override
+  Future<void> setThemeId(String id) async => _themeId = id;
+  @override
+  bool get showDistanceDebug => showDistance;
+  @override
+  Future<void> setShowDistanceDebug(bool value) async => showDistance = value;
+}
+
+/// Zone tối thiểu. `exhibits: const []` — màn 2 chỉ đọc `.length`.
 ZoneInfo _zone({int major = 1, String name = 'Khu Thử'}) {
   return ZoneInfo(
     major: major,
@@ -94,6 +112,9 @@ Widget _app({
   required FakeZoneRepository repo,
   required Stream<ZoneStatus> status,
   required ZoneStatus initial,
+  Stream<List<NearbyZone>>? ranking,
+  List<NearbyZone> initialRanking = const [],
+  bool showDistance = false,
   MuseumThemeId themeId = MuseumThemeId.dark,
 }) {
   return MultiProvider(
@@ -101,16 +122,24 @@ Widget _app({
       ChangeNotifierProvider<ContentProvider>(
         create: (_) => ContentProvider(
           repository: repo,
-          // null -> HeroImage tự vẽ gradient fallback, không chạm file system.
           imagePathResolver: (_) => null,
         ),
       ),
+      ChangeNotifierProvider<SettingsProvider>(
+        create: (_) =>
+            SettingsProvider(store: FakeSettingsStore(showDistance: showDistance)),
+      ),
       ChangeNotifierProvider<ZoneProvider>(
-        create: (_) => ZoneProvider(status: status, initial: initial),
+        create: (_) => ZoneProvider(
+          status: status,
+          initial: initial,
+          ranking: ranking ?? const Stream<List<NearbyZone>>.empty(),
+          initialRanking: initialRanking,
+          repository: repo,
+        ),
       ),
     ],
     child: MaterialApp(
-      // Bắt buộc: cung cấp MuseumTokens extension. Thiếu nó -> context.tokens ném.
       theme: buildMuseumTheme(themeId),
       home: const ZoneScreen(),
     ),
@@ -119,7 +148,7 @@ Widget _app({
 
 void main() {
   group('rendering, with no pipeline behind it', () {
-    testWidgets('renders the current zone card', (tester) async {
+    testWidgets('renders the current (pinned) zone card', (tester) async {
       final zone = _zone();
       final repo = FakeZoneRepository(zones: [zone]);
 
@@ -137,29 +166,115 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('shows the radar standby when no zone is confirmed',
-        (tester) async {
+    testWidgets('shows radar standby only when NOTHING is heard', (tester) async {
       final repo = FakeZoneRepository();
 
       await tester.pumpWidget(_app(
         repo: repo,
         status: const Stream<ZoneStatus>.empty(),
         initial: ZoneStatus.standby,
+        initialRanking: const [], // nothing audible
       ));
       await tester.pump();
 
       expect(find.text('ĐANG QUÉT KHÔNG GIAN'), findsOneWidget);
 
-      // BẮT BUỘC: _RadarStandby giữ một AnimationController.repeat(). Nếu test
-      // kết thúc khi widget còn mounted, flutter_test báo "A Ticker was active
-      // when the test ended". KHÔNG dùng pumpAndSettle() ở màn này — animation
-      // lặp vô hạn nên nó sẽ chờ tới timeout.
+      // _RadarStandby giữ AnimationController.repeat() — KHÔNG pumpAndSettle.
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('audible-but-not-engaged zones show the list, not radar',
+        (tester) async {
+      // No engaged zone (status standby) but one zone is audible -> list, not
+      // radar. This is the C3 "heard but beyond engage" case.
+      final b = _zone(major: 2, name: 'Khu B');
+      final repo = FakeZoneRepository(zones: [b]);
+
+      await tester.pumpWidget(_app(
+        repo: repo,
+        status: const Stream<ZoneStatus>.empty(),
+        initial: ZoneStatus.standby,
+        initialRanking: const [
+          NearbyZone(major: 2, rssiDb: -70, distanceMeters: 6.5),
+        ],
+      ));
+      await tester.pump();
+
+      expect(find.text('ĐANG QUÉT KHÔNG GIAN'), findsNothing);
+      expect(find.text('Khu B'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
+  group('ranking', () {
+    testWidgets('pinned current zone first, nearby zones numbered below',
+        (tester) async {
+      final a = _zone(major: 1, name: 'Khu A');
+      final b = _zone(major: 2, name: 'Khu B');
+      final repo = FakeZoneRepository(zones: [a, b]);
+
+      await tester.pumpWidget(_app(
+        repo: repo,
+        status: const Stream<ZoneStatus>.empty(),
+        initial: ZoneStatus(zone: a), // A engaged
+        initialRanking: const [
+          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.0), // A (pinned)
+          NearbyZone(major: 2, rssiDb: -72, distanceMeters: 7.0), // B (nearby)
+        ],
+      ));
+      await tester.pump();
+
+      // A pinned with "Đang ở đây"; B present as a numbered nearby row.
+      expect(find.text('0 hiện vật · Đang ở đây'), findsOneWidget);
+      expect(find.text('Khu A'), findsOneWidget);
+      expect(find.text('Khu B'), findsOneWidget);
+      // B's meta is just the count (no "Đang ở đây").
+      expect(find.text('0 hiện vật'), findsOneWidget);
+      // Rank badge "2" for the single nearby row.
+      expect(find.text('2'), findsOneWidget);
+
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('distance shown only when the debug toggle is on',
+        (tester) async {
+      final a = _zone(major: 1, name: 'Khu A');
+      final repo = FakeZoneRepository(zones: [a]);
+
+      // Off -> no metres.
+      await tester.pumpWidget(_app(
+        repo: repo,
+        status: const Stream<ZoneStatus>.empty(),
+        initial: ZoneStatus(zone: a),
+        initialRanking: const [
+          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.3),
+        ],
+        showDistance: false,
+      ));
+      await tester.pump();
+      expect(find.textContaining('m', findRichText: false), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+
+      // On -> metres appended.
+      await tester.pumpWidget(_app(
+        repo: repo,
+        status: const Stream<ZoneStatus>.empty(),
+        initial: ZoneStatus(zone: a),
+        initialRanking: const [
+          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.3),
+        ],
+        showDistance: true,
+      ));
+      await tester.pump();
+      expect(find.textContaining('2.3 m'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
   });
 
   group('the arbiter drives screen 2, and only screen 2', () {
-    testWidgets('swaps the card in place when the zone changes', (tester) async {
+    testWidgets('swaps the pinned card in place when the zone changes',
+        (tester) async {
       final a = _zone(major: 1, name: 'Khu A');
       final b = _zone(major: 2, name: 'Khu B');
       final repo = FakeZoneRepository(zones: [a, b]);
@@ -174,7 +289,6 @@ void main() {
       await tester.pump();
       expect(find.text('Khu A'), findsOneWidget);
 
-      // KHÔNG pop, KHÔNG push — thẻ tự đổi tại chỗ.
       ctrl.add(ZoneStatus(zone: b));
       await tester.pump();
       await tester.pump();
@@ -185,7 +299,8 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('falls back to standby when the zone is lost', (tester) async {
+    testWidgets('falls back to standby when the zone AND ranking are lost',
+        (tester) async {
       final a = _zone();
       final repo = FakeZoneRepository(zones: [a]);
       final ctrl = StreamController<ZoneStatus>();
@@ -195,6 +310,7 @@ void main() {
         repo: repo,
         status: ctrl.stream,
         initial: ZoneStatus(zone: a),
+        // ranking empty from the start -> once zone lost, nothing audible.
       ));
       await tester.pump();
       expect(find.text('Khu Thử'), findsOneWidget);
@@ -209,8 +325,7 @@ void main() {
   });
 
   // ==========================================================================
-  // Step 5 — token families. This is the only place the split is verifiable
-  // without human eyes on a light-theme build.
+  // Step 5 — token families (unchanged by C3: pinned card still on image).
   // ==========================================================================
 
   group('token families', () {
@@ -228,11 +343,6 @@ void main() {
       await tester.pump();
 
       final title = tester.widget<Text>(find.text('Khu Thử'));
-
-      // Tiêu đề nằm TRÊN ẢNH hiện vật, dưới tourCardVeil (đen 82%). Ảnh không
-      // sáng lên khi bật light theme. Nếu ai đó "sửa" thành t.ink, chữ sẽ là
-      // #141414 trên nền đen — vô hình. Ở dark theme cả hai token đều trắng nên
-      // lỗi không lộ ra; chỉ test này bắt được.
       expect(title.style!.color, MuseumTokens.light.inkOnImage);
       expect(title.style!.color, isNot(MuseumTokens.light.ink));
 
@@ -258,11 +368,10 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('radar text follows the theme (it sits on surface, not an image)',
+    testWidgets('radar text follows the theme (sits on surface, not an image)',
         (tester) async {
       final repo = FakeZoneRepository();
 
-      // Dark: kicker trắng.
       await tester.pumpWidget(_app(
         repo: repo,
         status: const Stream<ZoneStatus>.empty(),
@@ -273,9 +382,6 @@ void main() {
       expect(kicker.style!.color, MuseumTokens.dark.ink);
       await tester.pumpWidget(const SizedBox());
 
-      // Light: kicker phải ĐỔI sang mực đen. Đây là mặt đối xứng của hai test
-      // trên — chữ trên `surface` PHẢI đi theo theme, đúng như chữ trên ảnh
-      // PHẢI KHÔNG đi theo.
       await tester.pumpWidget(_app(
         repo: repo,
         status: const Stream<ZoneStatus>.empty(),
