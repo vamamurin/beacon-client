@@ -204,7 +204,7 @@ class _StartButton extends StatelessWidget {
       button: true,
       label: 'Bắt đầu tham quan',
       child: Material(
-        color: enabled ? t.ctaOnImageFill.withValues(alpha: 0.35) : t.ctaDisabled,
+        color: enabled ? t.ctaOnImageFill : t.ctaDisabled,
         borderRadius: t.sharpAll,
         child: InkWell(
           onTap: enabled ? onPressed : null,
@@ -213,7 +213,7 @@ class _StartButton extends StatelessWidget {
             height: 48, // >= 48dp tap target (accessibility)
             alignment: Alignment.center,
             child: Text('Bắt đầu tham quan'.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ctaOnImageFill)),
+                style: AppText.button.copyWith(color: t.ctaOnImageInk)),
           ),
         ),
       ),
