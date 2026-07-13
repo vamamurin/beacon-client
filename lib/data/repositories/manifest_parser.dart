@@ -73,6 +73,9 @@ abstract final class ManifestParser {
     final museum = _reqMap(root, 'museum', 'root');
     final museumName = _reqLocalized(museum, 'name', 'museum', fallbackLanguage);
     final welcomeImagePath = _optPath(museum, 'welcomeImage', 'museum');
+    // Vùng ảnh 2 của màn chào — optional, cùng _pathRule với mọi payload khác.
+    final welcomeAccentImagePath =
+        _optPath(museum, 'welcomeAccentImage', 'museum');
 
     final beacon = _reqMap(root, 'beacon', 'root');
     final beaconUuid = _reqString(beacon, 'uuid', 'beacon').toLowerCase();
@@ -131,6 +134,7 @@ abstract final class ManifestParser {
         bundleVersion: bundleVersion,
         museumName: museumName,
         welcomeImagePath: welcomeImagePath,
+        welcomeAccentImagePath: welcomeAccentImagePath,
         languages: List.unmodifiable(languages),
         fallbackLanguage: fallbackLanguage,
         beaconUuid: beaconUuid,

@@ -21,7 +21,10 @@
 // chỉ lộ ra khi thực sự có theme sáng, và là lý do việc token hoá phải làm
 // TRƯỚC khi viết theme thứ hai.
 //
-// Toàn bộ màn Gate nằm trên HeroImage — kể cả nút Start và các khung staff.
+// Họ on-image dùng cho mọi chữ nằm TRÊN ẢNH (card, hero, player). Màn Gate
+// từng thuộc trọn họ này khi còn là ảnh full màn; từ khi chuyển sang collage
+// hai khung ảnh trên nền phẳng, Gate đã quay về họ surface + `welcomeBackdrop`
+// (đi theo theme) — xem doc gate_screen.dart.
 // Nên Gate giữ tông tối ở mọi theme. Đó là hành vi đúng, không phải bug.
 //
 // highContrast VẪN được phép làm đậm veil và sáng chữ on-image: mục tiêu của nó
@@ -88,10 +91,16 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     required this.tourCardVeil,
     required this.playerVeil,
     required this.heroVeil,
-    required this.welcomeVeil,
 
     // ── điểm nhấn ──
     required this.accent,
+
+    // ── nền màn chào ──
+    required this.welcomeBackdrop,
+    required this.welcomeAmbient,
+    required this.welcomeBandLower,
+    required this.welcomeBandUpper,
+    required this.frameShadow,
 
     // ── hình học ──
     required this.radiusSharp,
@@ -160,9 +169,6 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// Veil ảnh hero 250px của danh sách hiện vật.
   final LinearGradient heroVeil;
 
-  /// Veil màn chào. Tối cả đỉnh lẫn đáy vì wordmark nằm trên cùng.
-  final LinearGradient welcomeVeil;
-
   // ── điểm nhấn ─────────────────────────────────────────────────────────────
 
   /// Màu nhấn DUY NHẤT của ứng dụng — tông đồng/đất, hợp không gian bảo tàng.
@@ -173,6 +179,51 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// lần cho cả hai họ. highContrast dùng biến thể sáng hơn — mục tiêu của
   /// preset đó là độ tương phản, không phải sắc thái.
   final Color accent;
+
+  // ── nền màn chào ─────────────────────────────────────────────────────────
+
+  /// Nền phía sau collage hai vùng ảnh ở Gate — ĐI THEO THEME.
+  ///
+  /// Lịch sử: khi Gate còn là ảnh full màn, cả màn thuộc họ on-image và không
+  /// đổi theo theme. Từ khi chuyển sang collage (hai khung ảnh tự chứa trên
+  /// nền phẳng), chữ của Gate nằm trên nền NÀY chứ không nằm trên ảnh nữa —
+  /// tiền đề của on-image biến mất, nên Gate quay về quy tắc chung: đổi màu
+  /// theo theme, chữ dùng họ surface (ink/inkMuted).
+  ///
+  /// Không dùng thẳng `surface` vì màn chào cố ý ấm hơn phần còn lại của app
+  /// (tông tường phòng trưng bày, hoà với accent). Độ chói giữ TƯƠNG ĐƯƠNG
+  /// surface của preset để ink/inkMuted/inkFaint đạt tương phản y như trên
+  /// surface; riêng `line` KHÔNG dùng được trên nền này — xem gate_screen.
+  final Color welcomeBackdrop;
+
+  /// Lớp phủ trên ảnh-nền-mờ (ambient) của Gate: CHÍNH LÀ màu backdrop kèm
+  /// alpha theo preset. Alpha là "âm lượng" của ảnh nền — thấp hơn ⇒ ảnh lộ
+  /// nhiều hơn. Bất biến phải giữ khi chỉnh: đủ đặc để chữ ink/inkMuted vẫn
+  /// được coi là nằm trên backdrop (họ surface), KHÔNG phải trên ảnh.
+  /// highContrast đặt alpha = 100%: ambient tự tắt thành nền phẳng, không
+  /// cần nhánh điều kiện nào trong widget.
+  final Color welcomeAmbient;
+
+  /// HAI KHỐI MÀU BỐ CỤC của tường chào — dải dưới (~42% chiều cao) và dải
+  /// trên (~14%), phủ lên nền/ambient, nằm DƯỚI hai khung ảnh. Vai trò thuần
+  /// bố cục: chia tường thành các mảng tông khác nhau để nền không đơn điệu;
+  /// CẠNH CỨNG LÀ CHỦ ĐÍCH (ngôn ngữ color-block, khác với scrim gradient).
+  ///
+  /// Mỗi preset chọn "khối" theo nghĩa của mình: preset tối = mảng sẫm bán
+  /// trong suốt; preset giấy = mảng giấy trầm hơn vài bậc (mực alpha thấp —
+  /// mảng tối đậm trên giấy sẽ thành vệt bẩn); highContrast = trong suốt,
+  /// preset đó phẳng tuyệt đối (cùng triết lý với [frameShadow]).
+  final Color welcomeBandLower;
+
+  /// Xem [welcomeBandLower]. Dải trên nhạt hơn dải dưới ở mọi preset — đỉnh
+  /// màn chỉ có một dòng kicker, không cần khối nặng.
+  final Color welcomeBandUpper;
+
+  /// Bóng đổ của khung ảnh trên tường chào (chiều sâu gallery-wall). Chỉ MÀU
+  /// là token; blur/offset là hình học, sống ở gate_screen. Tường sáng cần
+  /// bóng nhạt hơn tường tối; highContrast trong suốt — preset đó phẳng
+  /// tuyệt đối, và bóng đen trên nền đen cũng vô hình.
+  final Color frameShadow;
 
   // ── hình học ──────────────────────────────────────────────────────────────
 
@@ -217,9 +268,14 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     tourCardVeil: _tourCardVeil,
     playerVeil: _playerVeil,
     heroVeil: _heroVeil,
-    welcomeVeil: _welcomeVeil,
 
     accent: Color(0xFFC99A5B),
+
+    welcomeBackdrop: Color(0xFF181A1F),
+    welcomeAmbient: Color(0xB3181A1F), 
+    welcomeBandLower: Color(0xFF5E3226), 
+    welcomeBandUpper: Color(0xFF244740), 
+    frameShadow: Color(0x80000000), 
 
     radiusSharp: 2,
     gutter: 18,
@@ -254,9 +310,15 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     tourCardVeil: _tourCardVeil,
     playerVeil: _playerVeil,
     heroVeil: _heroVeil,
-    welcomeVeil: _welcomeVeil,
 
     accent: Color(0xFFC99A5B),
+
+    welcomeBackdrop: Color(0xFFF1F3ED),
+    welcomeAmbient: Color(0xB3181A1F),
+    welcomeBandUpper: Color(0xFFCDE0C4),
+    welcomeBandLower: Color.fromARGB(255, 162, 128, 125),
+    frameShadow: Color(0x80000000),
+
 
     radiusSharp: 2,
     gutter: 18,
@@ -287,9 +349,15 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     tourCardVeil: _tourCardVeilStrong,
     playerVeil: _playerVeilStrong,
     heroVeil: _heroVeilStrong,
-    welcomeVeil: _welcomeVeilStrong,
 
     accent: Color(0xFFE3B87E),
+
+    // Đen tuyệt đối = surface của preset: tương phản trước, sắc thái sau.
+    welcomeBackdrop: Color(0xFF000000),
+    welcomeAmbient: Color(0xFF000000), // ĐẶC — ambient tắt, xem doc của field
+    welcomeBandLower: Color(0x00000000), // phẳng tuyệt đối
+    welcomeBandUpper: Color(0x00000000),
+    frameShadow: Color(0x00000000), // phẳng tuyệt đối
 
     radiusSharp: 2,
     gutter: 18,
@@ -322,16 +390,6 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     end: Alignment.topCenter,
     colors: [Color(0xFF000000), Color(0x26000000)],
     stops: [0.04, 0.60],
-  );
-
-  /// Đáy ~72% (không còn đen đặc 100% — ảnh phải hé qua vùng chữ), giữa ~20%,
-  /// đỉnh ~35% (chỉ còn một dòng kicker nhỏ, không cần tối như trước).
-  /// GIỮ ĐÚNG 3 stops như bản strong — ràng buộc lerp ghi ở đầu nhóm dưới.
-  static const LinearGradient _welcomeVeil = LinearGradient(
-    begin: Alignment.bottomCenter,
-    end: Alignment.topCenter,
-    colors: [Color(0xB8000000), Color(0x33000000), Color(0x59000000)],
-    stops: [0.10, 0.55, 1.0],
   );
 
   // ── biến thể đậm cho highContrast ─────────────────────────────────────────
@@ -367,13 +425,6 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     stops: [0.04, 0.60],
   );
 
-  static const LinearGradient _welcomeVeilStrong = LinearGradient(
-    begin: Alignment.bottomCenter,
-    end: Alignment.topCenter,
-    colors: [Color(0xFF000000), Color(0x99000000), Color(0xCC000000)],
-    stops: [0.10, 0.55, 1.0],
-  );
-
   // ═════════════════════════════════════════════════════════════════════════
   // ThemeExtension
   // ═════════════════════════════════════════════════════════════════════════
@@ -398,8 +449,12 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     LinearGradient? tourCardVeil,
     LinearGradient? playerVeil,
     LinearGradient? heroVeil,
-    LinearGradient? welcomeVeil,
     Color? accent,
+    Color? welcomeBackdrop,
+    Color? welcomeAmbient,
+    Color? welcomeBandLower,
+    Color? welcomeBandUpper,
+    Color? frameShadow,
     double? radiusSharp,
     double? gutter,
   }) {
@@ -422,8 +477,12 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       tourCardVeil: tourCardVeil ?? this.tourCardVeil,
       playerVeil: playerVeil ?? this.playerVeil,
       heroVeil: heroVeil ?? this.heroVeil,
-      welcomeVeil: welcomeVeil ?? this.welcomeVeil,
       accent: accent ?? this.accent,
+      welcomeBackdrop: welcomeBackdrop ?? this.welcomeBackdrop,
+      welcomeAmbient: welcomeAmbient ?? this.welcomeAmbient,
+      welcomeBandLower: welcomeBandLower ?? this.welcomeBandLower,
+      welcomeBandUpper: welcomeBandUpper ?? this.welcomeBandUpper,
+      frameShadow: frameShadow ?? this.frameShadow,
       radiusSharp: radiusSharp ?? this.radiusSharp,
       gutter: gutter ?? this.gutter,
     );
@@ -451,8 +510,14 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       tourCardVeil: LinearGradient.lerp(tourCardVeil, other.tourCardVeil, t)!,
       playerVeil: LinearGradient.lerp(playerVeil, other.playerVeil, t)!,
       heroVeil: LinearGradient.lerp(heroVeil, other.heroVeil, t)!,
-      welcomeVeil: LinearGradient.lerp(welcomeVeil, other.welcomeVeil, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
+      welcomeBackdrop: Color.lerp(welcomeBackdrop, other.welcomeBackdrop, t)!,
+      welcomeAmbient: Color.lerp(welcomeAmbient, other.welcomeAmbient, t)!,
+      welcomeBandLower:
+          Color.lerp(welcomeBandLower, other.welcomeBandLower, t)!,
+      welcomeBandUpper:
+          Color.lerp(welcomeBandUpper, other.welcomeBandUpper, t)!,
+      frameShadow: Color.lerp(frameShadow, other.frameShadow, t)!,
       radiusSharp: lerpDouble(radiusSharp, other.radiusSharp, t)!,
       gutter: lerpDouble(gutter, other.gutter, t)!,
     );

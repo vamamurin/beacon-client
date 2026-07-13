@@ -17,17 +17,23 @@
 //   • otherwise -> Start button, enabled only when the session is at the gate.
 //
 // ═══════════════════════════════════════════════════════════════════════════
-// THIS ENTIRE SCREEN IS ON-IMAGE
+// MÀN NÀY ĐÃ QUAY VỀ HỌ SURFACE (đi theo theme)
 // ═══════════════════════════════════════════════════════════════════════════
-// The root is a Stack whose first child is HeroImage. Wordmark, welcome copy,
-// Start button, sync notice and BLE notice ALL sit on top of it. So every
-// colour here comes from the on-image family (inkOnImage, mutedOnImage,
-// lineOnImage, ctaOnImage*), which does not follow the theme.
+// Lịch sử: bản đầu là ảnh full màn ⇒ mọi chữ nằm TRÊN ẢNH ⇒ bắt buộc dùng họ
+// on-image cố định (ảnh không sáng lên theo theme). Từ khi chuyển sang
+// collage — HAI khung ảnh tự chứa đặt trên nền phẳng `welcomeBackdrop` — chữ
+// không còn nằm trên ảnh nữa, tiền đề của on-image biến mất.
 //
-// Consequence, and it is correct: the Gate stays dark even in light theme. The
-// photograph doesn't brighten, so neither can the text on it. Reaching for
-// t.ink here would print #141414 on a dark gradient in light mode — the whole
-// welcome screen would disappear.
+// Quy tắc màu hiện tại của màn này:
+//   • Nền: t.welcomeBackdrop (theo theme; ấm hơn surface, cùng độ chói).
+//   • Chữ: t.ink / t.inkMuted — như mọi màn surface khác.
+//   • CTA: t.ctaFill / t.ctaLabel / t.ctaDisabled.
+//   • Đường kẻ/khung: KHÔNG dùng t.line (nó tinh chỉnh cho `surface`, gần như
+//     tàng hình trên backdrop ấm) — dùng t.ink với alpha, tự đúng ở mọi theme.
+//   • Họ on-image KHÔNG xuất hiện ở đây nữa; nó vẫn là quy tắc cho chữ nằm
+//     trên ảnh ở các màn 2/3/player.
+
+import 'dart:ui' as ui show ImageFilter;
 
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:flutter/material.dart';
@@ -82,14 +88,15 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     final needsSync = startup.needsSync;
 
     return Scaffold(
-      backgroundColor: t.surface,
+      backgroundColor: t.welcomeBackdrop,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Full-bleed hero (bundle image later; gradient fallback for now).
-          HeroImage(
-            filePath: content.welcomeImagePath, // Screen 1 has no zone image; use fallback tone.
-            veil: t.welcomeVeil,
+          // Nền ambient + collage HAI vùng ảnh + scrim đáy. Thay cho
+          // HeroImage full-bleed trước đây — xem doc của _WelcomeCollage.
+          _WelcomeCollage(
+            primaryPath: content.welcomeImagePath,
+            accentPath: content.welcomeAccentImagePath,
           ),
 
           SafeArea(
@@ -122,7 +129,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                           child: Text(
                             museumName.toUpperCase(),
                             style: AppText.kicker
-                                .copyWith(color: t.inkOnImage),
+                                .copyWith(color: t.inkMuted),
                           ),
                         ),
                       ),
@@ -146,20 +153,20 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                       const SizedBox(height: 12),
                       Text('Chào mừng\nquý khách',
                           style: AppText.welcomeTitle
-                              .copyWith(color: t.inkOnImage)),
-                      const SizedBox(height: 10),
+                              .copyWith(color: t.ink)),
+                      const SizedBox(height: 30),
                       Text(
                         // Rút từ 3 ý còn 2: "không cần tìm kiếm" là hệ quả
                         // của "tự nhận biết", không cần nói riêng.
                         'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
                         'Đeo tai nghe để bắt đầu nghe thuyết minh.',
-                        style: AppText.lede.copyWith(color: t.mutedOnImage),
+                        style: AppText.lede.copyWith(color: t.inkMuted),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 22),
+                const SizedBox(height: 40),
 
                 // Bottom action area. Rebuilds on BLE-status change (grant /
                 // enable BT) via bleStatus, and on session change via the outer
@@ -196,13 +203,160 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
   }
 }
 
-/// Visitor CTA, on the image: white fill, dark label, at every theme.
+/// Lớp nền của màn chào, từ dưới lên:
+///   1. Backdrop đặc [MuseumTokens.welcomeBackdrop] — lưới an toàn khi chưa
+///      có ảnh và là "màu danh nghĩa" mà chữ họ surface đứng trên.
+///   2. Ambient: ẢNH CHÀO CHÍNH phóng mờ mạnh + lớp phủ
+///      [MuseumTokens.welcomeAmbient] (= backdrop kèm alpha theo preset).
+///      Nền nhuốm hơi màu của chính tấm ảnh nên tự hoà sắc với mọi bundle,
+///      nhưng nhờ lớp phủ đặc, chữ vẫn thuộc họ surface — KHÔNG quay lại
+///      on-image. highContrast có alpha 100% ⇒ ambient tự tắt.
+///   3. HAI KHỐI MÀU bố cục [MuseumTokens.welcomeBandLower]/[welcomeBandUpper]
+///      — mảng dưới ~42%, mảng trên ~14%, cạnh cứng có chủ đích (color-block),
+///      chia tường thành các tông để nền không đơn điệu.
+///   4. HAI vùng ảnh đóng khung, chồng lệch (kiểu tường trưng bày), có bóng
+///      đổ [MuseumTokens.frameShadow] — offset (-6, 8) hắt bóng khung 2 đè
+///      lên mép khung 1, tạo chiều sâu lớp lang.
+///   5. Scrim đáy màu-của-backdrop, cho MÀN NGẮN khi khối chữ neo đáy dâng
+///      lên chạm mép dưới khung 2 — chữ luôn tách khỏi ảnh, đúng ở mọi theme.
 ///
-/// FIX: bản trước fill alpha 0.35 với chữ CÙNG MÀU fill — trắng trên trắng
-/// mờ, trông như nút disabled. Giờ implementation mới khớp câu doc phía trên:
-/// nền [ctaOnImageFill] đặc, chữ [ctaOnImageInk]. Trạng thái disabled cũng
-/// chuyển hẳn sang họ on-image (fill mờ + chữ mờ) thay vì mượn `ctaDisabled`
-/// của họ surface — màn này toàn bộ on-image, không được đổi màu theo theme.
+/// Vị trí hai khung tính theo TỶ LỆ màn hình (khớp mockup thiết kế):
+///   • Vùng ảnh 1 (chính): left 12%, top 20%, rộng 56%, cao 34%.
+///   • Vùng ảnh 2 (phụ):  right 8%, top 30%, rộng 26%, cao 30% — vẽ SAU nên
+///     nằm ĐÈ lên góc phải của vùng 1.
+///
+/// Suy biến có chủ đích, không nhánh lỗi nào ra broken box:
+///   • [accentPath] null (bundle cũ) ⇒ chỉ vẽ vùng 1 — bố cục vẫn đứng được.
+///   • [primaryPath] null ⇒ bỏ luôn lớp ambient (không tốn blur cho gradient
+///     fallback); khung 1 tự vẽ fallback BÊN TRONG — giữ nhịp bố cục.
+class _WelcomeCollage extends StatelessWidget {
+  final String? primaryPath;
+  final String? accentPath;
+  const _WelcomeCollage({required this.primaryPath, required this.accentPath});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+
+    return LayoutBuilder(builder: (context, constraints) {
+      final w = constraints.maxWidth;
+      final h = constraints.maxHeight;
+
+      return Stack(
+        fit: StackFit.expand,
+        children: [
+          ColoredBox(color: t.welcomeBackdrop),
+
+          // ── 2. Ambient ──
+          // Decode rất nhỏ (≈1/5 bề ngang vật lý): vừa rẻ RAM vừa là một nửa
+          // của chính hiệu ứng mờ (upscale ảnh nhỏ đã tự mềm). Scale 1.1 nuốt
+          // viền mờ dần ở mép do blur lấy mẫu ra ngoài ảnh. RepaintBoundary
+          // cô lập lớp tĩnh đắt tiền này khỏi các repaint phía trên.
+          if (primaryPath != null) ...[
+            RepaintBoundary(
+              child: Transform.scale(
+                scale: 1.1,
+                child: ImageFiltered(
+                  imageFilter: ui.ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: HeroImage(
+                    filePath: primaryPath,
+                    cacheWidth: (w * 0.2 * dpr).round(),
+                  ),
+                ),
+              ),
+            ),
+            ColoredBox(color: t.welcomeAmbient),
+          ],
+
+          // ── 3. Hai khối màu bố cục ──
+          // Mảng dưới (~42%) và mảng trên (~14%), cạnh cứng CÓ CHỦ ĐÍCH —
+          // ngôn ngữ color-block chia tường thành các tông, tránh nền đơn
+          // điệu. Màu theo theme qua token (xem doc welcomeBandLower); ở
+          // highContrast chúng trong suốt nên tự biến mất.
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: h * 0.42,
+            child: ColoredBox(color: t.welcomeBandLower),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: h * 0.14,
+            child: ColoredBox(color: t.welcomeBandUpper),
+          ),
+
+          // ── 4. Hai vùng ảnh ──
+          Positioned(
+            left: w * 0.12,
+            top: h * 0.20,
+            width: w * 0.56,
+            height: h * 0.34,
+            child: _framed(t, path: primaryPath,
+                decodeWidth: (w * 0.56 * dpr).round()),
+          ),
+          if (accentPath != null)
+            Positioned(
+              right: w * 0.08,
+              top: h * 0.30,
+              width: w * 0.26,
+              height: h * 0.30,
+              child: _framed(t, path: accentPath,
+                  decodeWidth: (w * 0.26 * dpr).round()),
+            ),
+
+          // ── 5. Scrim đáy — xem doc của class ──
+          DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.bottomCenter,
+                end: Alignment.topCenter,
+                colors: [
+                  t.welcomeBackdrop,
+                  t.welcomeBackdrop.withValues(alpha: 0.0),
+                ],
+                stops: const [0.0, 0.55],
+              ),
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  /// Khung ảnh có bóng — dùng chung cho cả hai vùng để hai khung không bao
+  /// giờ lệch nhau về bóng/bo góc khi chỉnh về sau. Màu bóng là token
+  /// (theo theme); blur/offset là hình học nên sống ở đây.
+  Widget _framed(MuseumTokens t,
+      {required String? path, required int decodeWidth}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: t.sharpAll,
+        boxShadow: [
+          BoxShadow(
+            color: t.frameShadow,
+            blurRadius: 12,
+            offset: const Offset(-6, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: t.sharpAll,
+        child: HeroImage(filePath: path, cacheWidth: decodeWidth),
+      ),
+    );
+  }
+}
+
+/// Visitor CTA — filled, dùng cặp CTA của họ surface nên tự đảo theo theme:
+/// dark = nút trắng chữ đen, light = nút mực chữ giấy, HC = trắng/đen.
+///
+/// Disabled: nền [ctaDisabled] + chữ [inkMuted] (KHÔNG dùng [ctaLabel] — ở
+/// light theme ctaLabel là màu giấy, đặt lên ctaDisabled xám nhạt sẽ chìm).
+/// Contrast của cặp disabled đã soát trên cả ba preset.
 class _StartButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onPressed;
@@ -211,23 +365,19 @@ class _StartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final fg = enabled
-        ? t.ctaOnImageInk
-        : t.ctaOnImageInk.withValues(alpha: 0.45);
+    final fg = enabled ? t.ctaLabel : t.inkMuted;
     return Semantics(
       button: true,
       enabled: enabled,
       label: 'Bắt đầu tham quan',
       child: Material(
-        color: enabled
-            ? t.ctaOnImageFill
-            : t.ctaOnImageFill.withValues(alpha: 0.55),
+        color: enabled ? t.ctaFill : t.ctaDisabled,
         borderRadius: t.sharpAll,
         child: InkWell(
           onTap: enabled ? onPressed : null,
           borderRadius: t.sharpAll,
           child: Container(
-            height: 52, // >= 48dp tap target (accessibility)
+            height: 70, // >= 48dp tap target (accessibility)
             alignment: Alignment.center,
             child: Row(
               mainAxisSize: MainAxisSize.min,
@@ -303,7 +453,7 @@ class _SyncNoticeState extends State<_SyncNotice> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: t.lineOnImage),
+        border: Border.all(color: t.ink.withValues(alpha: 0.35)),
         borderRadius: t.sharpAll,
       ),
       child: Column(
@@ -311,13 +461,13 @@ class _SyncNoticeState extends State<_SyncNotice> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text((_readyToRestart ? 'Đã tải xong' : 'Chưa sẵn sàng').toUpperCase(),
-              style: AppText.kicker.copyWith(color: t.inkOnImage)),
+              style: AppText.kicker.copyWith(color: t.ink)),
           const SizedBox(height: 6),
           Text(
             _message ??
                 'Thiết bị chưa có nội dung tham quan. Nhấn Đồng bộ để tải '
                     'dữ liệu trước khi bàn giao cho khách.',
-            style: AppText.guidance.copyWith(color: t.mutedOnImage),
+            style: AppText.guidance.copyWith(color: t.inkMuted),
           ),
           const SizedBox(height: 12),
           if (_syncing)
@@ -413,16 +563,16 @@ class _BleNotReadyState extends State<_BleNotReady> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        border: Border.all(color: t.lineOnImage),
+        border: Border.all(color: t.ink.withValues(alpha: 0.35)),
         borderRadius: t.sharpAll,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(c.title, style: AppText.kicker.copyWith(color: t.inkOnImage)),
+          Text(c.title, style: AppText.kicker.copyWith(color: t.ink)),
           const SizedBox(height: 6),
-          Text(c.body, style: AppText.guidance.copyWith(color: t.mutedOnImage)),
+          Text(c.body, style: AppText.guidance.copyWith(color: t.inkMuted)),
           if (c.cta.isNotEmpty) ...[
             const SizedBox(height: 12),
             _busy
@@ -458,11 +608,11 @@ class _StaffButton extends StatelessWidget {
             height: 44,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              border: Border.all(color: t.lineOnImage),
+              border: Border.all(color: t.ink.withValues(alpha: 0.35)),
               borderRadius: t.sharpAll,
             ),
             child: Text(label.toUpperCase(),
-                style: AppText.button.copyWith(color: t.inkOnImage)),
+                style: AppText.button.copyWith(color: t.ink)),
           ),
         ),
       ),
@@ -486,15 +636,15 @@ class _ProgressLine extends StatelessWidget {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 3,
-              backgroundColor: t.lineOnImage,
-              valueColor: AlwaysStoppedAnimation<Color>(t.inkOnImage),
+              backgroundColor: t.ink.withValues(alpha: 0.25),
+              valueColor: AlwaysStoppedAnimation<Color>(t.ink),
             ),
           ),
         ),
         if (progress != null) ...[
           const SizedBox(width: 10),
           Text('${(progress! * 100).round()}%',
-              style: AppText.timeCode.copyWith(color: t.mutedOnImage)),
+              style: AppText.timeCode.copyWith(color: t.inkMuted)),
         ],
       ],
     );

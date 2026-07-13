@@ -96,4 +96,10 @@ class ContentProvider extends ChangeNotifier {
     final rel = _repo.config?.welcomeImagePath;
     return rel == null ? null : _imagePath(rel);
   }
+
+  /// Vùng ảnh 2 của màn chào. null ⇒ Gate chỉ vẽ một khung (bundle cũ).
+  String? get welcomeAccentImagePath {
+    final rel = _repo.config?.welcomeAccentImagePath;
+    return rel == null ? null : _imagePath(rel);
+  }
 }

@@ -175,6 +175,12 @@ class MuseumConfig {
 
   final String? welcomeImagePath;
 
+  /// Ảnh thứ hai của màn chào (vùng ảnh 2 — khung nhỏ chồng lệch bên phải).
+  /// OPTIONAL theo đúng hợp đồng tương thích: bundle cũ không có key
+  /// `welcomeAccentImage` ⇒ null ⇒ Gate chỉ vẽ một khung ảnh. Không bao giờ
+  /// là điều kiện bắt buộc của bundle.
+  final String? welcomeAccentImagePath;
+
   /// Available narration languages, e.g. ["vi", "en"]. Gate screen options.
   final List<String> languages;
   final String fallbackLanguage;
@@ -199,6 +205,7 @@ class MuseumConfig {
     required this.bundleVersion,
     required this.museumName,
     this.welcomeImagePath,
+    this.welcomeAccentImagePath,
     required this.languages,
     required this.fallbackLanguage,
     required this.beaconUuid,
@@ -215,6 +222,7 @@ class MuseumConfig {
         other.bundleVersion == bundleVersion &&
         other.museumName == museumName &&
         other.welcomeImagePath == welcomeImagePath &&
+        other.welcomeAccentImagePath == welcomeAccentImagePath &&
         listEquals(other.languages, languages) &&
         other.fallbackLanguage == fallbackLanguage &&
         other.beaconUuid == beaconUuid &&
@@ -229,6 +237,7 @@ class MuseumConfig {
         bundleVersion,
         museumName,
         welcomeImagePath,
+        welcomeAccentImagePath,
         Object.hashAll(languages),
         fallbackLanguage,
         beaconUuid,

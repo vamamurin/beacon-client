@@ -74,6 +74,9 @@ class MockZoneRepository implements IZoneRepository {
 }
 
 /// Verbatim-structure copy of manifest.example.json (transcripts shortened).
+/// Có thêm 2 key optional `welcomeImage`/`welcomeAccentImage` để đường parse
+/// optional-path được tập luyện; file ảnh không tồn tại trên máy dev ⇒
+/// HeroImage tự rơi về gradient fallback (đúng hợp đồng của nó).
 /// Zone 1 "Vũ khí Kháng chiến": minors 1, 2, 5 — grenade is minor 5, matching
 /// the original UX scenario. Zone 2 "Kỷ vật Sinh hoạt": minors 1, 2.
 /// Desk beacon: major 99.
@@ -85,7 +88,9 @@ const String kMockManifestJson = r'''
   "languages": ["vi", "en"],
   "fallbackLanguage": "vi",
   "museum": {
-    "name": { "vi": "Bảo tàng Tôn Đức Thắng", "en": "Ton Duc Thang Museum" }
+    "name": { "vi": "Bảo tàng Tôn Đức Thắng", "en": "Ton Duc Thang Museum" },
+    "welcomeImage": "images/welcome.jpg",
+    "welcomeAccentImage": "images/welcome_accent.jpg"
   },
   "beacon": {
     "uuid": "4d6fc88b-be75-6698-da48-6866a36ec78e",
