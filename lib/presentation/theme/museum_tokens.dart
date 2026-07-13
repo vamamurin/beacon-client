@@ -90,6 +90,9 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     required this.heroVeil,
     required this.welcomeVeil,
 
+    // ── điểm nhấn ──
+    required this.accent,
+
     // ── hình học ──
     required this.radiusSharp,
     required this.gutter,
@@ -160,6 +163,17 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// Veil màn chào. Tối cả đỉnh lẫn đáy vì wordmark nằm trên cùng.
   final LinearGradient welcomeVeil;
 
+  // ── điểm nhấn ─────────────────────────────────────────────────────────────
+
+  /// Màu nhấn DUY NHẤT của ứng dụng — tông đồng/đất, hợp không gian bảo tàng.
+  /// Dùng tiết chế: vạch nhấn ở Gate, và sau này là trạng thái "Đang ở đây" /
+  /// progress fill nếu quyết định mở rộng. KHÔNG dùng làm nền chữ dài.
+  ///
+  /// Đủ tương phản trên cả `surface` tối lẫn ảnh có veil, nên khai báo một
+  /// lần cho cả hai họ. highContrast dùng biến thể sáng hơn — mục tiêu của
+  /// preset đó là độ tương phản, không phải sắc thái.
+  final Color accent;
+
   // ── hình học ──────────────────────────────────────────────────────────────
 
   /// 2px — chữ ký thị giác của thiết kế: gần vuông. MỘT giá trị, không phải một
@@ -205,6 +219,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeil,
     welcomeVeil: _welcomeVeil,
 
+    accent: Color(0xFFC99A5B),
+
     radiusSharp: 2,
     gutter: 18,
   );
@@ -240,6 +256,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeil,
     welcomeVeil: _welcomeVeil,
 
+    accent: Color(0xFFC99A5B),
+
     radiusSharp: 2,
     gutter: 18,
   );
@@ -270,6 +288,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     playerVeil: _playerVeilStrong,
     heroVeil: _heroVeilStrong,
     welcomeVeil: _welcomeVeilStrong,
+
+    accent: Color(0xFFE3B87E),
 
     radiusSharp: 2,
     gutter: 18,
@@ -304,10 +324,13 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     stops: [0.04, 0.60],
   );
 
+  /// Đáy ~72% (không còn đen đặc 100% — ảnh phải hé qua vùng chữ), giữa ~20%,
+  /// đỉnh ~35% (chỉ còn một dòng kicker nhỏ, không cần tối như trước).
+  /// GIỮ ĐÚNG 3 stops như bản strong — ràng buộc lerp ghi ở đầu nhóm dưới.
   static const LinearGradient _welcomeVeil = LinearGradient(
     begin: Alignment.bottomCenter,
     end: Alignment.topCenter,
-    colors: [Color(0xFF000000), Color(0x59000000), Color(0x8C000000)],
+    colors: [Color(0xB8000000), Color(0x33000000), Color(0x59000000)],
     stops: [0.10, 0.55, 1.0],
   );
 
@@ -376,6 +399,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     LinearGradient? playerVeil,
     LinearGradient? heroVeil,
     LinearGradient? welcomeVeil,
+    Color? accent,
     double? radiusSharp,
     double? gutter,
   }) {
@@ -399,6 +423,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       playerVeil: playerVeil ?? this.playerVeil,
       heroVeil: heroVeil ?? this.heroVeil,
       welcomeVeil: welcomeVeil ?? this.welcomeVeil,
+      accent: accent ?? this.accent,
       radiusSharp: radiusSharp ?? this.radiusSharp,
       gutter: gutter ?? this.gutter,
     );
@@ -427,6 +452,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       playerVeil: LinearGradient.lerp(playerVeil, other.playerVeil, t)!,
       heroVeil: LinearGradient.lerp(heroVeil, other.heroVeil, t)!,
       welcomeVeil: LinearGradient.lerp(welcomeVeil, other.welcomeVeil, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
       radiusSharp: lerpDouble(radiusSharp, other.radiusSharp, t)!,
       gutter: lerpDouble(gutter, other.gutter, t)!,
     );

@@ -96,71 +96,76 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Wordmark, top-left.
+                // Tên bảo tàng, top-left — HẠ CẤP từ wordmark 30px xuống
+                // kicker: màn hình chỉ được có MỘT tiêu đề, và tiêu đề đó là
+                // khối "Chào mừng" phía dưới. Tên bảo tàng vẫn hiện diện,
+                // nhưng nhường vai chính.
+                //
+                // Lối vào Cài đặt là LONG-PRESS lên tên bảo tàng — khớp thiết
+                // kế đã ghi trong settings_screen.dart. Nút icon hiện rõ trước
+                // đây để khách bấm được vào màn có URL máy chủ; chức năng
+                // (route + điều kiện) giữ nguyên, chỉ đổi cách kích hoạt.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 26, 18, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          museumName,
-                          style:
-                              AppText.wordmark.copyWith(color: t.inkOnImage),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Semantics(
+                      label: museumName,
+                      onLongPressHint: 'Mở cài đặt (dành cho nhân viên)',
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onLongPress: () => Navigator.of(context)
+                            .pushNamed(AppRouter.settingsRoute),
+                        child: Padding(
+                          // Nới vùng chạm của long-press mà không xê chữ.
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            museumName.toUpperCase(),
+                            style: AppText.kicker
+                                .copyWith(color: t.inkOnImage),
+                          ),
                         ),
                       ),
-                      // Nằm trên HeroImage -> họ on-image, không phải t.ink.
-                      // mutedOnImage chứ không inkOnImage: đây là chức năng
-                      // phụ, không được cạnh tranh thị giác với wordmark.
-                      Semantics(
-                        button: true,
-                        label: 'Cài đặt',
-                        child: IconButton(
-                          icon: Icon(Icons.settings_outlined,
-                              color: t.mutedOnImage, size: 22),
-                          // IconButton mặc định đã 48x48 — đủ tap target.
-                          tooltip: 'Cài đặt',
-                          onPressed: () => Navigator.of(context)
-                              .pushNamed(AppRouter.settingsRoute),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
                 const Spacer(),
 
-                // Welcome text block, bottom.
+                // Welcome text block, bottom. Kicker "HƯỚNG DẪN THAM QUAN TỰ
+                // ĐỘNG" đã bỏ: chữ hoa tiếng Việt có dấu + tracking rộng đọc
+                // lởm chởm, và nội dung của nó đã nằm trong câu dẫn bên dưới.
                 Padding(
                   padding: const EdgeInsets.fromLTRB(18, 0, 18, 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text('Hướng dẫn tham quan tự động'.toUpperCase(),
-                          style: AppText.kicker.copyWith(color: t.mutedOnImage)),
-                      const SizedBox(height: 6),
+                      // Điểm nhấn màu duy nhất của màn hình — phá thế đơn sắc
+                      // trắng/xám/đen. Trang trí thuần tuý nên không Semantics.
+                      Container(width: 28, height: 2, color: t.accent),
+                      const SizedBox(height: 12),
                       Text('Chào mừng\nquý khách',
-                          style:
-                              AppText.heroTitle.copyWith(color: t.inkOnImage)),
-                      const SizedBox(height: 8),
+                          style: AppText.welcomeTitle
+                              .copyWith(color: t.inkOnImage)),
+                      const SizedBox(height: 10),
                       Text(
-                        'Ứng dụng tự nhận biết khu trưng bày quanh bạn qua '
-                        'sóng beacon — không cần tìm kiếm. Cắm tai nghe để '
-                        'nghe thuyết minh.',
-                        style: AppText.guidance
-                            .copyWith(color: t.mutedOnImage, height: 1.6),
+                        // Rút từ 3 ý còn 2: "không cần tìm kiếm" là hệ quả
+                        // của "tự nhận biết", không cần nói riêng.
+                        'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
+                        'Đeo tai nghe để bắt đầu nghe thuyết minh.',
+                        style: AppText.lede.copyWith(color: t.mutedOnImage),
                       ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 14),
+                const SizedBox(height: 22),
 
                 // Bottom action area. Rebuilds on BLE-status change (grant /
                 // enable BT) via bleStatus, and on session change via the outer
                 // watch. Branches: BLE not ready -> needs sync -> Start.
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+                  padding: const EdgeInsets.fromLTRB(18, 0, 18, 24),
                   child: ValueListenableBuilder<StartupStatus>(
                     valueListenable: startup.bleStatus,
                     builder: (context, bleStatus, _) => _buildAction(
@@ -192,6 +197,12 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
 }
 
 /// Visitor CTA, on the image: white fill, dark label, at every theme.
+///
+/// FIX: bản trước fill alpha 0.35 với chữ CÙNG MÀU fill — trắng trên trắng
+/// mờ, trông như nút disabled. Giờ implementation mới khớp câu doc phía trên:
+/// nền [ctaOnImageFill] đặc, chữ [ctaOnImageInk]. Trạng thái disabled cũng
+/// chuyển hẳn sang họ on-image (fill mờ + chữ mờ) thay vì mượn `ctaDisabled`
+/// của họ surface — màn này toàn bộ on-image, không được đổi màu theo theme.
 class _StartButton extends StatelessWidget {
   final bool enabled;
   final VoidCallback onPressed;
@@ -200,20 +211,35 @@ class _StartButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final fg = enabled
+        ? t.ctaOnImageInk
+        : t.ctaOnImageInk.withValues(alpha: 0.45);
     return Semantics(
       button: true,
+      enabled: enabled,
       label: 'Bắt đầu tham quan',
       child: Material(
-        color: enabled ? t.ctaOnImageFill : t.ctaDisabled,
+        color: enabled
+            ? t.ctaOnImageFill
+            : t.ctaOnImageFill.withValues(alpha: 0.55),
         borderRadius: t.sharpAll,
         child: InkWell(
           onTap: enabled ? onPressed : null,
           borderRadius: t.sharpAll,
           child: Container(
-            height: 48, // >= 48dp tap target (accessibility)
+            height: 52, // >= 48dp tap target (accessibility)
             alignment: Alignment.center,
-            child: Text('Bắt đầu tham quan'.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ctaOnImageInk)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon nhắc lại lời dẫn "đeo tai nghe" — trang trí, đã có
+                // label ở Semantics bên ngoài.
+                Icon(Icons.headphones, size: 16, color: fg),
+                const SizedBox(width: 8),
+                Text('Bắt đầu tham quan'.toUpperCase(),
+                    style: AppText.button.copyWith(color: fg)),
+              ],
+            ),
           ),
         ),
       ),

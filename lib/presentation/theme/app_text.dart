@@ -48,6 +48,16 @@ abstract final class AppText {
     height: 1.10,
   );
 
+  /// Tiêu đề màn chào (Gate) — CỐ Ý tách khỏi [heroTitle]: Gate là màn duy
+  /// nhất có ~55% không gian trống nên chịu được cỡ 34; màn 3 dùng [heroTitle]
+  /// 28 trên hero 250px thì không. Đổi cỡ ở đây không được ảnh hưởng màn 3.
+  static const TextStyle welcomeTitle = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 34,
+    height: 1.12,
+  );
+
   /// Zone card title.
   static const TextStyle cardTitle = TextStyle(
     fontFamily: AppFonts.serif,
@@ -120,6 +130,16 @@ abstract final class AppText {
     fontWeight: FontWeight.w300,
     fontSize: 12,
     height: 1.5,
+  );
+
+  /// Đoạn dẫn nhập của màn chào — chỉ dẫn quan trọng nhất khách sẽ đọc, nên
+  /// KHÔNG dùng [guidance] (12/w300 đọc như chữ in nhỏ). w400 vì chữ sáng
+  /// trên nền tối render mảnh hơn thực tế (halation).
+  static const TextStyle lede = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w400,
+    fontSize: 13,
+    height: 1.55,
   );
 
   /// Thân bài các mục dưới fold. Gom từ _bodyStyle private ở màn 4.
