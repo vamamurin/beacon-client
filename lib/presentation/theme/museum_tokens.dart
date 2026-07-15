@@ -76,6 +76,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     required this.inkMuted,
     required this.inkFaint,
     required this.line,
+    required this.surfaceRaised,
     required this.ctaFill,
     required this.ctaLabel,
     required this.ctaDisabled,
@@ -94,6 +95,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
     // ── điểm nhấn ──
     required this.accent,
+    required this.accentInk,
+    required this.sectionBand,
 
     // ── nền màn chào ──
     required this.welcomeBackdrop,
@@ -124,6 +127,20 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
   /// Đường kẻ hairline giữa các hàng.
   final Color line;
+
+  /// Nền của KHỐI NÂNG đặt trên [surface]: hàng hiện vật ở màn 3, và mọi card
+  /// tonal về sau. Nâng "tông", không nâng "sáng": ở preset giấy nó TRẦM hơn
+  /// surface (yêu cầu sản phẩm: theme sáng không được sáng bừng cả màn), ở
+  /// preset tối nó nhạt hơn surface một bậc — cả hai đều là "rời khỏi mặt
+  /// nền", chỉ khác chiều.
+  ///
+  /// Cặp đôi với badge số ở màn 3: badge tô [surface] nên trên nền này nó đọc
+  /// là đĩa LÕM. Đổi giá trị ở đây mà quên soát badge thì badge sẽ biến mất —
+  /// hai màu này định nghĩa lẫn nhau.
+  ///
+  /// highContrast KHÔNG được để bằng surface: từ khi bỏ hairline giữa các
+  /// hàng, đây là thứ DUY NHẤT phân tách hàng — preset đó cần nó rõ nhất.
+  final Color surfaceRaised;
 
   /// Nền nút CTA đặt trên `surface` (hint bar ở màn 3).
   final Color ctaFill;
@@ -180,6 +197,24 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// preset đó là độ tương phản, không phải sắc thái.
   final Color accent;
 
+  /// Chữ / glyph đặt TRÊN nền [accent] (badge số đang phát, chip accent sau
+  /// này). PHẢI tối: accent đồng #C99A5B với chữ trắng chỉ đạt ~2.5:1 —
+  /// rớt chuẩn tương phản. Nâu gần đen ấm để không lạnh so với nền đồng.
+  final Color accentInk;
+
+  /// Dải màu ngăn khối — đường nối hero ↔ danh sách ở màn 3, và mọi seam kiểu
+  /// đó về sau. Khối màu đặc, KHÔNG hoa văn: ngôn ngữ của app là hình học tối
+  /// giản (radius 2, không trang trí thừa), một dải đặc là đủ và đúng.
+  ///
+  /// CÙNG HỌ với [welcomeBandLower]/[welcomeBandUpper] của Gate — đây là cùng
+  /// một thủ pháp color-block, chỉ khác màn. Đổi tông band ở Gate thì soát cả
+  /// token này, nếu không hai màn sẽ trôi khỏi nhau.
+  ///
+  /// highContrast trong suốt: preset đó phẳng tuyệt đối, và dải chỉ là seam
+  /// trang trí — mất nó không mất thông tin nào (cùng lý lẽ với [frameShadow]
+  /// và band ở Gate).
+  final Color sectionBand;
+
   // ── nền màn chào ─────────────────────────────────────────────────────────
 
   /// Nền phía sau collage hai vùng ảnh ở Gate — ĐI THEO THEME.
@@ -196,12 +231,18 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// surface; riêng `line` KHÔNG dùng được trên nền này — xem gate_screen.
   final Color welcomeBackdrop;
 
-  /// Lớp phủ trên ảnh-nền-mờ (ambient) của Gate: CHÍNH LÀ màu backdrop kèm
-  /// alpha theo preset. Alpha là "âm lượng" của ảnh nền — thấp hơn ⇒ ảnh lộ
-  /// nhiều hơn. Bất biến phải giữ khi chỉnh: đủ đặc để chữ ink/inkMuted vẫn
-  /// được coi là nằm trên backdrop (họ surface), KHÔNG phải trên ảnh.
-  /// highContrast đặt alpha = 100%: ambient tự tắt thành nền phẳng, không
-  /// cần nhánh điều kiện nào trong widget.
+  /// Lớp phủ trên ảnh-nền-mờ của Gate — tông TƯỜNG TRANH phía sau hai khung.
+  ///
+  /// ĐƯỢC PHÉP TỐI HƠN BACKDROP, KỂ CẢ Ở THEME SÁNG (quyết định sản phẩm):
+  /// hai khung ảnh cần nền tối hơn chúng để nổi; ambient sáng trên theme sáng
+  /// làm khung chìm vào tường. Theme sáng vì thế KHÔNG "sáng bừng cả màn" —
+  /// giấy ở rìa, tường tranh trầm ở giữa, band taupe làm lớp đệm.
+  ///
+  /// AN TOÀN CHỮ KHÔNG DO TOKEN NÀY ĐẢM NHẬN: vùng chữ của Gate được
+  /// [welcomeBandLower]/[welcomeBandUpper] (đục) + scrim đáy màu backdrop che.
+  /// Nếu chỉnh alpha/độ tối ở đây, thứ phải soát lại là band và scrim, không
+  /// phải màu chữ. highContrast đặt ĐẶC 100% màu nền: ambient tự tắt thành
+  /// nền phẳng, không cần nhánh điều kiện nào trong widget.
   final Color welcomeAmbient;
 
   /// HAI KHỐI MÀU BỐ CỤC của tường chào — dải dưới (~42% chiều cao) và dải
@@ -249,18 +290,19 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// Mặc định. Rijksmuseum-style: nền gần đen, chữ trắng. Đúng cho phòng trưng
   /// bày tối, và không làm phiền khách đứng cạnh.
   static const MuseumTokens dark = MuseumTokens(
-    surface: Color(0xFF141414),
+    surface: Color(0xFF151312),
     ink: Color(0xFFFFFFFF),
-    inkMuted: Color(0xFFCFCFCF),
-    inkFaint: Color(0xFF9B9B9B),
-    line: Color(0xFF222222),
+    inkMuted: Color(0xFFD4CCC2),
+    inkFaint: Color(0xFFA39A8E),
+    line: Color(0xFF262220),
+    surfaceRaised: Color(0xFF201D1A),
     ctaFill: Color(0xFFFFFFFF),
-    ctaLabel: Color(0xFF000000),
-    ctaDisabled: Color(0xFF6E6E6E),
+    ctaLabel: Color(0xFF151312),
+    ctaDisabled: Color(0xFF6B655D),
 
     inkOnImage: Color(0xFFFFFFFF),
-    mutedOnImage: Color(0xFFCFCFCF),
-    artistOnImage: Color(0xFFC8C8C8),
+    mutedOnImage: Color(0xFFD6CFC5),
+    artistOnImage: Color(0xFFCEC7BD),
     scrimBack: Color(0x66000000),
     lineOnImage: Color(0x59FFFFFF),
     ctaOnImageFill: Color(0xFFFFFFFF),
@@ -270,12 +312,14 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeil,
 
     accent: Color(0xFFC99A5B),
+    accentInk: Color(0xFF201509),
+    sectionBand: Color(0xFF42231B), // cùng tông band Gate
 
     welcomeBackdrop: Color(0xFF181A1F),
-    welcomeAmbient: Color(0xB3181A1F), 
-    welcomeBandLower: Color(0xFF5E3226), 
-    welcomeBandUpper: Color(0xFF244740), 
-    frameShadow: Color(0x80000000), 
+    welcomeAmbient: Color(0xB3181A1F), // ~70% — tường tranh tối, ảnh nổi
+    welcomeBandLower: Color(0xFF42231B), // nâu đất — cùng giá trị bandUpper (chủ đích)
+    welcomeBandUpper: Color(0xFF42231B),
+    frameShadow: Color(0x80000000),
 
     radiusSharp: 2,
     gutter: 18,
@@ -291,18 +335,19 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// Toàn bộ họ on-image giữ nguyên giá trị của [dark]: ảnh hiện vật không sáng
   /// lên theo theme, nên chữ trên nó cũng không được đổi.
   static const MuseumTokens light = MuseumTokens(
-    surface: Color(0xFFF7F7F5),
-    ink: Color(0xFF141414),
-    inkMuted: Color(0xFF5A5A5A),
-    inkFaint: Color(0xFF7A7A7A),
-    line: Color(0xFFE0E0DC),
-    ctaFill: Color(0xFF141414),
-    ctaLabel: Color(0xFFF7F7F5),
-    ctaDisabled: Color(0xFFBFBFBF),
+    surface: Color(0xFFF6F3EE),
+    ink: Color(0xFF171412),
+    inkMuted: Color(0xFF5D554C),
+    inkFaint: Color(0xFF7D7469),
+    line: Color(0xFFE5DFD6),
+    surfaceRaised: Color(0xFFEBE5DB), // TRẦM hơn giấy, không trắng hơn
+    ctaFill: Color(0xFF171412),
+    ctaLabel: Color(0xFFF6F3EE),
+    ctaDisabled: Color(0xFFC4BDB3),
 
     inkOnImage: Color(0xFFFFFFFF),
-    mutedOnImage: Color(0xFFCFCFCF),
-    artistOnImage: Color(0xFFC8C8C8),
+    mutedOnImage: Color(0xFFD6CFC5),
+    artistOnImage: Color(0xFFCEC7BD),
     scrimBack: Color(0x66000000),
     lineOnImage: Color(0x59FFFFFF),
     ctaOnImageFill: Color(0xFFFFFFFF),
@@ -312,13 +357,18 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeil,
 
     accent: Color(0xFFC99A5B),
+    accentInk: Color(0xFF201509),
+    sectionBand: Color(0xFFD9D0C3), // cùng tông band Gate (taupe)
 
-    welcomeBackdrop: Color(0xFFF1F3ED),
-    welcomeAmbient: Color(0xB3181A1F),
-    welcomeBandUpper: Color(0xFFCDE0C4),
-    welcomeBandLower: Color.fromARGB(255, 162, 128, 125),
-    frameShadow: Color(0x80000000),
-
+    // Giấy ấm — cùng độ chói với surface #F7F7F5 nhưng ngả đất,
+    // để hai khung ảnh nổi như tranh treo tường sáng.
+    welcomeBackdrop: Color(0xFFF0EBE3),
+    // TỐI trên theme sáng — CHỦ ĐÍCH, xem doc của field: đây là tường tranh,
+    // ảnh cần nền tối hơn chúng để nổi. Vùng chữ được band + scrim che.
+    welcomeAmbient: Color(0xB3262019),
+    welcomeBandLower: Color(0xFFD9D0C3), // taupe ấm — giữa giấy và tường tối
+    welcomeBandUpper: Color(0xFFD9D0C3),
+    frameShadow: Color(0x4D000000), // ~30% — tường sáng, bóng nhạt hơn dark
 
     radiusSharp: 2,
     gutter: 18,
@@ -335,6 +385,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     inkMuted: Color(0xFFF0F0F0),
     inkFaint: Color(0xFFD0D0D0),
     line: Color(0xFF6E6E6E),
+    surfaceRaised: Color(0xFF1C1C1C), // phân tách hàng — xem doc của field
     ctaFill: Color(0xFFFFFFFF),
     ctaLabel: Color(0xFF000000),
     ctaDisabled: Color(0xFF4A4A4A),
@@ -351,6 +402,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeilStrong,
 
     accent: Color(0xFFE3B87E),
+    accentInk: Color(0xFF000000), // tương phản trước, sắc thái sau
+    sectionBand: Color(0x00000000), // phẳng tuyệt đối
 
     // Đen tuyệt đối = surface của preset: tương phản trước, sắc thái sau.
     welcomeBackdrop: Color(0xFF000000),
@@ -436,6 +489,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     Color? inkMuted,
     Color? inkFaint,
     Color? line,
+    Color? surfaceRaised,
     Color? ctaFill,
     Color? ctaLabel,
     Color? ctaDisabled,
@@ -450,6 +504,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     LinearGradient? playerVeil,
     LinearGradient? heroVeil,
     Color? accent,
+    Color? accentInk,
+    Color? sectionBand,
     Color? welcomeBackdrop,
     Color? welcomeAmbient,
     Color? welcomeBandLower,
@@ -464,6 +520,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       inkMuted: inkMuted ?? this.inkMuted,
       inkFaint: inkFaint ?? this.inkFaint,
       line: line ?? this.line,
+      surfaceRaised: surfaceRaised ?? this.surfaceRaised,
       ctaFill: ctaFill ?? this.ctaFill,
       ctaLabel: ctaLabel ?? this.ctaLabel,
       ctaDisabled: ctaDisabled ?? this.ctaDisabled,
@@ -478,6 +535,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       playerVeil: playerVeil ?? this.playerVeil,
       heroVeil: heroVeil ?? this.heroVeil,
       accent: accent ?? this.accent,
+      accentInk: accentInk ?? this.accentInk,
+      sectionBand: sectionBand ?? this.sectionBand,
       welcomeBackdrop: welcomeBackdrop ?? this.welcomeBackdrop,
       welcomeAmbient: welcomeAmbient ?? this.welcomeAmbient,
       welcomeBandLower: welcomeBandLower ?? this.welcomeBandLower,
@@ -497,6 +556,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       inkMuted: Color.lerp(inkMuted, other.inkMuted, t)!,
       inkFaint: Color.lerp(inkFaint, other.inkFaint, t)!,
       line: Color.lerp(line, other.line, t)!,
+      surfaceRaised: Color.lerp(surfaceRaised, other.surfaceRaised, t)!,
       ctaFill: Color.lerp(ctaFill, other.ctaFill, t)!,
       ctaLabel: Color.lerp(ctaLabel, other.ctaLabel, t)!,
       ctaDisabled: Color.lerp(ctaDisabled, other.ctaDisabled, t)!,
@@ -511,6 +571,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       playerVeil: LinearGradient.lerp(playerVeil, other.playerVeil, t)!,
       heroVeil: LinearGradient.lerp(heroVeil, other.heroVeil, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
+      accentInk: Color.lerp(accentInk, other.accentInk, t)!,
+      sectionBand: Color.lerp(sectionBand, other.sectionBand, t)!,
       welcomeBackdrop: Color.lerp(welcomeBackdrop, other.welcomeBackdrop, t)!,
       welcomeAmbient: Color.lerp(welcomeAmbient, other.welcomeAmbient, t)!,
       welcomeBandLower:

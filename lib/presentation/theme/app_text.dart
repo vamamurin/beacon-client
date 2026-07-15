@@ -32,12 +32,33 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppFonts {
-  static const String serif = 'PlayfairDisplay';
+  static const String serif = 'CormorantGaramond';
   static const String sans = 'Inter';
 }
 
 abstract final class AppText {
   // ── serif titles (Playfair Display) ──────────────────────────────────────
+
+  /// Hero title của KHU TRƯNG BÀY (màn 3 — người dùng duy nhất còn lại sau
+  /// khi Gate chuyển sang [welcomeTitle]). 32 vì hero giờ cao 80% màn hình,
+  /// và tên khu thường ngắn hơn tên hiện vật. height nới từ 1.02 để dấu tiếng
+  /// Việt không bị cắt khi hệ thống phóng chữ.
+  // static const TextStyle heroTitle = TextStyle(
+  //   fontFamily: AppFonts.serif,
+  //   fontWeight: FontWeight.w600,
+  //   fontSize: 32,
+  //   height: 1.12,
+  // );
+
+  /// Tiêu đề màn chào (Gate) — CỐ Ý tách khỏi [heroTitle]: Gate là màn duy
+  /// nhất có ~55% không gian trống nên chịu được cỡ 34; màn 3 dùng [heroTitle]
+  /// 28 trên hero 250px thì không. Đổi cỡ ở đây không được ảnh hưởng màn 3.
+  // static const TextStyle welcomeTitle = TextStyle(
+  //   fontFamily: AppFonts.serif,
+  //   fontWeight: FontWeight.w600,
+  //   fontSize: 34,
+  //   height: 1.12,
+  // );
 
   /// Welcome / hero title. height nới từ 1.02 để dấu tiếng Việt không bị cắt
   /// khi hệ thống phóng chữ.
@@ -55,6 +76,20 @@ abstract final class AppText {
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
     fontSize: 34,
+    height: 1.12,
+  );
+
+  static const TextStyle museumName = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 18,
+    height: 1.12,
+  );
+
+  static const TextStyle welcomeSubTitle = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 28,
     height: 1.12,
   );
 

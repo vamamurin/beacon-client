@@ -33,3 +33,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+  - family: CormorantGaramond
+    fonts:
+      - asset: assets/fonts/CormorantGaramond-Regular.ttf
+        weight: 400
+      - asset: assets/fonts/CormorantGaramond-SemiBold.ttf
+        weight: 600
+      - asset: assets/fonts/CormorantGaramond-Bold.ttf
+        weight: 700

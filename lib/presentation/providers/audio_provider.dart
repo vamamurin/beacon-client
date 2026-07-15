@@ -45,6 +45,11 @@ class AudioProvider extends ChangeNotifier {
   // ── user intents ── (tất cả đi qua controller, không chạm engine)
   AudioIntentResult tapExhibit({required int major, required int minor}) =>
       _controller.tapExhibit(major: major, minor: minor);
+
+  /// Phát lại intro của khu — nút play trên hero màn 3.
+  AudioIntentResult tapZoneIntro({required int major}) =>
+      _controller.tapZoneIntro(major: major);
+
   AudioIntentResult play() => _controller.userPlay();
   void pause() => _controller.userPause();
 

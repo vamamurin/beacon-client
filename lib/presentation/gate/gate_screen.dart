@@ -128,7 +128,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           child: Text(
                             museumName.toUpperCase(),
-                            style: AppText.kicker
+                            style: AppText.museumName
                                 .copyWith(color: t.inkMuted),
                           ),
                         ),
@@ -149,12 +149,16 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                     children: [
                       // Điểm nhấn màu duy nhất của màn hình — phá thế đơn sắc
                       // trắng/xám/đen. Trang trí thuần tuý nên không Semantics.
-                      Container(width: 28, height: 2, color: t.accent),
+                      Container(width: 88, height: 2, color: t.accent),
                       const SizedBox(height: 12),
-                      Text('Chào mừng\nquý khách',
+                      Text('Chào mừng',
                           style: AppText.welcomeTitle
                               .copyWith(color: t.ink)),
-                      const SizedBox(height: 30),
+                      // const SizedBox(height: 10),
+                      Text('quý khách',
+                          style: AppText.welcomeSubTitle
+                              .copyWith(color: t.ink)),
+                      const SizedBox(height: 10),
                       Text(
                         // Rút từ 3 ý còn 2: "không cần tìm kiếm" là hệ quả
                         // của "tự nhận biết", không cần nói riêng.
@@ -166,7 +170,7 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
                   ),
                 ),
 
-                const SizedBox(height: 40),
+                const SizedBox(height: 10),
 
                 // Bottom action area. Rebuilds on BLE-status change (grant /
                 // enable BT) via bleStatus, and on session change via the outer
@@ -291,19 +295,27 @@ class _WelcomeCollage extends StatelessWidget {
 
           // ── 4. Hai vùng ảnh ──
           Positioned(
-            left: w * 0.12,
-            top: h * 0.20,
-            width: w * 0.56,
-            height: h * 0.34,
+            // left: w * 0.12,
+            // top: h * 0.20,
+            // width: w * 0.56,
+            // height: h * 0.34,
+            left: w * 0.08,
+            top: h * 0.16,
+            width: w * 0.66,
+            height: h * 0.50,
             child: _framed(t, path: primaryPath,
                 decodeWidth: (w * 0.56 * dpr).round()),
           ),
           if (accentPath != null)
             Positioned(
+              // right: w * 0.08,
+              // top: h * 0.30,
+              // width: w * 0.26,
+              // height: h * 0.30,
               right: w * 0.08,
-              top: h * 0.30,
-              width: w * 0.26,
-              height: h * 0.30,
+              top: h * 0.42,
+              width: w * 0.34,   // = 0.66 / 3
+              height: h * 0.28,  // ≈ 0.50 / 3
               child: _framed(t, path: accentPath,
                   decodeWidth: (w * 0.26 * dpr).round()),
             ),

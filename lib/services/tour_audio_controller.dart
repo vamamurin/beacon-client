@@ -320,6 +320,44 @@ class TourAudioController {
         : AudioIntentResult.blockedNoHeadphones;
   }
 
+  /// Visitor bấm nút play trên hero của màn 3: PHÁT LẠI intro của khu đó.
+  /// Yêu cầu tường minh như [tapExhibit] — interrupt clip đang phát, load
+  /// intro, phát qua cổng [_tryPlay] (reading mode: vẫn load để màn 4 hiện
+  /// transcript, chỉ không ra tiếng).
+  ///
+  /// [major] là zone ĐÓNG BĂNG của màn hình (route args), không phải zone của
+  /// arbiter — cùng kỷ luật với [tapExhibit].
+  ///
+  /// KHÔNG tái dụng [_loadIntro]: hàm đó reset `_autoIndex = 0` vô điều kiện,
+  /// đúng cho đường enter/change zone nhưng SAI ở đây khi tap intro của một
+  /// zone đã rời đi — nó sẽ cướp auto-queue của zone visitor đang thực sự
+  /// đứng. Quy tắc giữ nguyên từ tapExhibit: chỉ đụng `_autoIndex` khi major
+  /// trùng zone vật lý hiện tại; khi đó reset về 0 để intro phát xong,
+  /// auto-tour đi lại từ hiện vật có sóng đầu tiên — y hệt lần vào zone
+  /// (rule 1). Intro của zone khác: phát xong thì im, chờ tap —
+  /// [_onClipCompleted] đã chặn advance cho ref lệch zone.
+  AudioIntentResult tapZoneIntro({required int major}) {
+    final zone = _repo.zoneByMajor(major);
+    if (zone == null) return AudioIntentResult.notFound;
+    final resolved = zone.introAudio.resolve(_language(), _fallback);
+    if (resolved == null) return AudioIntentResult.notFound;
+
+    if (major == _activeZoneMajor) {
+      _autoIndex = 0;
+    }
+
+    _engine.load(
+      AudioTrackRef.zoneIntro(major),
+      _resolveUri(resolved.track.filePath),
+      durationHint: Duration(
+          milliseconds: (resolved.track.durationSec * 1000).round()),
+    );
+
+    return _tryPlay()
+        ? AudioIntentResult.started
+        : AudioIntentResult.blockedNoHeadphones;
+  }
+
   /// Visitor bấm play (resume, hoặc khởi động một intro đã load nhưng im).
   AudioIntentResult userPlay() {
     if (_engine.state.current == null) return AudioIntentResult.noClip;
