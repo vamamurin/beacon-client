@@ -3,6 +3,13 @@
 // Design tokens, instance-based. Thay cho `static const` trong AppColors, vốn
 // không thể mang hai giá trị cùng lúc.
 //
+//
+// ⚠ MỌI CON SỐ TRONG FILE NÀY ĐƯỢC ĐO TRONG MỘT NGỮ CẢNH CỤ THỂ.
+// Đổi ngữ cảnh (cỡ hero, font, tỷ lệ khung) là VÔ HIỆU HOÁ con số, không
+// phải chỉ làm nó lệch đi một chút. Đã dính ba lần: hero 250px→80% (veil
+// đen đặc), Playfair→Cormorant (height + stopName), 0.56→0.66 (decodeWidth).
+// Nếu bạn đang đổi một hằng số hình học: grep xem con số nào được đo QUANH nó.
+//
 // ═══════════════════════════════════════════════════════════════════════════
 // HAI HỌ TOKEN — đọc kỹ trước khi thêm field mới
 // ═══════════════════════════════════════════════════════════════════════════
@@ -96,7 +103,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     // ── điểm nhấn ──
     required this.accent,
     required this.accentInk,
-    required this.sectionBand,
+    required this.heroDissolve,
 
     // ── nền màn chào ──
     required this.welcomeBackdrop,
@@ -213,7 +220,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   /// highContrast trong suốt: preset đó phẳng tuyệt đối, và dải chỉ là seam
   /// trang trí — mất nó không mất thông tin nào (cùng lý lẽ với [frameShadow]
   /// và band ở Gate).
-  final Color sectionBand;
+  final Color heroDissolve;
 
   // ── nền màn chào ─────────────────────────────────────────────────────────
 
@@ -313,7 +320,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
     accent: Color(0xFFC99A5B),
     accentInk: Color(0xFF201509),
-    sectionBand: Color(0xFF42231B), // cùng tông band Gate
+    heroDissolve: Color(0xFF151312), 
 
     welcomeBackdrop: Color(0xFF181A1F),
     welcomeAmbient: Color(0xB3181A1F), // ~70% — tường tranh tối, ảnh nổi
@@ -358,7 +365,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
     accent: Color(0xFFC99A5B),
     accentInk: Color(0xFF201509),
-    sectionBand: Color(0xFFD9D0C3), // cùng tông band Gate (taupe)
+    heroDissolve: Color(0xFFF6F3EE), // cùng tông band Gate (taupe)
 
     // Giấy ấm — cùng độ chói với surface #F7F7F5 nhưng ngả đất,
     // để hai khung ảnh nổi như tranh treo tường sáng.
@@ -403,7 +410,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
     accent: Color(0xFFE3B87E),
     accentInk: Color(0xFF000000), // tương phản trước, sắc thái sau
-    sectionBand: Color(0x00000000), // phẳng tuyệt đối
+    heroDissolve: Color(0x00000000), // phẳng tuyệt đối
 
     // Đen tuyệt đối = surface của preset: tương phản trước, sắc thái sau.
     welcomeBackdrop: Color(0xFF000000),
@@ -441,8 +448,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   static const LinearGradient _heroVeil = LinearGradient(
     begin: Alignment.bottomCenter,
     end: Alignment.topCenter,
-    colors: [Color(0xFF000000), Color(0x26000000)],
-    stops: [0.04, 0.60],
+    colors: [Color(0xB3000000), Color(0x26000000)],
+    stops: [0.42, 0.74],
   );
 
   // ── biến thể đậm cho highContrast ─────────────────────────────────────────
@@ -474,10 +481,9 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   static const LinearGradient _heroVeilStrong = LinearGradient(
     begin: Alignment.bottomCenter,
     end: Alignment.topCenter,
-    colors: [Color(0xFF000000), Color(0x80000000)],
-    stops: [0.04, 0.60],
+    colors: [Color(0xD9000000), Color(0x80000000)],
+    stops: [0.42, 0.74],
   );
-
   // ═════════════════════════════════════════════════════════════════════════
   // ThemeExtension
   // ═════════════════════════════════════════════════════════════════════════
@@ -536,7 +542,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       heroVeil: heroVeil ?? this.heroVeil,
       accent: accent ?? this.accent,
       accentInk: accentInk ?? this.accentInk,
-      sectionBand: sectionBand ?? this.sectionBand,
+      heroDissolve: sectionBand ?? this.heroDissolve,
       welcomeBackdrop: welcomeBackdrop ?? this.welcomeBackdrop,
       welcomeAmbient: welcomeAmbient ?? this.welcomeAmbient,
       welcomeBandLower: welcomeBandLower ?? this.welcomeBandLower,
@@ -572,7 +578,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       heroVeil: LinearGradient.lerp(heroVeil, other.heroVeil, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       accentInk: Color.lerp(accentInk, other.accentInk, t)!,
-      sectionBand: Color.lerp(sectionBand, other.sectionBand, t)!,
+      heroDissolve: Color.lerp(heroDissolve, other.heroDissolve, t)!,
       welcomeBackdrop: Color.lerp(welcomeBackdrop, other.welcomeBackdrop, t)!,
       welcomeAmbient: Color.lerp(welcomeAmbient, other.welcomeAmbient, t)!,
       welcomeBandLower:
