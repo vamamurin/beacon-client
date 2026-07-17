@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
+import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
@@ -41,7 +42,15 @@ class SettingsScreen extends StatelessWidget {
             Text('Cài đặt', style: AppText.sheetTitle.copyWith(color: t.ink)),
       ),
       body: ListView(
-        padding: EdgeInsets.fromLTRB(t.gutter, 8, t.gutter, 24),
+        // AppSpace.gutter (20), KHÔNG phải t.gutter (18 — đã xoá khỏi
+        // MuseumTokens). Màn này là call site DUY NHẤT còn đọc token đó, nên
+        // nó là màn duy nhất trong app đang lệch 2dp so với màn 1 và màn 3.
+        // Một token chỉ có một người đọc thì không ai kiểm nó.
+        //
+        // `8` và `24` vẫn là số thô: màn Cài đặt chưa qua đợt tái cấu trúc thị
+        // giác (mới làm màn 1 và 3). Để nguyên có chủ đích — sửa nửa vời một
+        // màn chưa redesign chỉ tạo ra một lưới thứ ba.
+        padding: const EdgeInsets.fromLTRB(AppSpace.gutter, 8, AppSpace.gutter, 24),
         children: [
           Text('GIAO DIỆN', style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
@@ -135,7 +144,9 @@ class _ServerSectionState extends State<_ServerSection> {
             labelStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
             hintStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
             enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: t.line)),
+                // Viền ô nhập là ranh giới CONTROL ⇒ t.outline (3.55:1).
+                // t.line là hairline trang trí: 1.17:1 — ô nhập không có viền.
+                borderSide: BorderSide(color: t.outline)),
             focusedBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: t.ctaFill)),
           ),

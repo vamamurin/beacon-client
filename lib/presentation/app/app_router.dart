@@ -29,7 +29,7 @@ abstract final class AppRouter {
   static const String exhibitListRoute = '/exhibits'; // Screen 3
   static const String exhibitDetailRoute = '/exhibit'; // Screen 4
   static const String settingsRoute = '/settings'; // setting screen
-  static const String initialRoute = gateRoute;
+  static const String initialRoute = zoneRoute;
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {

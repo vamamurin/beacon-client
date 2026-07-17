@@ -55,16 +55,42 @@ import 'package:flutter/material.dart';
 //
 //       LUẬT THAY THẾ cho (b) — chỉ một, và nó là luật về TRẬT TỰ chứ không
 //       phải về CON SỐ: khe phải TĂNG DẦN theo mức tách rời. Ở Gate:
-//         tiêu đề↔phụ đề (0)  <  phụ đề↔lede (8)  <  vạch↔tiêu đề (12)
+//         tiêu đề↔phụ đề (0)  <  vạch↔tiêu đề (12)  =  phụ đề↔lede (12)
 //         <  khối chữ↔CTA (24)
-//       Bốn số, thứ tự đúng, mỗi bước có nghĩa. Đó là điều kiện duy nhất.
 //
-//       ĐIỀU PHẢI KIỂM BẰNG MẮT (số không nói được): khe TRÊN một đoạn phải
-//       lớn hơn hẳn khe TRONG đoạn đó, nếu không đoạn văn thôi đọc như một
-//       khối riêng và tụt xuống thành "một dòng nữa của tiêu đề". lede là
-//       13/1.55 ⇒ khe giữa hai dòng của chính nó ≈ 7–8dp. Khe 8 phía trên nó
-//       cộng leading ≈ 13dp, tức chỉ ~1.6×. Đủ, nhưng sát — đó là con số cần
-//       nhìn nếu sau này thấy khối chữ Gate "dính".
+//       LUẬT THẬT chỉ có MỘT, và nó không phải "thứ tự tăng dần nghiêm ngặt":
+//
+//           khe TRÊN một đoạn phải lớn hơn HẲN khe TRONG đoạn đó.
+//
+//       Nếu không, đoạn văn thôi đọc như một khối riêng và tụt xuống thành
+//       "một dòng nữa của tiêu đề". Đó là điều kiện duy nhất, và nó là điều
+//       kiện QUANG HỌC — nó nói về khe HIỆU DỤNG (khe + leading), không nói về
+//       con số trong `SizedBox`.
+//
+//       ĐÃ SỬA (giữ lại để không ai "sửa" ngược): bản trước ghi ví dụ
+//       `phụ đề↔lede (8)` và kèm cảnh báo của chính nó —
+//
+//           "lede là 13/1.55 ⇒ khe giữa hai dòng của chính nó ≈ 7–8dp. Khe 8
+//            phía trên nó cộng leading ≈ 13dp, tức chỉ ~1.6×. Đủ, nhưng SÁT —
+//            đó là con số cần nhìn nếu sau này thấy khối chữ Gate dính."
+//
+//       Rồi có người ĐÃ NHÌN, và nâng 8 → 12. Đó là gate_screen hôm nay, và nó
+//       ĐÚNG: 12 + leading ≈ 19dp so với 7–8dp bên trong lede = ~2.5×, thoải
+//       mái thay vì sát. Người đó làm đúng thứ doc dặn; chỉ là không ai quay
+//       lại sửa doc, nên suốt thời gian sau đó doc và code mâu thuẫn nhau và
+//       CẢ HAI đều trông như nguồn sự thật.
+//
+//       Hệ quả: `vạch↔tiêu đề` và `phụ đề↔lede` giờ BẰNG NHAU (12 = 12). Thứ
+//       tự tăng dần nghiêm ngặt GÃY — và không sao, vì nó chưa bao giờ là luật.
+//       Nó là một ví dụ bị đọc nhầm thành luật. Khối tiêu đề giờ có 12 ở cả
+//       hai phía: nó đọc ra là một đơn vị cân xứng.
+//
+//       CÂU HỎI CÒN MỞ (chỉ mắt trả lời được, số không): vạch 88×2 GIỚI THIỆU
+//       tiêu đề, nên có lẽ nó phải DÍNH tiêu đề hơn là lede dính phụ đề — tức
+//       vạch↔tiêu đề nên nhỏ hơn 12. Nhưng thang chỉ có x2 (8) dưới x3, và 8
+//       là con số vừa bị loại vì quá sát ở chỗ kia. Nếu bao giờ thấy vạch
+//       "trôi" khỏi tiêu đề, đó là chỗ để nhìn — và câu trả lời có thể là thang
+//       cần một nấc 10, chứ không phải khe này cần đổi.
 //
 // SỬA LUẬT (giữ lại để không tái phạm): bản đầu của file này viết "BA MỨC
 // NHỊP DỌC, và chỉ ba" cho MỌI khoảng cách, gộp cả chữ. Đó là lỗi PHẠM TRÙ —

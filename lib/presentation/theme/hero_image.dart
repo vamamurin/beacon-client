@@ -15,7 +15,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 
-// import 'museum_palette.dart';
+import 'museum_tokens.dart';
 
 class HeroImage extends StatelessWidget {
   /// Absolute file path from the active bundle (via repository.resolveAsset),
@@ -28,39 +28,44 @@ class HeroImage extends StatelessWidget {
   /// Decode target width in px — set to the on-screen width to cap memory.
   final int? cacheWidth;
 
-  /// Fallback gradient shown when [filePath] is null or the file fails to load.
-  /// Defaults to a neutral dark tone consistent with the mockup's `.ph`.
-  final Gradient fallback;
+  /// Ghi đè gradient fallback. `null` (mặc định) ⇒ lấy
+  /// [MuseumTokens.imageFallback] từ theme — đó là đường đúng; tham số này chỉ
+  /// dành cho trường hợp một màn thật sự cần khác, và tới giờ chưa có màn nào.
+  ///
+  /// TRƯỚC 1.5 ĐÂY LÀ MỘT `static const` #2A2A2A→#0C0C0C nằm ngay trong file
+  /// này — ngoài hệ token, trong khối dựng chung của CẢ BỐN màn.
+  ///
+  /// ⚠ GIÁ TRỊ KHÔNG ĐỔI, CHỖ Ở CỦA NÓ THÌ ĐỔI. Nó vẫn tối ở mọi preset, và
+  /// đó KHÔNG phải "chưa sửa xong": bốn trên năm call site có chữ TRẮNG (họ
+  /// on-image) nằm trên. Làm fallback sáng lên ở preset giấy là để chữ trắng
+  /// biến mất đúng lúc ảnh hỏng — tức đúng lúc màn hình cần nói rằng có gì đó
+  /// sai. Xem doc [MuseumTokens.imageFallback].
+  final Gradient? fallback;
 
   const HeroImage({
     super.key,
     required this.filePath,
     this.veil,
     this.cacheWidth,
-    this.fallback = _defaultFallback,
+    this.fallback,
   });
 
-  static const Gradient _defaultFallback = LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [Color(0xFF2A2A2A), Color(0xFF0C0C0C)],
-  );
 
   @override
   Widget build(BuildContext context) {
     return Stack(
       fit: StackFit.expand,
       children: [
-        _buildImage(),
+        _buildImage(context),
         if (veil != null)
           DecoratedBox(decoration: BoxDecoration(gradient: veil)),
       ],
     );
   }
 
-  Widget _buildImage() {
+  Widget _buildImage(BuildContext context) {
     final path = filePath;
-    if (path == null) return _fallbackBox();
+    if (path == null) return _fallbackBox(context);
 
     final file = File(path);
     return Image.file(
@@ -68,15 +73,18 @@ class HeroImage extends StatelessWidget {
       fit: BoxFit.cover,
       cacheWidth: cacheWidth,
       // Any decode/IO error -> gradient, never a broken-image box.
-      errorBuilder: (_, __, ___) => _fallbackBox(),
+      errorBuilder: (_, __, ___) => _fallbackBox(context),
       // Smooth in once decoded; show fallback tone underneath meanwhile.
       frameBuilder: (context, child, frame, wasSync) {
         if (wasSync || frame != null) return child;
-        return _fallbackBox();
+        return _fallbackBox(context);
       },
     );
   }
 
-  Widget _fallbackBox() =>
-      DecoratedBox(decoration: BoxDecoration(gradient: fallback));
+  Widget _fallbackBox(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: fallback ?? context.tokens.imageFallback,
+        ),
+      );
 }

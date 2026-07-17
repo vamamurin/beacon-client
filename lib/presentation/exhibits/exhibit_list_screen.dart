@@ -96,6 +96,13 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
   late final ExhibitPresenceProvider _presence;
   late final Stream<Set<int>> _presenceStream;
 
+  // Nối `open` (độ mở của hero) từ flexibleSpace tới leading — xem doc
+  // `scrimBack` ở museum_tokens.dart cho lý do việc nối dây này tồn tại.
+  // `Listenable` chứ không phải `ValueNotifier<double>` riêng: ScrollController
+  // đã LÀ một Listenable, việc thêm một tầng thông báo thứ hai chỉ tạo ra hai
+  // nguồn sự thật có thể trôi khỏi nhau.
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -105,6 +112,12 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
     // detail we shouldn't depend on.
     _presence = context.read<ExhibitPresenceProvider>();
     _presenceStream = _presence.watchMajor(widget.major);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -139,8 +152,13 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
           ];
 
           return CustomScrollView(
+            controller: _scrollController,
             slivers: [
-              _ZoneHeroBar(zone: zone, content: content),
+              _ZoneHeroBar(
+                zone: zone,
+                content: content,
+                scrollController: _scrollController,
+              ),
               if (visible.isEmpty)
                 const SliverFillRemaining(
                   hasScrollBody: false,
@@ -240,11 +258,19 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
 ///    nén vào 60px sẽ vỡ dải, giãn ra 112px thì mượt. Đây là ngoại lệ hợp lệ
 ///    của luật "tỷ lệ theo màn hình" ở doc _WelcomeCollage.
 ///
-/// 4. TỰ TẮT Ở highContrast, KHÔNG CẦN NHÁNH ĐIỀU KIỆN. Alpha của ramp được
-///    NHÂN với alpha của chính token [MuseumTokens.heroDissolve]. HC đặt token
-///    trong suốt ⇒ mọi stop về 0 ⇒ gradient biến mất ⇒ ảnh gặp danh sách bằng
-///    cạnh cứng — đúng thứ preset đó cần (hoà tan là phản đề của tương phản
-///    cao). Cùng thủ pháp mà welcomeAmbient đang dùng.
+/// 4. TẮT Ở highContrast BẰNG MỘT `if` TƯỜNG MINH — `if (t.heroDissolveEnabled)`.
+///    Ảnh gặp danh sách bằng cạnh cứng: hoà tan là PHẢN ĐỀ của tương phản cao.
+///
+///    Bản trước làm việc này bằng một mẹo — nhân mọi stop với alpha của token
+///    `heroDissolve`, vốn trong suốt ở HC ⇒ ramp tự biến mất, không cần nhánh
+///    nào. Mẹo đó gọn và nó SAI, chỉ chưa lộ: nó khoá chặt hai thứ không liên
+///    quan — "ramp hạ cánh vào MÀU nào" và "preset này CÓ ramp không" — vào
+///    cùng một field. Khi 1.8 gỡ field đó (nó chỉ là `surface` chép lại, xem
+///    doc token) thì mẹo mất chỗ bám: `surface` đục ở cả ba preset, nên ramp
+///    sẽ BẬT ở HC. Điều kiện phải hiện ra thành chữ mới soát được.
+///
+///    Lợi ích phụ: HC không dựng gradient nào cả, thay vì dựng bảy stop trong
+///    suốt rồi vẽ chúng lên nhau.
 ///
 /// ⚠ HỆ QUẢ HÌNH HỌC — lý do [_heroTextBottom] tồn tại: chữ hero từng neo ở
 /// `bottom: x6` (24), tức NẰM GIỮA vùng tan. Ở light theme, đáy hero bị kéo về
@@ -260,7 +286,18 @@ class _ZoneHeroBar extends StatelessWidget {
   final ZoneInfo zone;
   final ContentProvider content;
 
-  const _ZoneHeroBar({required this.zone, required this.content});
+  /// Nguồn CHUNG của `open` cho cả [leading] lẫn [flexibleSpace]. Trước bản
+  /// sửa này, hai vùng đó tính `open` ở hai nơi tách biệt — `flexibleSpace` có
+  /// nó qua `LayoutBuilder`, `leading` không có đường nào tới nó — nên nút back
+  /// mặc định luôn là `inkOnImage`, bất kể hero đang mở hay đã thu. Xem doc
+  /// `scrimBack` ở museum_tokens.dart.
+  final ScrollController scrollController;
+
+  const _ZoneHeroBar({
+    required this.zone,
+    required this.content,
+    required this.scrollController,
+  });
 
   /// Chiều cao vùng hoà tan. 144 = 4×36. Cố định theo dp — xem chi tiết 3 ở
   /// doc class.
@@ -344,6 +381,20 @@ class _ZoneHeroBar extends StatelessWidget {
     // RAM trên máy 2x. Cùng loại lỗi với decodeWidth ở Gate.
     final heroDecodeWidth = (media.size.width * media.devicePixelRatio).round();
 
+    // NGUỒN DUY NHẤT của `open`, đọc từ scroll offset — KHÔNG phải từ
+    // `LayoutBuilder.maxHeight` như bản trước. Hai cách đó cho CÙNG một con số
+    // khi mọi thứ yên, nhưng chỉ scroll offset mới đọc được ở `leading`, nơi
+    // không có `LayoutBuilder` nào của `flexibleSpace` để hỏi.
+    //
+    // 1.0 = mở hết, 0.0 = thu hết. `hasClients` false ở khung hình đầu tiên
+    // (trước layout) ⇒ coi như đang mở — đúng trạng thái ban đầu thật.
+    double open() {
+      if (!scrollController.hasClients) return 1.0;
+      final range = expandedHeight - collapsedHeight;
+      if (range <= 0) return 0.0; // màn quá thấp để hero có chỗ mở — xem 2.3
+      return (1 - scrollController.offset / range).clamp(0.0, 1.0);
+    }
+
     return SliverAppBar(
       pinned: true,
       expandedHeight: expandedHeight,
@@ -359,36 +410,61 @@ class _ZoneHeroBar extends StatelessWidget {
       // nút 48 trong đó ⇒ mép trái nút rơi ở 4dp, lệch khỏi đường dọc 20 của
       // màn. Đặt gutter + tap rồi tự padding là cách DUY NHẤT ghim nó đúng.
       leadingWidth: AppSpace.gutter + AppSpace.tap,
-      leading: Padding(
-        padding: const EdgeInsets.only(left: AppSpace.gutter),
-        child: Center(
-          child: Semantics(
-            button: true,
-            label: 'Quay lại',
-            child: Material(
-              color: t.scrimBack,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
+      // scrimBack GIỮ NGUYÊN 40% (quyết định thẩm mỹ đã chốt — xem doc token).
+      // Cái đổi là CHEVRON: nó chuyển họ theo `open`, thay vì cứng
+      // `inkOnImage`. Đây là lời giải mà doc `scrimBack` đã đề xuất nhưng chưa
+      // ai nối dây — chỗ nối dây là chính khối này.
+      leading: AnimatedBuilder(
+        animation: scrollController,
+        builder: (context, _) {
+          final o = open();
+          // Ngưỡng, không phải nội suy liên tục: dưới nó chevron NGẢ sang
+          // `ink`, cùng thời điểm scrim của nó nhận nền `surface` thật (ramp
+          // hoà tan đã phủ hết ảnh). Nội suy liên tục từng bị bác vì có một
+          // dải giữa chừng nơi glyph xám-trung-tính chìm vào cả hai nền — xem
+          // `_heroTextBottom` doc, "vùng chết của hoà tan". Ngưỡng cứng tại
+          // điểm ramp CHẠM ĐÁY né hẳn dải đó: hai bên ngưỡng đều có nền thuần.
+          final onSurface = o < 0.15;
+          return Padding(
+            padding: const EdgeInsets.only(left: AppSpace.gutter),
+            child: Center(
+              child: Semantics(
+                button: true,
+                label: 'Quay lại',
+                // excludeSemantics + onTap ĐI THÀNH CẶP: excludeSemantics gỡ cả
+                // cây con khỏi semantics, kể cả action onTap mà InkWell tự
+                // khai. Thiếu vế thứ hai là nút thôi bấm được bằng TalkBack —
+                // hồi quy im lặng, không test nào bắt được.
+                excludeSemantics: true,
                 onTap: () => Navigator.of(context).pop(),
-                child: const SizedBox(
-                  width: AppSpace.tap,
-                  height: AppSpace.tap,
-                  child: _BackGlyph(),
+                child: Material(
+                  color: t.scrimBack,
+                  shape: const CircleBorder(),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: () => Navigator.of(context).pop(),
+                    child: SizedBox(
+                      width: AppSpace.tap,
+                      height: AppSpace.tap,
+                      child: _BackGlyph(onSurface: onSurface),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
+          );
+        },
       ),
 
       flexibleSpace: LayoutBuilder(builder: (context, c) {
-        // 1.0 = mở hết, 0.0 = thu hết. Chữ hero fade theo bình phương của độ
-        // mở (tắt sớm) để không trôi vào vùng thanh ghim khi đang thu.
-        final open = ((c.maxHeight - collapsedHeight) /
-                (expandedHeight - collapsedHeight))
-            .clamp(0.0, 1.0);
-        final textOpacity = open * open;
+        // Cùng `open()` với leading — MỘT nguồn, không phải một bản sao tính
+        // lại từ `c.maxHeight`. Hai cách cho cùng số khi mọi thứ yên; giữ một
+        // nguồn để chúng không có cơ hội trôi khỏi nhau khi ai đó sửa một bên.
+        //
+        // Chữ hero fade theo bình phương của độ mở (tắt sớm) để không trôi vào
+        // vùng thanh ghim khi đang thu.
+        final o = open();
+        final textOpacity = o * o;
 
         return Stack(
           fit: StackFit.expand,
@@ -403,33 +479,54 @@ class _ZoneHeroBar extends StatelessWidget {
             // KHÔNG bọc Opacity: đây là ranh giới, không phải trang trí. Nó
             // giữ nguyên độ mạnh ở mọi trạng thái cuộn.
             //
-            // KHI HERO THU HẾT (~103dp < 112dp): vùng tan phủ trọn thanh ghim
+            // KHI HERO THU HẾT (~103dp < _dissolveExtent 144): vùng tan phủ
+            // trọn thanh ghim
             // ⇒ toolbar tự đọc thành `surface` với nút back nổi trên scrimBack.
             // Đó là TÍNH NĂNG, không phải tai nạn: khi đã cuộn, thanh ghim
             // thuộc về danh sách chứ không thuộc về tấm ảnh nữa.
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              height: _dissolveExtent,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    stops: _fadeStops,
-                    colors: [
-                      for (final a in _fadeAlphas)
-                        // NHÂN với alpha của token ⇒ HC (token trong suốt) tự
-                        // tắt toàn bộ ramp, không cần `if`. Và luôn là
-                        // heroDissolve.withValues, KHÔNG BAO GIỜ
-                        // Colors.transparent — xem chi tiết 1 ở doc class.
-                        t.heroDissolve.withValues(alpha: a * t.heroDissolve.a),
-                    ],
+            // `if` TƯỜNG MINH, thay cho mẹo nhân-alpha (1.8).
+            //
+            // Bản trước tắt ramp ở highContrast bằng cách nhân mọi stop với
+            // alpha của token, và token đó trong suốt ở HC. Mẹo đó gọn nhưng
+            // nó KHOÁ CHẶT hai thứ chẳng liên quan gì nhau: "ramp hạ cánh vào
+            // màu nào" và "preset này có ramp không". Giờ màu lấy thẳng
+            // `t.surface` — vốn ĐỤC ở cả ba preset — nên mẹo cũ sẽ để ramp BẬT
+            // ở HC. Điều kiện phải hiện ra thành chữ.
+            //
+            // Nó cũng rẻ hơn: HC không dựng gradient nào cả, thay vì dựng bảy
+            // stop trong suốt rồi vẽ chúng lên nhau.
+            if (t.heroDissolveEnabled)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: _dissolveExtent,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      stops: _fadeStops,
+                      colors: [
+                        for (final a in _fadeAlphas)
+                          // `t.surface.withValues`, KHÔNG BAO GIỜ
+                          // `Colors.transparent` — xem chi tiết 1 ở doc class:
+                          // Colors.transparent là ĐEN alpha 0, và ramp về nó sẽ
+                          // ám xám bẩn ở preset giấy. RGB phải đứng yên, chỉ
+                          // alpha chạy.
+                          //
+                          // t.surface chứ không phải một token riêng: ramp PHẢI
+                          // hạ cánh đúng màu nền của danh sách bên dưới. Trước
+                          // 1.8 đó là `Color heroDissolve` chép lại `surface` ở
+                          // mỗi preset — một bất biến không ai canh, và nó đã
+                          // trôi một lần (comment "(taupe)" trên một giá trị
+                          // bằng surface). Giờ không còn gì để lệch.
+                          t.surface.withValues(alpha: a),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
 
             // Title + meta, bottom-left. The meta is intentionally STATIC (no
             // live count) — a number that changed as you walked would itself
@@ -447,8 +544,16 @@ class _ZoneHeroBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     // Kicker accent — nối ngôn ngữ với vạch accent ở Gate.
-                    Text('KHU TRƯNG BÀY',
-                        style: AppText.kicker.copyWith(color: t.accent)),
+                    //
+                    // accentOnImage, KHÔNG phải accent: dòng này nằm trên ảnh
+                    // dưới veil ~70% — nền TỐI ở mọi theme. accent của preset
+                    // giấy là #7E5620 (nâu sẫm) và sẽ biến mất ở đây. Cùng lý
+                    // lẽ với inkOnImage; xem doc accent/accentOnImage.
+                    //
+                    // Chuỗi để chữ thường: vai trò kicker lo việc viết hoa
+                    // (luật ở app_text.dart). Kết quả hiển thị không đổi.
+                    Text('Khu trưng bày'.toUpperCase(),
+                        style: AppText.kicker.copyWith(color: t.accentOnImage)),
                     const SizedBox(height: AppSpace.x2),
                     Text(name,
                         style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
@@ -484,7 +589,11 @@ class _ZoneHeroBar extends StatelessWidget {
                     // WCAG (ngưỡng chỉ dành cho CHỮ). Ở α≈0.035 nó nằm trên
                     // ảnh dưới veil 70% ⇒ ~3.4:1 với ảnh sáng nhất — thừa cho
                     // một dấu 2px.
-                    Container(width: 88, height: 2, color: t.accent),
+                    // accentOnImage: vạch này nằm TRÊN ẢNH, không trên surface.
+                    // Vạch 88×2 ở Gate là anh em sinh đôi của nó nhưng nằm trên
+                    // welcomeBackdrop ⇒ dùng `accent`. Cùng vai trò, khác nền,
+                    // khác họ token — đó là toàn bộ điểm của việc tách.
+                    Container(width: 88, height: 2, color: t.accentOnImage),
                   ],
                 ),
               ),
@@ -511,11 +620,23 @@ class _ZoneHeroBar extends StatelessWidget {
 /// Tách riêng chỉ để `SizedBox` bọc nó giữ được `const` (Icon cần token màu,
 /// nhưng token đọc được từ context ở đây).
 class _BackGlyph extends StatelessWidget {
-  const _BackGlyph();
+  /// true khi hero đã thu hết và scrim đứng trên `surface` thật (không còn
+  /// ảnh dưới nó). Xem doc `scrimBack` ở museum_tokens.dart cho toàn bộ lý do
+  /// field này tồn tại — nó là lời giải thay cho việc nâng alpha của scrim.
+  final bool onSurface;
+  const _BackGlyph({required this.onSurface});
 
   @override
   Widget build(BuildContext context) =>
-      Icon(Icons.chevron_left, color: context.tokens.inkOnImage, size: 26);
+      Icon(
+        Icons.chevron_left,
+        // ink (chevron SẪM) khi đứng trên surface thật — cùng scrim 40%, nền
+        // giờ là surface đục thay vì ảnh, nên chevron phải đổi cực để vẫn nổi.
+        // inkOnImage (TRẮNG, đóng băng theo theme) trên mọi trạng thái khác —
+        // đúng luật họ on-image, vì lúc đó nền dưới scrim vẫn là ảnh thật.
+        color: (onSurface ? context.tokens.ink : context.tokens.inkOnImage),
+        size: 26,
+      );
 }
 
 /// Trạng thái của nút intro, tính từ AudioQueueState. Enum riêng (thay vì hai
@@ -567,30 +688,38 @@ class _ZoneIntroButton extends StatelessWidget {
       },
       builder: (context, state, _) {
         final playing = state == _IntroButtonState.playingThis;
+
+        // Nhấc ra khỏi cây widget: nó phải chạy ở HAI chỗ (InkWell cho ngón
+        // tay, Semantics cho screen reader) và hai chỗ đó không được phép trôi
+        // khỏi nhau. Viết inline hai lần là mời một lần sửa chỉ sửa một vế.
+        final VoidCallback? onTap = !tappable
+            ? null
+            : () {
+                final audio = context.read<AudioProvider>();
+                switch (state) {
+                  case _IntroButtonState.playingThis:
+                    audio.pause();
+                  case _IntroButtonState.pausedThis:
+                    showAudioFeedback(context, audio.play());
+                  case _IntroButtonState.idle:
+                    showAudioFeedback(context, audio.tapZoneIntro(major: major));
+                }
+              };
+
         return Semantics(
           button: true,
+          enabled: tappable,
           label: playing
               ? 'Tạm dừng giới thiệu khu trưng bày'
               : 'Nghe giới thiệu khu trưng bày',
+          excludeSemantics: true, // + onTap: xem doc ở nút back
+          onTap: onTap,
           child: Material(
             color: t.ctaOnImageFill,
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: !tappable
-                  ? null
-                  : () {
-                      final audio = context.read<AudioProvider>();
-                      switch (state) {
-                        case _IntroButtonState.playingThis:
-                          audio.pause();
-                        case _IntroButtonState.pausedThis:
-                          showAudioFeedback(context, audio.play());
-                        case _IntroButtonState.idle:
-                          showAudioFeedback(
-                              context, audio.tapZoneIntro(major: major));
-                      }
-                    },
+              onTap: onTap,
               child: SizedBox(
                 width: AppSpace.actionCircle,
                 height: AppSpace.actionCircle,
@@ -614,6 +743,23 @@ class _ZoneIntroButton extends StatelessWidget {
 /// là tiếng nói của Material, không phải của app này.
 ///
 /// Thay bằng vạch accent — chính thứ đã có ở Gate (88×2) và ở kicker hero.
+///
+/// CĂN TRÊN, KHÔNG CĂN GIỮA — và đó là cả sự khác biệt trên màn này.
+///
+/// Hero cao 80% là CHỦ ĐÍCH (ảnh đại diện cho cả một khu là ảnh quan trọng;
+/// tham chiếu Rijksmuseum). Nên `SliverFillRemaining` chỉ còn ~20% màn ≈ 168dp
+/// trên máy 844. `Center` đặt khối này vào GIỮA dải đó — tức bắt đầu ~45dp
+/// DƯỚI mép fold, lơ lửng giữa một vùng trống, dưới một tấm ảnh chiếm 80%.
+/// Nó đọc ra như một chú thích ảnh, không đọc ra như thông điệp của màn hình.
+///
+/// Mà nó LÀ thông điệp của màn hình: khi không có hiện vật nào ở gần, đây là
+/// thứ duy nhất trên trang nói cho khách biết phải làm gì.
+///
+/// Căn trên dán nó ngay dưới mép hoà tan — đúng chỗ mắt vừa dừng khi hero cuộn
+/// hết. Cùng một hero, cùng một dải 20%; chỉ khác chỗ đặt.
+///
+/// (Bản đánh giá gốc kết luận sai chỗ này: nó đòi THU hero lại. Hero không sai
+/// — chỗ đặt sai.)
 /// Trạng thái rỗng là chỗ DỄ NHẤT để một app tối giản phản bội chính nó, vì
 /// nó trống và ai cũng muốn lấp. Luật của app: hình học tối giản, không hoa
 /// văn, không viền — và nếu phải có một dấu thì dấu đó là accent.
@@ -633,11 +779,16 @@ class _NoneNearby extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     return Padding(
-      // Empty state căn giữa, nên lề của nó KHÔNG phải gutter — nó là lề đo
-      // chiều dài dòng (measure), không phải lề lưới. x10 (40) giữ dòng ở
-      // ~45–55 ký tự, ngưỡng đọc thoải mái.
-      padding: const EdgeInsets.symmetric(horizontal: AppSpace.x10),
-      child: Center(
+      // Lề NGANG không phải gutter — nó là lề đo CHIỀU DÀI DÒNG (measure),
+      // không phải lề lưới. x10 (40) giữ dòng ở ~45–55 ký tự, ngưỡng đọc thoải
+      // mái. Đây là ngoại lệ hợp lệ duy nhất với "một đường dọc cho cả màn":
+      // khối này căn giữa, nên nó không ngồi trên đường nào.
+      //
+      // Lề TRÊN x6: căn TRÊN, không căn giữa — xem doc class.
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.x10, AppSpace.x6, AppSpace.x10, 0),
+      child: Align(
+        alignment: Alignment.topCenter,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -646,15 +797,46 @@ class _NoneNearby extends StatelessWidget {
             // chào.
             Container(width: AppSpace.x12, height: 2, color: t.accent),
             const SizedBox(height: AppSpace.x4),
-            Text('CHƯA CÓ HIỆN VẬT NÀO Ở GẦN',
+            // CHỮ THƯỜNG, và vì thế KHÔNG CÒN LÀ kicker — hai điều đó đi
+            // liền nhau, không tách được.
+            //
+            // Câu hỏi ở đợt trước: đây là "nhãn trạng thái" hay "tiêu đề"?
+            // Đã quyết: TIÊU ĐỀ. Nó là một CÂU sáu chữ có dấu chồng (Ệ, Ậ, Ầ),
+            // và ở tracking .22em nó đọc lởm chởm — đúng lý do đã khai tử
+            // kicker ở Gate. Một nhãn là một hai từ; sáu từ là một câu.
+            //
+            // Kéo theo: kicker mang sẵn chữ hoa + .22em trong định nghĩa vai
+            // trò, nên "kicker viết thường" không tồn tại. Style phải đổi.
+            //
+            // cardTitle (serif 20) chứ KHÔNG PHẢI sheetTitle (26): trên màn
+            // này đã có heroTitle 28 (tên khu). 26 cạnh 28 là hai tiêu đề
+            // tranh nhau mà không phân được vai; 20 nói rõ đây là thông điệp
+            // NẰM TRONG khu, không phải tên khu.
+            //
+            // Ngữ pháp thu được đúng bằng ngữ pháp của Gate, thu nhỏ:
+            //     Gate:   vạch 88×2 → welcomeTitle (serif) → lede (sans)
+            //     ở đây:  vạch 48×2 → cardTitle    (serif) → guidance (sans)
+            // Đó là lý do tin được rằng đây là tiếng nói của app, không phải
+            // một trạng thái rỗng đi mượn từ vựng ở đâu về.
+            Text('Chưa có hiện vật nào ở gần',
                 textAlign: TextAlign.center,
-                style: AppText.kicker.copyWith(color: t.ink)),
+                style: AppText.cardTitle.copyWith(color: t.ink)),
             const SizedBox(height: AppSpace.x2),
             Text(
+              // inkMuted, KHÔNG phải inkFaint. Hai lý do, và lý do thứ hai
+              // đúng cả trước khi có preset giấy:
+              //   1. inkFaint #7D7469 trên surface #F6F3EE = 4.15:1 — dưới
+              //      chuẩn AA (4.5) cho chữ 12px. inkMuted: 6.61:1 ✓
+              //   2. doc của inkFaint viết thẳng: "KHÔNG dùng cho nội dung
+              //      khách cần đọc kỹ". Đoạn này LÀ chỉ dẫn hành động duy nhất
+              //      của trạng thái rỗng — không có gì trên màn này khách cần
+              //      đọc kỹ hơn nó.
+              // Token đã bị dùng ngược hợp đồng của chính nó; con số chỉ là
+              // chỗ điều đó lộ ra.
               'Hãy tiến lại gần một tủ trưng bày. Hiện vật sẽ tự xuất hiện '
               'trong danh sách khi bạn tới đủ gần.',
               textAlign: TextAlign.center,
-              style: AppText.guidance.copyWith(color: t.inkFaint),
+              style: AppText.guidance.copyWith(color: t.inkMuted),
             ),
           ],
         ),
@@ -671,12 +853,17 @@ class _NoneNearby extends StatelessWidget {
 /// việc phân tách hàng sau khi hairline bị bỏ — nền + khoảng cách x3 làm việc
 /// mà gạch mờ từng làm, nhưng không cắt ngang thị giác.
 ///
-/// SỐ Ở MÉP PHẢI, CỘT THẲNG, ĐỌC LÀ ĐĨA LÕM: badge tô [surface] — chính màu
-/// nền gốc — nên trên kệ [surfaceRaised] nó thành một lỗ khoét chìm xuống,
-/// đúng yêu cầu "nhạt, chìm". Số [ink] w700 vẫn sắc nét: chìm là NỀN, không
-/// phải chữ. Hai màu này định nghĩa lẫn nhau (xem doc surfaceRaised) — đổi
-/// một cái phải soát cái kia. Bóng [frameShadow] thay cho `ink @ 10%`: ở dark
-/// theme ink là TRẮNG, `ink @10%` sẽ thành quầng sáng chứ không phải bóng.
+/// ĐĨA LÕM Ở MÉP PHẢI: badge tô [MuseumTokens.badgeWell] — trầm hơn kệ
+/// [surfaceRaised] ΔL* ≈ 5 ở mọi preset — một lỗ khoét NÔNG, cố ý.
+///
+/// CẢ BADGE IM LẶNG cho tới khi nó có gì để nói. Doc cũ ở đây viết "chìm là
+/// NỀN, không phải chữ" và tô số bằng [ink] w700. Câu đó giả định con số là
+/// thông tin. Nó không phải: bảo tàng không đánh số hiện vật, và giá trị đang
+/// hiển thị là minor ID của beacon. Nên số dùng [inkFaint], và hố thì NÔNG —
+/// độ sâu của hố là âm lượng của badge, xem doc [MuseumTokens.badgeWell].
+///
+/// Bóng [shadowInk] thay cho `ink @ 10%`: ở dark theme ink là TRẮNG,
+/// `ink @10%` sẽ thành quầng sáng chứ không phải bóng.
 ///
 /// TRẠNG THÁI "ĐANG PHÁT": badge đổi nền [accent] đặc + glyph sóng âm
 /// [accentInk] (KHÔNG trắng — trắng trên đồng chỉ ~2.5:1, rớt chuẩn); meta
@@ -740,8 +927,22 @@ class _StopRow extends StatelessWidget {
       builder: (context, nowPlaying, _) {
         return Semantics(
           button: true,
-          label: 'Hiện vật số ${exhibit.minor}, $name'
-              '${nowPlaying ? ', đang phát' : ''}',
+          // KHÔNG còn "Hiện vật số N". Con số là `exhibit.minor` — minor ID
+          // của beacon BLE — và bảo tàng KHÔNG đánh số hiện vật. Đọc nó lên
+          // là chỉ cho khách dùng TalkBack đi tìm một cái nhãn không tồn tại;
+          // một định danh kỹ thuật đọc thành "số hiệu vật" thì tệ hơn im lặng.
+          //
+          // Đây là vế thứ hai của quyết định "con số là trang trí" — xem doc
+          // [MuseumTokens.badgeWell]. Làm nó chìm về màu mà để nguyên câu này
+          // là giấu vấn đề khỏi người nhìn thấy được, và giữ nguyên nó cho
+          // người không nhìn thấy.
+          label: '$name${nowPlaying ? ', đang phát' : ''}',
+          // excludeSemantics + onTap ĐI THÀNH CẶP — xem doc ở nút back. Ở hàng
+          // này exclude còn làm một việc thứ hai: `label` phía trên đã gói tên
+          // + số + trạng thái thành MỘT câu đọc được; không exclude thì screen
+          // reader đọc thêm tên, meta và số badge rời rạc lần nữa.
+          excludeSemantics: true,
+          onTap: onTap,
           child: Padding(
             // Khe giữa các hàng = x3 (12). Cùng mức với "trong một khối" ở
             // Gate — cố ý: các hàng là MỘT khối danh sách, không phải nhiều
@@ -791,6 +992,11 @@ class _StopRow extends StatelessWidget {
                                     : _metaLine(),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
+                                // accent (họ surface), KHÔNG phải accentOnImage:
+                                // dòng này nằm trên `surfaceRaised`, không trên
+                                // ảnh. Ở light nó giờ là #7E5620 = 5.17:1; bản
+                                // một-field cho 2.01:1 — tín hiệu quan trọng
+                                // nhất của màn 3 gần như vô hình trên giấy.
                                 style: AppText.stopMeta.copyWith(
                                     color: nowPlaying ? t.accent : t.inkMuted)),
                           ],
@@ -811,27 +1017,32 @@ class _StopRow extends StatelessWidget {
                       // accent + nhấc lên khỏi kệ, có bóng. Cùng một tương
                       // phản cường độ mà cả hàng đang dùng làm tín hiệu.
                       //
-                      // ⚠ CÒN NỢ Ở LIGHT THEME — cần soát bằng mắt trên máy:
-                      // dark  surface #151312 < surfaceRaised #201D1A → tối
-                      //       hơn kệ → là hố ✓
-                      // light surface #F6F3EE > surfaceRaised #EBE5DB → SÁNG
-                      //       hơn kệ → đọc là đĩa nổi, KHÔNG phải hố ✗
-                      // surfaceRaised ở light cố ý trầm hơn giấy (đúng theo
-                      // doc token), nên ẩn dụ "lõm" chỉ sống ở dark + HC. Bỏ
-                      // bóng đã gỡ phần lớn hiểu nhầm, nhưng nếu vẫn thấy nổi
-                      // ở light thì cần token riêng (`badgeWell`) trầm hơn
-                      // surfaceRaised ở CẢ BA preset — đừng vá bằng cách đổi
-                      // surface, hai màu đó định nghĩa lẫn nhau.
+                      // NỢ Ở LIGHT ĐÃ TRẢ: comment cũ ở đây tự chẩn đoán đúng
+                      // và tự kê đúng đơn thuốc — "cần token riêng
+                      // (`badgeWell`) trầm hơn surfaceRaised ở CẢ BA preset" —
+                      // rồi nằm đó qua nhiều lần sửa. Giờ token đó tồn tại.
+                      //
+                      // Bản cũ tô `surface`, và `surface` chỉ TÌNH CỜ tối hơn
+                      // kệ ở preset tối:
+                      //   dark  #151312 < #201D1A → ΔL* −4.7 → hố (nhưng mờ)
+                      //   light #F6F3EE > #EBE5DB → ΔL* +4.7 → ĐĨA NỔI ✗
+                      // badgeWell tách hẳn khỏi `surface` ⇒ ΔL* −8.9 (dark) và
+                      // −11.4 (light): hố ở CẢ BA preset, và đủ sâu để mắt bắt
+                      // được trên một đĩa 36dp chứ không chỉ trên mảng lớn.
+                      //
+                      // Lợi ích phụ, quan trọng hơn con số: `surface` và badge
+                      // không còn định nghĩa lẫn nhau. Đổi nền app không còn
+                      // phá badge.
                       Container(
                         width: AppSpace.badge,
                         height: AppSpace.badge,
                         decoration: BoxDecoration(
-                          color: nowPlaying ? t.accent : t.surface,
+                          color: nowPlaying ? t.accent : t.badgeWell,
                           shape: BoxShape.circle,
                           boxShadow: nowPlaying
                               ? [
                                   BoxShadow(
-                                    color: t.frameShadow,
+                                    color: t.shadowInk,
                                     blurRadius: AppShadow.liftBlur,
                                     offset: AppShadow.liftOffset,
                                   ),
@@ -846,14 +1057,33 @@ class _StopRow extends StatelessWidget {
                             // quản khoảng cách và bố cục, không quản cỡ glyph
                             // — ép icon về 16 hay 20 là áp nhầm luật lên một
                             // đại lượng typographic.
+                            //
+                            // ĐANG PHÁT VẪN BỪNG, và giờ nó là thứ DUY NHẤT
+                            // bừng: accent 5.18:1 + glyph accentInk 5.86:1.
+                            // Cả badge im lặng cho tới khi có gì để nói.
                             ? Icon(Icons.graphic_eq,
                                 size: 18, color: t.accentInk)
+                            // Chữ số trang trí. HAI thứ đã bỏ, và `w700` hét
+                            // to hơn cả màu:
+                            //   ink  → inkFaint (bậc thấp nhất của thang ink)
+                            //   w700 → w300 mặc định của `meta` (bỏ override)
+                            //
+                            // inkFaint chứ KHÔNG phải một token riêng: doc của
+                            // nó là "chữ mờ nhất còn đọc được — KHÔNG dùng cho
+                            // nội dung khách cần đọc kỹ", tức đúng định nghĩa
+                            // một chỉ số trang trí. Từng có `badgeInk` ở đây,
+                            // sinh ra để cho số chìm SÂU HƠN thang ink cho
+                            // phép; khi hố về lại độ nông đúng, việc đó biến
+                            // mất và token theo nó. (highContrast tự lo:
+                            // inkFaint của preset đó là #D0D0D0 sáng — số hiện
+                            // bình thường, không cần nhánh nào.)
+                            //
+                            // Thứ tự âm lượng trong hàng, đo bằng ΔL* so với
+                            // nền của chính nó:  tên 88.8 > meta 71.2 > số 59.3.
+                            // Số là thứ nhỏ tiếng nhất — đúng vai của nó.
                             : Text(
                                 '${exhibit.minor}',
-                                style: AppText.meta.copyWith(
-                                  color: t.ink,
-                                  fontWeight: FontWeight.w700,
-                                ),
+                                style: AppText.meta.copyWith(color: t.inkFaint),
                               ),
                       ),
                     ],

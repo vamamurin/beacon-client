@@ -17,6 +17,50 @@
 // TextStyle.inherit — đó là màu `ink` mặc định của theme.
 //
 // ═══════════════════════════════════════════════════════════════════════════
+// CHỮ HOA LÀ THUỘC TÍNH CỦA VAI TRÒ, KHÔNG PHẢI CỦA CHUỖI
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Chỉ HAI style được viết hoa, và chúng là NHÃN HỆ THỐNG:
+//
+//     AppText.kicker    — nhãn mục / nhãn trạng thái
+//     AppText.button    — nhãn nút
+//
+// Mọi thứ khác là NỘI DUNG và giữ nguyên chữ của bảo tàng: tên bảo tàng, tên
+// khu, tên hiện vật, câu dẫn, chỉ dẫn.
+//
+// ── Vì sao có luật này ────────────────────────────────────────────────────
+// Gate từng có kicker "HƯỚNG DẪN THAM QUAN TỰ ĐỘNG" và nó bị khai tử với lý
+// do: "chữ hoa tiếng Việt có dấu + tracking rộng đọc lởm chởm". Lý do đó
+// đúng — nhưng lúc đó nó chỉ được áp cho MỘT dòng, trong khi bốn chỗ khác
+// vẫn viết hoa y hệt (kicker hero màn 3, _StaffCard, _NoneNearby, và
+// museumName.toUpperCase()). Một lý lẽ chỉ áp cho một call site thì nó không
+// phải lý lẽ, nó là khẩu vị của hôm đó.
+//
+// Đường phân đúng không phải "hoa hay không hoa" mà là NHÃN hay NỘI DUNG.
+// "BẮT ĐẦU THAM QUAN" là app đang nói. "Bảo tàng Lịch sử Quốc gia" là bảo
+// tàng đang nói — và ta không viết hoa tên riêng của người khác.
+//
+// ── Cách thi hành ─────────────────────────────────────────────────────────
+// Widget SỞ HỮU VAI TRÒ tự gọi `.toUpperCase()`; call site truyền chuỗi
+// thường. ĐỪNG viết hoa sẵn trong string literal.
+//
+// Trước luật này đã có hai lối làm song song, ngay trong cùng một file:
+//     _BleNotReady:  title: 'CẦN QUYỀN BLUETOOTH'          // hoa sẵn
+//     _SyncNotice:   title: 'Đã tải xong'.toUpperCase()    // hoa ở call site
+// Hai lối làm = không có luật nào. Chuỗi hoa sẵn còn phá cả Semantics (screen
+// reader có thể đánh vần từng chữ cái) và không dịch được sang ngôn ngữ không
+// có khái niệm chữ hoa.
+//
+// ── Hệ quả ────────────────────────────────────────────────────────────────
+// Chữ hoa SERIF không còn tồn tại ⇒ vấn đề "serif hoa tracking 0 vs sans hoa
+// tracking .22em" tự biến mất, không cần token nào.
+//
+// ⚠ CÒN NỢ: `height: 1.32` của [museumName] được đo TRÊN chữ hoa ("BẢO TÀNG"),
+// vì "chữ HOA có dấu là tệ nhất". Tiền đề đó vừa mất. GIỮ NGUYÊN 1.32 cho tới
+// khi có người nhìn bằng mắt trên máy thật — đổi một con số hình học vì suy
+// luận, không vì đo, là đúng cái bug file này đã dính ba lần.
+//
+// ═══════════════════════════════════════════════════════════════════════════
 // CỠ CHỮ — đã sửa (xem commit "fix(a11y)")
 // ═══════════════════════════════════════════════════════════════════════════
 //
@@ -78,17 +122,37 @@ abstract final class AppText {
   // tight, cách duy nhất là gộp hai dòng vào MỘT Text hai style (TextSpan) và
   // chỉnh height ở span, đừng hạ height về mức chật.
 
-  /// Hero title của KHU TRƯNG BÀY (màn 3 — người dùng duy nhất còn lại sau
-  /// khi Gate chuyển sang [welcomeTitle]). 32 vì hero giờ cao 80% màn hình,
-  /// và tên khu thường ngắn hơn tên hiện vật. height nới từ 1.02 để dấu tiếng
-  /// Việt không bị cắt khi hệ thống phóng chữ.
-
-  /// Tiêu đề màn chào (Gate) — CỐ Ý tách khỏi [heroTitle]: Gate là màn duy
-  /// nhất có ~55% không gian trống nên chịu được cỡ 34; màn 3 dùng [heroTitle]
-  /// 28 trên hero 250px thì không. Đổi cỡ ở đây không được ảnh hưởng màn 3.
-
-  /// Welcome / hero title. height nới từ 1.02 để dấu tiếng Việt không bị cắt
-  /// khi hệ thống phóng chữ.
+  /// Hero title của KHU TRƯNG BÀY — call site DUY NHẤT còn lại là `_ZoneHeroBar`
+  /// (màn 3), sau khi Gate chuyển sang [welcomeTitle].
+  ///
+  /// (Doc cũ ở đây có ba comment chồng lên nhau, hai trong số đó mô tả
+  /// [welcomeTitle], và comment thắng cuộc nói "32 vì hero giờ cao 80% màn
+  /// hình" trong khi giá trị là 28. Đã gỡ hai comment mồ côi và sửa con số —
+  /// 28 là giá trị thật, chưa từng có ai đo lại cho hero 80%.)
+  ///
+  /// ⚠ GIỐNG [welcomeSubTitle] TỪNG BYTE (serif/w600/28/1.28), VÀ ĐỪNG GỘP.
+  ///
+  /// Bản trước ghi ở đây: "nếu tới lần sửa sau chúng vẫn bằng nhau thì chúng là
+  /// một." Câu đó SAI, và tiền lệ nằm ngay trong file này: [welcomeTitle] đã
+  /// được CỐ Ý tách khỏi style này với lý do —
+  ///
+  ///     "Gate là màn duy nhất có ~55% không gian trống nên chịu được cỡ 34;
+  ///      màn 3 dùng heroTitle 28 trên hero thì không. Đổi cỡ ở đây không được
+  ///      ảnh hưởng màn 3."
+  ///
+  /// Dự án này đã chọn: MÀN KHÁC NHAU THÌ STYLE KHÁC NHAU, kể cả khi giá trị
+  /// trùng. Hai style trùng byte nhưng có HAI LÝ DO ĐỔI khác nhau là HAI thứ —
+  /// gộp chúng không phải khử trùng lặp, mà là tạo ra một khớp nối giả: sửa
+  /// phụ đề của Gate sẽ âm thầm sửa tên khu ở màn 3.
+  ///
+  /// DRY nói về TRI THỨC, không nói về ký tự. Hai con số bằng nhau vì tình cờ
+  /// thì không phải một tri thức bị lặp.
+  ///
+  /// (Ràng buộc thật của [welcomeSubTitle] nằm ở chỗ khác: nó phải nhỏ hơn
+  /// [welcomeTitle] 34 để phân vai trong một câu bị bẻ hai dòng. Style NÀY
+  /// không có ràng buộc đó — nó đứng một mình trên hero màn 3.)
+  ///
+  /// height 1.28 nới từ 1.02: xem khối doc "CỠ CHỮ" ở đầu file.
   static const TextStyle heroTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
@@ -106,6 +170,17 @@ abstract final class AppText {
     height: 1.28,
   );
 
+  /// Tên bảo tàng, góc trên-trái Gate.
+  ///
+  /// KHÔNG CÒN VIẾT HOA (luật ở đầu file): tên riêng của một tổ chức là NỘI
+  /// DUNG, không phải nhãn giao diện. `.toUpperCase()` đã gỡ khỏi call site.
+  ///
+  /// ⚠ height 1.32 GIỮ NGUYÊN dù tiền đề của nó đã mất. Nó được chọn vì "chữ
+  /// HOA có dấu (BẢO TÀNG) là tệ nhất, nên nó được 1.32". Giờ chuỗi là chữ
+  /// thường, và 1.32 nhiều khả năng rộng hơn cần thiết. ĐỪNG hạ nó bằng suy
+  /// luận: hạ height là đúng loại thao tác đã cắt dấu tiếng Việt hai lần
+  /// trước. Đo trên máy, ở textScaler 1.6×, với một tên bảo tàng thật, rồi
+  /// mới đổi.
   static const TextStyle museumName = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
@@ -113,6 +188,25 @@ abstract final class AppText {
     height: 1.32,
   );
 
+  /// Dòng thứ hai của lời chào Gate ("quý khách"). MỘT câu, hai dòng, hai cỡ.
+  ///
+  /// Style DUY NHẤT trong file này từng không có doc — và điều đó đã đẻ ra một
+  /// lỗi review: khi rà soát, người ta so 34/28 với một "phân cấp editorial hai
+  /// vai, hai trọng lượng" mà không doc nào tuyên bố, rồi gọi khoảng cách giữa
+  /// code và tài liệu-tưởng-tượng-đó là lỗi. Không có tài liệu thì phê bình chỉ
+  /// còn là khẩu vị đội lốt phát hiện. Đây là tài liệu.
+  ///
+  /// RÀNG BUỘC THẬT, và chỉ có một: PHẢI NHỎ HƠN [welcomeTitle] (34). Hai dòng
+  /// là một câu bị bẻ; cỡ giảm là thứ nói cho mắt biết dòng hai là phần TIẾP,
+  /// không phải một tiêu đề mới. Bằng nhau thì thành hai tiêu đề; lớn hơn thì
+  /// thành đảo ngữ.
+  ///
+  /// 34/28 (tỉ lệ 1.21) là con số ĐÃ ĐƯỢC NHÌN BẰNG MẮT trên máy thật với
+  /// Cormorant. Đừng đổi nó bằng suy luận từ một thang tỉ lệ nào đó — thang tỉ
+  /// lệ không biết x-height của font này.
+  ///
+  /// ⚠ KHÔNG PHẢI [heroTitle], dù trùng byte (serif/w600/28/1.28). Xem doc ở
+  /// đó: trùng giá trị nhưng khác lý do đổi ⇒ khác thứ.
   static const TextStyle welcomeSubTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
@@ -120,7 +214,17 @@ abstract final class AppText {
     height: 1.28,
   );
 
-  /// Zone card title.
+  /// Tiêu đề cỡ vừa. HAI call site, cố ý dùng chung:
+  ///   • thẻ zone (màn 2)
+  ///   • tiêu đề trạng thái rỗng (màn 3) — xem `_NoneNearby`
+  ///
+  /// Không tách làm hai style: thang chữ của app đã có bảy style ở cỡ 12, và
+  /// thêm một nấc serif-20 thứ hai chỉ vì tên khác nhau là cách một thang chết.
+  ///
+  /// ⚠ RÀNG BUỘC LIÊN MÀN: màn 2 CHƯA qua tái cấu trúc thị giác. Khi nó được
+  /// làm, đổi style này sẽ đổi luôn trạng thái rỗng của màn 3 — mà ở đó nó
+  /// đang giữ một quan hệ cụ thể (phải NHỎ HƠN heroTitle 28 để không tranh vai
+  /// với tên khu). Soát cả hai chỗ, hoặc lúc đó mới tách.
   static const TextStyle cardTitle = TextStyle(
     fontFamily: AppFonts.serif,
     fontWeight: FontWeight.w600,
@@ -171,7 +275,30 @@ abstract final class AppText {
 
   // ── sans body (Inter) ────────────────────────────────────────────────────
 
-  /// Uppercase kicker. 8.5 -> 11. letterSpacing giữ tỉ lệ .22em.
+  /// Nhãn mục / nhãn trạng thái. VAI TRÒ CHỮ HOA — widget sở hữu tự gọi
+  /// `.toUpperCase()`, call site truyền chuỗi thường (xem luật ở đầu file).
+  ///
+  /// 8.5 -> 11. letterSpacing 2.42 = .22em CỦA CỠ 11.
+  ///
+  /// ⚠ ĐỪNG "SỬA" letterSpacing CHO CO THEO textScaler. Nó đã bị báo là bug
+  /// một lần, và báo sai — giữ đoạn này để không ai tốn công báo lại.
+  ///
+  /// Flutter KHÔNG nhân letterSpacing với textScaler, chỉ nhân fontSize. Nên ở
+  /// 1.6× cỡ chữ thành 17.6 mà tracking vẫn 2.42dp — tức .1375em thay vì .22em.
+  /// Nghe như một tỉ lệ bị trôi. Nó không phải.
+  ///
+  /// OPTICAL SIZING: cỡ càng LỚN thì tracking càng phải HẸP. Chữ hoa 11px cần
+  /// ~.22em để không dính; cùng chữ đó ở 17.6px mà vẫn .22em thì rời rạc — các
+  /// chữ cái thôi đọc thành từ. Giá trị quang học nên có ở 17.6px là khoảng
+  /// .12–.14em, và 2.42dp cố định cho ra đúng .1375em.
+  ///
+  /// Tức hành vi "không co" của Flutter TÌNH CỜ làm đúng optical sizing. Ép nó
+  /// co theo textScaler là giữ .22em ở mọi cỡ — tức làm hỏng chữ ở cỡ lớn, cho
+  /// đúng một tỉ lệ mà bản thân tỉ lệ đó không phải mục tiêu.
+  ///
+  /// Bài học của lần báo sai: `em` là cách VIẾT một quyết định typographic,
+  /// không phải bản thân quyết định. Kiểm "em có giữ nguyên không" là đo bằng
+  /// nhầm thước; câu hỏi đúng là "em có GIẢM theo cỡ không".
   static const TextStyle kicker = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w500,
@@ -238,7 +365,8 @@ abstract final class AppText {
     height: 1.3,
   );
 
-  /// CTA label (uppercase).
+  /// Nhãn nút. VAI TRÒ CHỮ HOA — widget sở hữu tự gọi `.toUpperCase()`,
+  /// call site truyền chuỗi thường (xem luật ở đầu file).
   static const TextStyle button = TextStyle(
     fontFamily: AppFonts.sans,
     fontWeight: FontWeight.w600,

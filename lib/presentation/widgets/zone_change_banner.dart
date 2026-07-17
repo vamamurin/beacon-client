@@ -78,12 +78,16 @@ class _BannerCard extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: t.line),
+          // Viền CONTROL ⇒ t.outline. t.line (hairline, 1.17:1) làm banner
+          // gần như không có viền. Màn 2 chưa qua redesign thị giác — chỉ nối
+          // lại token cho đúng vai, không đụng bố cục.
+          border: Border.all(color: t.outline),
         ),
         padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
         child: Row(
           children: [
-            _CountdownRing(deadline: deadline, color: t.ctaFill, track: t.line),
+            _CountdownRing(
+                deadline: deadline, color: t.ctaFill, track: t.outline),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
