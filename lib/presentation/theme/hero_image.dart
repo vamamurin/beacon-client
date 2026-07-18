@@ -48,7 +48,21 @@ class HeroImage extends StatelessWidget {
     this.veil,
     this.cacheWidth,
     this.fallback,
+    this.fit = BoxFit.cover,
   });
+
+  /// Cách ảnh lấp khung.
+  ///
+  /// `cover` (mặc định) khi ảnh là một BỀ MẶT — nền tường chào, hero khu, thẻ,
+  /// thumbnail. Ở đó ảnh phải lấp trọn, và cắt mép là chấp nhận được vì thứ
+  /// đang xem không phải bản thân tấm ảnh.
+  ///
+  /// `contain` khi ảnh là CHỦ THỂ — màn 4, nơi khách đang nhìn CHÍNH hiện vật
+  /// đó. Cắt một cái bình gốm cho vừa khung vuông là thứ bảo tàng không làm.
+  /// Dải trống hai bên KHÔNG phải lỗi bố cục: nó là tấm BO (passe-partout), và
+  /// nó nên mang màu [MuseumTokens.surfaceRaised] để đọc ra là một tấm ảnh
+  /// được đóng khung, không phải một tấm ảnh bị hụt.
+  final BoxFit fit;
 
 
   @override
@@ -70,7 +84,7 @@ class HeroImage extends StatelessWidget {
     final file = File(path);
     return Image.file(
       file,
-      fit: BoxFit.cover,
+      fit: fit,
       cacheWidth: cacheWidth,
       // Any decode/IO error -> gradient, never a broken-image box.
       errorBuilder: (_, __, ___) => _fallbackBox(context),
