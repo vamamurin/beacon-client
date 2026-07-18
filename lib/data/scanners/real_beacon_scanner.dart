@@ -17,6 +17,24 @@
 // Dùng onScanResults thay cho scanResults: onScanResults xóa kết quả giữa các
 // phiên scan, nên một chu kỳ stop→start không phát lại danh sách của phiên cũ.
 // Dedupe (1) vẫn giữ như dây an toàn thứ hai.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX A (Feature A — chạy ngầm màn hình tắt), ĐÃ ĐIỀU CHỈNH:
+//
+//   ScanFilter phần cứng giờ MẶC ĐỊNH TẮT. Bản đầu bật filter company-id Apple
+//   luôn, nhưng thực địa cho thấy trên một số máy/phiên bản flutter_blue_plus,
+//   filter làm gói iBeacon dài KHÔNG tới được callback (chỉ còn gói Continuity
+//   ngắn của iPhone/AirPods). Vì "chết sau 5 phút" đã được vá bằng FOREGROUND
+//   SERVICE (audio_service) — không phải bằng filter — nên ưu tiên ĐÚNG (bắt
+//   được beacon) và để filter là tùy chọn.
+//
+//   • MẶC ĐỊNH: quét không lọc (đúng hành vi cũ đã bắt được beacon).
+//   • BẬT bằng: --dart-define=BLE_HW_FILTER=true → áp filter iBeacon CHÍNH XÁC
+//     (Apple 0x004C + prefix 0x02 0x15) để cắt nhiễu + gia cố screen-off, dùng
+//     SAU khi đã xác nhận detection chạy.
+//   • Guard UUID bảo tàng vẫn nằm một chỗ ở ZonePresenceService._onReading.
+//
+// YÊU CẦU PHIÊN BẢN: MsdFilter/`withMsd` có từ flutter_blue_plus ^1.32.0.
 
 // MARK: - 1. IMPORTS & DEPENDENCIES (Khai báo thư viện)
 // ============================================================================
@@ -29,11 +47,44 @@ import 'package:beacon_client/domain/interfaces/i_beacon_scanner.dart';
 import 'package:beacon_client/domain/models/beacon_reading.dart';
 
 class RealBeaconScanner implements IBeaconScanner {
-  RealBeaconScanner({this.scanMode = AndroidScanMode.lowLatency});
+  RealBeaconScanner({
+    this.scanMode = AndroidScanMode.lowLatency,
+    this.appleCompanyId = _kAppleCompanyId,
+    bool? useHardwareFilter,
+  }) : useHardwareFilter = useHardwareFilter ?? _kUseHwFilterDefault;
 
   // MARK: - 2. STATE VARIABLES & GETTERS (Biến nội bộ & Cổng truy xuất)
   // ============================================================================
   final AndroidScanMode scanMode;
+
+  /// Company id lọc ở tầng phần cứng. Mặc định Apple (0x004C) vì iBeacon là
+  /// định dạng của Apple. Để inject được cho test / firmware phi-Apple hiếm gặp.
+  final int appleCompanyId;
+
+  /// FIX A (đã điều chỉnh): CÓ bật ScanFilter phần cứng hay KHÔNG.
+  ///
+  /// MẶC ĐỊNH `false` = quét KHÔNG lọc (đúng hành vi cũ đã từng bắt được
+  /// beacon). Lý do hạ về false: một số phiên bản flutter_blue_plus dựng
+  /// MsdFilter không như kỳ vọng và có thể loại nhầm gói iBeacon dài — ưu tiên
+  /// ĐÚNG (bắt được beacon) hơn tối ưu. Việc "chết sau 5 phút" đã được vá bằng
+  /// FOREGROUND SERVICE (audio_service), KHÔNG phải bằng filter này, nên tắt
+  /// filter KHÔNG làm tái phát bug đó.
+  ///
+  /// Khi ĐÃ xác nhận detection chạy, BẬT lại để cắt nhiễu Continuity của
+  /// iPhone/AirPods quanh đó + gia cố screen-off delivery:
+  ///   flutter run --dart-define=BLE_HW_FILTER=true
+  /// Lúc bật, dùng filter iBeacon CHÍNH XÁC (prefix 0x02 0x15) chứ không phải
+  /// filter company-id lỏng.
+  final bool useHardwareFilter;
+
+  /// Apple Inc. Bluetooth SIG company identifier — vỏ chứa iBeacon payload.
+  static const int _kAppleCompanyId = 0x004C;
+
+  /// Giá trị mặc định của [useHardwareFilter], đọc lúc build. Muốn bật khi build
+  /// bản demo/release: `--dart-define=BLE_HW_FILTER=true`.
+  static const bool _kUseHwFilterDefault =
+      bool.fromEnvironment('BLE_HW_FILTER', defaultValue: false);
+
   final _controller = StreamController<BeaconReading>.broadcast();
   StreamSubscription<List<ScanResult>>? _scanSub;
 
@@ -71,6 +122,22 @@ class RealBeaconScanner implements IBeaconScanner {
     _lastProcessed.clear(); // phiên scan mới → dedupe mới
 
     await FlutterBluePlus.startScan(
+      // FIX A (điều chỉnh) — CHỈ lọc phần cứng khi [useHardwareFilter] bật.
+      //   • BẬT: filter iBeacon CHÍNH XÁC — manufacturer Apple + payload bắt
+      //     đầu bằng 0x02 0x15 (subtype iBeacon + length 0x15). Cho iBeacon
+      //     thật qua, chặn sạch gói Continuity ngắn (AirPods/Handoff/Find My)
+      //     và giúp screen-off delivery.
+      //   • TẮT (mặc định): withMsd rỗng = quét MỌI quảng cáo (đúng hành vi cũ
+      //     đã bắt được beacon). Guard UUID vẫn ở ZonePresenceService.
+      withMsd: useHardwareFilter
+          ? [
+              MsdFilter(
+                appleCompanyId,
+                data: [0x02, 0x15],
+                mask: [0xFF, 0xFF],
+              ),
+            ]
+          : const [],
       continuousUpdates: true,
       // lowLatency = scan liên tục, không duty-cycle, Android default là balanced (~5s delay)
       androidScanMode: scanMode,
@@ -136,7 +203,7 @@ class RealBeaconScanner implements IBeaconScanner {
     }
 
     // Apple Inc. company ID = 0x004C = 76
-    final appleData = mfgData[0x004C];
+    final appleData = mfgData[appleCompanyId];
     if (appleData == null) {
       if (kDebugMode) {
         final found = mfgData.keys

@@ -11,9 +11,21 @@
 // the user to kill and reopen the app, the Gate's sync notice calls
 // AppRestarter -> _restart(), which disposes the current graph and re-runs
 // Injection.build().
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE A — CHẠY NGẦM: audio_service được init ĐÚNG MỘT LẦN ở đây (không thể
+// init lại) và trả về MuseumAudioHandler — foreground service duy nhất giữ
+// process sống khi màn hình tắt. Handler được [bind] lại vào engine/controller/
+// session của MỖI graph khi boot (kể cả sau AppRestarter), y khuôn bindRunSync.
+// Metadata cho notification/lock-screen được dựng tại ĐÂY (nơi biết repository
+// + ngôn ngữ), giữ handler ở data/audio khỏi phụ thuộc repository.
 
+import 'package:audio_service/audio_service.dart';
+import 'package:beacon_client/data/audio/museum_audio_handler.dart';
 import 'package:beacon_client/data/settings/prefs_settings_store.dart';
 import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
+import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
+import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -39,6 +51,51 @@ Future<void> main() async {
   // dark sang light ở frame đầu tiên.
   final settings = await PrefsSettingsStore.create();
 
+  // FEATURE A — dựng foreground service audio MỘT LẦN cho cả vòng đời tiến
+  // trình. Handler chưa có engine/controller lúc này; nó tự báo idle cho tới
+  // khi graph boot và gọi bind().
+  //
+  // MẤU CHỐT chạy ngầm: `androidStopForegroundOnPause: false` — FGS DUY TRÌ khi
+  // tạm dừng (khách đi giữa hai hiện vật, chưa có tiếng) nên process không bị
+  // Doze đóng băng → BLE + timer 1 Hz sống suốt tour.
+  //
+  // PHÒNG THỦ QUAN TRỌNG: `AudioService.init` được bọc try/catch + timeout và
+  // handler là NULLABLE. Nếu init treo hoặc ném (cấu hình service/máy lạ),
+  // app + BLE VẪN chạy bình thường — audio_service KHÔNG được phép chặn hay
+  // giết phần lõi.
+  //
+  // CÔNG TẮC CÔ LẬP: --dart-define=DISABLE_AUDIO_SERVICE=true sẽ BỎ QUA hẳn
+  // AudioService.init. Dùng để kiểm chứng nghi vấn "audio_service bóp cửa sổ
+  // quét BLE": nếu bật cờ này mà beacon hiện lại trong log → thủ phạm là
+  // audio_service, ta sửa cách nó cùng tồn tại với BLE. Nếu vẫn không có beacon
+  // → không phải audio_service.
+  const bool disableAudioService =
+      bool.fromEnvironment('DISABLE_AUDIO_SERVICE', defaultValue: false);
+
+  MuseumAudioHandler? audioHandler;
+  if (disableAudioService) {
+    debugPrint('[AudioService] BỊ TẮT qua --dart-define=DISABLE_AUDIO_SERVICE');
+  } else {
+    try {
+      audioHandler = await AudioService.init(
+        builder: () => MuseumAudioHandler(),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'com.museum.beacon_client.audio',
+          androidNotificationChannelName: 'Thuyết minh tham quan',
+          androidStopForegroundOnPause: false, // <-- FGS sống khi pause
+          androidNotificationIcon: 'mipmap/ic_launcher',
+          androidNotificationClickStartsActivity: true,
+        ),
+      ).timeout(const Duration(seconds: 8));
+      debugPrint('[AudioService] init OK');
+    } catch (e, st) {
+      // Init hỏng/treo → chạy KHÔNG có audio nền + lock-screen (mất tính năng
+      // Feature A), nhưng app + BLE + audio foreground VẪN hoạt động.
+      audioHandler = null;
+      debugPrint('[AudioService] init FAILED (app vẫn chạy, không có FGS): $e\n$st');
+    }
+  }
+
   runApp(
     MultiProvider(
       providers: [
@@ -53,16 +110,54 @@ Future<void> main() async {
         ChangeNotifierProvider(
             create: (_) => SettingsProvider(store: settings)),
       ],
-      child: _BootstrapHost(settings: settings),
+      child: _BootstrapHost(settings: settings, audioHandler: audioHandler),
     ),
   );
+}
+
+/// Dựng metadata cho notification/lock-screen từ trạng thái audio hiện tại.
+/// Sống ở main.dart (chứ không trong handler) để giữ handler khỏi phụ thuộc
+/// repository/ngôn ngữ. FEATURE A dùng ngôn ngữ dự phòng của bảo tàng; FEATURE
+/// B sẽ thay `lang` bằng LanguageController — chỉ đổi đúng một dòng ở đây.
+MediaMetadataResolver _makeMediaResolver(IZoneRepository repo) {
+  return (AudioQueueState s) {
+    final cfg = repo.config;
+    final fallback = cfg?.fallbackLanguage ?? 'vi';
+    final lang = fallback; // FEATURE B: () => languageController.code
+    final album =
+        cfg?.museumName.resolve(lang, fallback) ?? 'Bảo tàng';
+
+    final AudioTrackRef? ref = s.current;
+    if (ref == null) {
+      return MediaItem(id: 'idle', title: album, album: album);
+    }
+
+    final zone = repo.zoneByMajor(ref.zoneMajor);
+    String title;
+    if (ref.exhibitMinor != null) {
+      final ex = zone?.exhibitByMinor(ref.exhibitMinor!);
+      title = ex?.name.resolve(lang, fallback) ??
+          zone?.name.resolve(lang, fallback) ??
+          album;
+    } else {
+      title = zone?.name.resolve(lang, fallback) ?? album;
+    }
+
+    return MediaItem(
+      id: '${ref.zoneMajor}-${ref.exhibitMinor}-${ref.clipKind.name}',
+      title: title,
+      album: album,
+      duration: s.duration,
+    );
+  };
 }
 
 /// Owns the graph lifecycle. Runs Injection.build(), swaps the splash for the
 /// app when ready, and can rebuild the whole graph on request (restart).
 class _BootstrapHost extends StatefulWidget {
-  const _BootstrapHost({required this.settings});
+  const _BootstrapHost({required this.settings, required this.audioHandler});
   final ISettingsStore settings;
+  final MuseumAudioHandler? audioHandler;
 
   @override
   State<_BootstrapHost> createState() => _BootstrapHostState();
@@ -78,6 +173,10 @@ class _BootstrapHostState extends State<_BootstrapHost> {
   /// The graph from the most recent successful build — kept so it can be
   /// disposed when we rebuild (Provider.value doesn't own disposal).
   AppGraph? _built;
+
+  /// Graph mà audioHandler đã bind vào — để builder (chạy mỗi rebuild) chỉ
+  /// bind LẠI khi graph THỰC SỰ đổi (boot mới), không bind lặp mỗi frame.
+  AppGraph? _boundGraph;
 
   Future<AppGraph> _boot() async {
     final g = await Injection.build(settings: widget.settings);
@@ -100,6 +199,23 @@ class _BootstrapHostState extends State<_BootstrapHost> {
     }
   }
 
+  /// Bind audioHandler vào graph nếu đây là graph mới. An toàn gọi trong
+  /// builder: guard `_boundGraph` khiến nó là no-op ở các rebuild không đổi
+  /// graph. No-op nếu audioHandler null (audio_service bị tắt/hỏng init).
+  void _bindAudioIfNeeded(AppGraph graph) {
+    final handler = widget.audioHandler;
+    if (handler == null) return;
+    if (identical(_boundGraph, graph)) return;
+    _boundGraph = graph;
+    handler.bind(
+      engine: graph.audioEngine,
+      controller: graph.audioController,
+      metadata: _makeMediaResolver(graph.repository),
+      sessionState: graph.session.state,
+      initialPhase: graph.session.current.phase,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<AppGraph>(
@@ -118,6 +234,10 @@ class _BootstrapHostState extends State<_BootstrapHost> {
         // rebind on each successful boot. read() is safe here: the provider is
         // an ancestor of this FutureBuilder.
         context.read<SettingsProvider>().bindRunSync(() => graph.runSync());
+
+        // FEATURE A — gắn foreground-audio handler vào graph này (một lần/boot).
+        _bindAudioIfNeeded(graph);
+
         return MultiProvider(
           providers: [
             // `create:` chứ không `.value(...)`: FutureBuilder.builder chạy lại
