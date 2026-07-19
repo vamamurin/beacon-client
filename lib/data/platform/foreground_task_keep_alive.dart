@@ -1,0 +1,124 @@
+// Destination: lib/data/platform/foreground_task_keep_alive.dart (NEW)
+//
+// Impl [IKeepAlive] bằng flutter_foreground_task (^9.2.2). Đây là foreground
+// service THỨ HAI của app (bên cạnh audio_service). Trách nhiệm DUY NHẤT: giữ
+// tiến trình ở mức foreground suốt tour để tiến trình được miễn Doze — nhờ đó
+// BLE + timer + audio sống được khi màn tắt, kể cả lúc standby chưa phát gì.
+// Nó KHÔNG chạy logic gì trong isolate task; TaskHandler chỉ là vỏ bắt buộc.
+//
+// Đánh đổi đã được chấp nhận: trong lúc audio thực sự phát, có thể có HAI
+// notification (keep-alive + media của audio_service). Máy cho mượn màn tắt bỏ
+// túi nên khách không thấy.
+//
+// foregroundServiceType = specialUse (khai trong AndroidManifest): chọn
+// specialUse thay vì connectedDevice/dataSync vì nó KHÔNG có kiểm tra runtime
+// (connectedDevice đòi thiết bị đang kết nối — quét BLE thuần có thể trượt) và
+// KHÔNG bị giới hạn 6 giờ/24 giờ (dataSync trên Android 15). Với app sideload
+// cho bảo tàng, specialUse là lựa chọn an toàn nhất. Xem FEATURE_A_SETUP.md.
+
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+
+import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
+
+/// Callback TOP-LEVEL bắt buộc của flutter_foreground_task: chạy trong isolate
+/// task, chỉ gắn một TaskHandler rỗng. @pragma giữ nó khỏi bị tree-shake.
+@pragma('vm:entry-point')
+void tourKeepAliveCallback() {
+  FlutterForegroundTask.setTaskHandler(_KeepAliveTaskHandler());
+}
+
+/// TaskHandler rỗng — ta không cần isolate task làm gì, chỉ cần service sống.
+class _KeepAliveTaskHandler extends TaskHandler {
+  @override
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
+
+  @override
+  void onRepeatEvent(DateTime timestamp) {}
+
+  @override
+  Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+}
+
+class ForegroundTaskKeepAlive implements IKeepAlive {
+  /// ID service tùy ý, chỉ cần ổn định trong app.
+  static const int _serviceId = 2847;
+
+  /// init() chỉ cần chạy MỘT lần cho cả vòng đời tiến trình. Gọi lazy ở start()
+  /// (lúc bắt đầu tour, app đang tiền cảnh nên mọi thao tác FGS đều hợp lệ) nên
+  /// main.dart không phải biết tới keep-alive.
+  static bool _configured = false;
+
+  static void _ensureConfigured() {
+    if (_configured) return;
+    _configured = true;
+    FlutterForegroundTask.initCommunicationPort();
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'tour_keep_alive',
+        channelName: 'Giữ phiên tham quan',
+        channelDescription:
+            'Giữ ứng dụng chạy để bắt beacon khi màn hình tắt.',
+        onlyAlertOnce: true,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(
+        showNotification: false,
+        playSound: false,
+      ),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        // Không cần sự kiện lặp; để 10 phút cho rẻ (onRepeatEvent là no-op).
+        eventAction: ForegroundTaskEventAction.repeat(600000),
+        autoRunOnBoot: false,
+        autoRunOnMyPackageReplaced: false,
+        allowWakeLock: true, // <-- giữ CPU thức khi màn tắt (mấu chốt)
+        allowWifiLock: false,
+      ),
+    );
+  }
+
+  @override
+  Future<void> start() async {
+    _ensureConfigured();
+    try {
+      if (await FlutterForegroundTask.isRunningService) return;
+      await FlutterForegroundTask.startService(
+        serviceId: _serviceId,
+        notificationTitle: 'Đang tham quan',
+        notificationText: 'Giữ kết nối beacon khi màn hình tắt',
+        notificationIcon: null, // dùng icon app mặc định
+        callback: tourKeepAliveCallback,
+      );
+      if (kDebugMode) debugPrint('[KeepAlive] started');
+    } catch (e) {
+      // Nếu OS từ chối (kiểm tra runtime FGS-type, thiếu quyền, v.v.) thì app +
+      // BLE VẪN chạy — chỉ mất keep-alive khi màn tắt lúc im lặng. Không để lỗi
+      // này phá tour.
+      if (kDebugMode) debugPrint('[KeepAlive] startService thất bại: $e');
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    try {
+      if (await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.stopService();
+        if (kDebugMode) debugPrint('[KeepAlive] stopped');
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[KeepAlive] stopService thất bại: $e');
+    }
+  }
+}
+
+/// No-op cho mock/desktop: không đụng API Android. Dùng ở RunMode.mock.
+class NoopKeepAlive implements IKeepAlive {
+  const NoopKeepAlive();
+
+  @override
+  Future<void> start() async {}
+
+  @override
+  Future<void> stop() async {}
+}

@@ -77,11 +77,13 @@ class ZoneChangeCoordinator {
     required TourAudioController audio,
     required IZoneRepository repository,
     required bool Function() isTouring,
+    required ValueListenable<bool> isForeground,
     Duration confirmWindow = const Duration(seconds: 20),
     DateTime Function()? now,
   })  : _audio = audio,
         _repo = repository,
         _isTouring = isTouring,
+        _isForeground = isForeground,
         _confirmWindow = confirmWindow,
         _now = now ?? DateTime.now {
     _sub = events.listen(_route);
@@ -90,6 +92,7 @@ class ZoneChangeCoordinator {
   final TourAudioController _audio;
   final IZoneRepository _repo;
   final bool Function() _isTouring;
+  final ValueListenable<bool> _isForeground;  
   final Duration _confirmWindow;
   final DateTime Function() _now;
 
@@ -128,6 +131,11 @@ class ZoneChangeCoordinator {
   }
 
   void _onChangedZone(int fromMajor, int toMajor) {
+    if (!_isForeground.value) {
+      _clearPending(); // phòng khi còn sót pending từ lúc màn còn bật
+      _audio.changeZone(toMajor);
+      return;
+    }
     // Returned to the zone we were still playing? cancel the pending ask.
     if (_pending != null && toMajor == _fromMajor) {
       _clearPending();
@@ -172,6 +180,20 @@ class ZoneChangeCoordinator {
   /// Visitor tapped "Ở lại" (optional dismiss). Cancels the ask; audio A stays.
   void dismiss() => _clearPending();
 
+  /// Cờ foreground đổi. Chỉ xử lý cạnh XUỐNG NỀN khi ĐANG có banner mở: người
+  /// dùng vừa bỏ máy vào túi giữa lúc được hỏi. Không bấm được nữa nên CHỐT
+  /// NGAY sang đích đang chờ, thay vì để họ nghe zone cũ tới hết deadline.
+  /// Cạnh lên foreground: no-op — nếu còn pending (hiếm), banner lại bấm được.
+  void _onForegroundChanged() {
+    if (_isForeground.value) return; // resumed → không làm gì
+    final p = _pending;
+    if (p == null) return;
+    // Chốt như đường hết-giờ (không forcePlay, không set nav target: người dùng
+    // không chủ động bấm nên đừng giật màn của họ khi bật lại).
+    _clearPending();
+    _audio.changeZone(p.toMajor);
+  }
+
   void _onDeadline() {
     final p = _pending;
     if (p == null) return;
@@ -204,6 +226,7 @@ class ZoneChangeCoordinator {
   }
 
   Future<void> dispose() async {
+    _isForeground.removeListener(_onForegroundChanged);
     _deadlineTimer?.cancel();
     await _sub.cancel();
     if (!_pendingCtrl.isClosed) await _pendingCtrl.close();

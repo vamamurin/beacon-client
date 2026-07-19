@@ -41,6 +41,8 @@ import 'package:beacon_client/data/scanners/mock_beacon_scanner.dart';
 import 'package:beacon_client/data/scanners/real_beacon_scanner.dart';
 import 'package:beacon_client/data/gateways/mock_bluetooth_gate.dart';
 import 'package:beacon_client/data/gateways/real_bluetooth_gate.dart';
+import 'package:beacon_client/data/platform/foreground_task_keep_alive.dart';
+import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
 import 'package:beacon_client/domain/interfaces/i_audio_engine.dart';
 import 'package:beacon_client/domain/interfaces/i_beacon_scanner.dart';
 import 'package:beacon_client/domain/interfaces/i_bluetooth_gate.dart';
@@ -69,6 +71,10 @@ class AppGraph {
   final SessionController session;
   final ChimePlayer chime;
   final ContentSyncService? sync; // null in mock mode
+
+   /// Keep-alive foreground service — giữ tiến trình sống suốt tour để BLE +
+  /// audio chạy được khi màn tắt, kể cả lúc standby chưa phát gì. No-op ở mock.
+  final IKeepAlive keepAlive;
 
   /// C2 — deferred zone-change coordinator (owns the confirm banner state).
   final ZoneChangeCoordinator zoneChanges;
@@ -118,6 +124,7 @@ class AppGraph {
     required this.session,
     required this.chime,
     required this.sync,
+    required this.keepAlive,
     required this.zoneChanges,
     required this.exhibitPresence,
     required this.nearbyZones,
@@ -165,6 +172,7 @@ class AppGraph {
   }
 
   Future<void> dispose() async {
+    await keepAlive.stop();
     await _tourStartSub.cancel();
     await zoneChanges.dispose();
     await session.dispose();
@@ -193,7 +201,7 @@ abstract final class Injection {
   /// Builds and wires everything. Async because it warms the bundle and reads
   /// the dock/documents dir. Safe to call once at startup (and again on a
   /// full restart — a fresh graph is returned each time).
-  static Future<AppGraph> build({ISettingsStore? settings}) async {
+  static Future<AppGraph> build({ISettingsStore? settings, required ValueListenable<bool> isForeground,}) async {
     // D — settings store may be null in mock mode / tests; fall back so URL
     // resolution still works off --dart-define + hard fallback.
     final ISettingsStore settingsStore = settings ?? _EphemeralSettings();
@@ -235,6 +243,10 @@ abstract final class Injection {
     final IBluetoothGate bluetoothGate = switch (mode) {
       RunMode.mock => MockBluetoothGate(),
       RunMode.real => RealBluetoothGate(),
+    };
+    final IKeepAlive keepAlive = switch (mode) {
+      RunMode.mock => const NoopKeepAlive(),
+      RunMode.real => ForegroundTaskKeepAlive(),
     };
     final registry = BeaconTrackerRegistry();
     final arbiter = ZoneArbiter(
@@ -316,8 +328,9 @@ abstract final class Injection {
       audio: audioController,
       repository: repository,
       isTouring: () => session.current.isTouring,
+      isForeground: isForeground,
       confirmWindow:
-          const Duration(seconds: 20), // TODO(config): manifest later
+          const Duration(seconds: 5), // TODO(config): manifest later
     );
 
     // On the gate->touring edge, re-announce the current zone so a visitor who
@@ -334,6 +347,9 @@ abstract final class Injection {
       lastPhase = s.phase;
       if (was != SessionPhase.touring && s.phase == SessionPhase.touring) {
         presence.resyncCurrentZone();
+        keepAlive.start(); // <-- THÊM: giữ tiến trình sống cả tour (kể cả standby)
+      } else if (was == SessionPhase.touring && s.phase != SessionPhase.touring) {
+        keepAlive.stop(); // <-- THÊM: hết tour → hạ keep-alive (tiết kiệm pin ở dock)
       }
     });
 
@@ -386,6 +402,7 @@ abstract final class Injection {
       session: session,
       chime: chime,
       sync: sync,
+      keepAlive: keepAlive,
       zoneChanges: zoneChanges,
       exhibitPresence: exhibitPresence,
       nearbyZones: nearbyZones,

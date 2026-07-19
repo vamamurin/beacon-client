@@ -163,7 +163,11 @@ class _BootstrapHost extends StatefulWidget {
   State<_BootstrapHost> createState() => _BootstrapHostState();
 }
 
-class _BootstrapHostState extends State<_BootstrapHost> {
+class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObserver {
+  /// Nguồn sự thật "app đang ở tiền cảnh (màn bật) hay không". Cấp tiến trình —
+  /// cùng tầng settings/audioHandler — nên vượt qua AppRestarter: mỗi graph mới
+  /// nhận đúng notifier này. Khai báo TRƯỚC _future vì _boot() đọc nó.
+  final ValueNotifier<bool> _foreground = ValueNotifier<bool>(true);
   /// Bumping this remounts the FutureBuilder subtree (fresh MaterialApp +
   /// Navigator), giving a clean UI restart.
   int _generation = 0;
@@ -178,8 +182,28 @@ class _BootstrapHostState extends State<_BootstrapHost> {
   /// bind LẠI khi graph THỰC SỰ đổi (boot mới), không bind lặp mỗi frame.
   AppGraph? _boundGraph;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _foreground.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // resumed = màn bật, người dùng bấm được banner. Mọi trạng thái khác coi
+    // như nền → ZoneChangeCoordinator chuyển-zone tức thì.
+    _foreground.value = state == AppLifecycleState.resumed;
+  }
+
   Future<AppGraph> _boot() async {
-    final g = await Injection.build(settings: widget.settings);
+    final g = await Injection.build(settings: widget.settings, isForeground: _foreground,);
     _built = g;
     return g;
   }

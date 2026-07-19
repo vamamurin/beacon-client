@@ -92,8 +92,8 @@ abstract final class ManifestParser {
           _reqNum(arb, 'sessionSilenceMinutes', 'arbitration'),
       // C1 — OPTIONAL (bundle cũ chưa có 3 trường này vẫn hợp lệ; default
       // 5/8/2.5 áp tại clamped). Tinh chỉnh tại hiện trường qua CMS.
-      engageAtMeters: _optNum(arb, 'engageAtMeters', 5),
-      releaseAtMeters: _optNum(arb, 'releaseAtMeters', 8),
+      engageAtMeters: _optNum(arb, 'engageAtMeters', 4),
+      releaseAtMeters: _optNum(arb, 'releaseAtMeters', 7),
       pathLossExponent: _optNum(arb, 'pathLossExponent', 2.5),
     );
 

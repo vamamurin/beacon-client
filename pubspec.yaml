@@ -25,6 +25,7 @@ dependencies:
   path: ^1.9.1
   shared_preferences: ^2.5.5
   audio_service: ^0.18.19
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_test:
