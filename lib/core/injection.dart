@@ -11,7 +11,6 @@
 //   repository(bundle) ─> TourAudioController <── engine,headphones, uriResolver│
 //   power ─> SessionController <── zoneEvents, deskStable(stream),              │
 //                                   lastBeaconAt(poll), TourAudioSink           │
-//   registry.signals ─> ExhibitPresenceTracker <────────────────────────────────┘
 //
 // Mode switch (mock vs real) mirrors the old injection: mock for desktop/dev,
 // real for on-device.
@@ -52,7 +51,6 @@ import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/domain/models/tour_session.dart';
-import 'package:beacon_client/services/exhibit_presence_tracker.dart';
 import 'package:beacon_client/services/nearby_zones_tracker.dart';
 import 'package:beacon_client/services/session_controller.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
@@ -81,7 +79,6 @@ class AppGraph {
 
   /// Live "which exhibit minors are broadcasting right now, per zone", with
   /// anti-flicker hysteresis. Screen 3 reads this to show only nearby exhibits.
-  final ExhibitPresenceTracker exhibitPresence;
 
   /// C3 — display-tier zone ranking for screen 2 (nearest-first, hysteresis).
   final NearbyZonesTracker nearbyZones;
@@ -126,7 +123,6 @@ class AppGraph {
     required this.sync,
     required this.keepAlive,
     required this.zoneChanges,
-    required this.exhibitPresence,
     required this.nearbyZones,
     required this.autoSync,
     required this.bluetoothGate,
@@ -177,7 +173,6 @@ class AppGraph {
     await zoneChanges.dispose();
     await session.dispose();
     await presence.dispose();
-    exhibitPresence.dispose();
     nearbyZones.dispose();
     await autoSync?.dispose();
     await audioController.dispose();
@@ -261,11 +256,6 @@ abstract final class Injection {
       arbiter: arbiter,
     );
 
-    // Live per-minor presence for the exhibit list (screen 3). Taps the raw
-    // registry heartbeat exposed by presence.signals and adds anti-flicker
-    // hysteresis + change-gating. Independent of the arbiter/audio paths.
-    final exhibitPresence = ExhibitPresenceTracker(signals: presence.signals);
-
     // C3 — display-tier zone ranking. Same heartbeat source as the exhibit
     // tracker, but per-ZONE with distance ordering (C1). Uses the tuned
     // path-loss exponent so metres match the arbiter's engage/release gate.
@@ -293,8 +283,6 @@ abstract final class Injection {
       language: () => repository.config?.fallbackLanguage ?? 'vi',
 
       onChime: chime.play,
-      // C3-fix — auto-tour chỉ phát hiện vật đang có sóng (cùng nguồn màn 3).
-      presentMinors: exhibitPresence.currentPresent,
     );
 
     // ── session ──
@@ -404,7 +392,6 @@ abstract final class Injection {
       sync: sync,
       keepAlive: keepAlive,
       zoneChanges: zoneChanges,
-      exhibitPresence: exhibitPresence,
       nearbyZones: nearbyZones,
       autoSync: autoSync,
       bluetoothGate: bluetoothGate,

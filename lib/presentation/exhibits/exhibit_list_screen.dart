@@ -2,18 +2,24 @@
 //
 // Screen 3 — the exhibit list of ONE zone.
 //
-// PRESENCE-DRIVEN LIST (Phase-4 change, confirmed with product): the list shows
-// ONLY exhibits whose minor beacon is currently being heard over the air — not
-// the full manifest. Consequence accepted by product: a dead-battery beacon
-// removes its exhibit from the list (the manifest is no longer the visibility
-// source, only the CONTENT source — name/thumb/audio still come from it).
+// MANIFEST-DRIVEN LIST (confirmed with product): once in the zone (major
+// detected), the list shows the FULL set of exhibits from the manifest, in
+// manifest order — it does NOT filter by which per-exhibit (minor) beacon is
+// currently heard. Rationale: a zone may carry only ONE beacon (the major), and
+// per-minor reception is fragile; the manifest is the single source of truth for
+// BOTH what's shown here AND what the auto-tour plays (see TourAudioController
+// ._playNextFrom, which likewise walks the whole manifest). A dead/weak exhibit
+// beacon therefore no longer hides its exhibit — it's still listed and tappable.
 //
-// ZONE STILL FROZEN: `major` comes from route arguments; only the SUBSET shown
-// is live. If the arbiter switches zones underneath, this screen keeps its
-// frozen `major` (Phase-1 rule); only screen 2 follows the arbiter.
+// (History: an earlier Phase-4 change made this presence-driven via
+// ExhibitPresenceTracker. That tracker has since been removed everywhere.)
 //
-// NO RANKING / NO FLICKER: visible rows keep MANIFEST ORDER. The present set is
-// already debounced and change-gated by ExhibitPresenceTracker.
+// ZONE STILL FROZEN: `major` comes from route arguments. If the arbiter switches
+// zones underneath, this screen keeps its frozen `major` (Phase-1 rule); only
+// screen 2 follows the arbiter.
+//
+// NO RANKING: rows keep MANIFEST ORDER. The list is now static per zone (no
+// live membership stream), so it rebuilds only on zone content change.
 //
 // TOKEN FAMILIES: only the hero is ON the image (inkOnImage / mutedOnImage —
 // fixed across themes, because the photograph doesn't brighten in light mode).
@@ -61,11 +67,6 @@
 //     trạng thái engine — tam giác khi im, hai gạch khi intro CỦA KHU NÀY
 //     đang phát. Chạm đổi hành vi theo trạng thái: pause / phát tiếp giữa
 //     chừng / phát từ đầu (tapZoneIntro). Xem doc của widget.
-//
-// STREAMBUILDER BỌC CẢ CUSTOMSCROLLVIEW: một StreamBuilder chỉ trả về MỘT
-// widget nên không thể sinh riêng sliver danh sách. Chấp nhận rebuild cả
-// scroll view theo presence vì (a) stream đã debounce + change-gated, tần suất
-// thấp; (b) rebuild giữ nguyên Element ⇒ vị trí cuộn và state hero không mất.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -76,7 +77,6 @@ import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
-import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
@@ -93,26 +93,12 @@ class ExhibitListScreen extends StatefulWidget {
 }
 
 class _ExhibitListScreenState extends State<ExhibitListScreen> {
-  late final ExhibitPresenceProvider _presence;
-  late final Stream<Set<int>> _presenceStream;
-
   // Nối `open` (độ mở của hero) từ flexibleSpace tới leading — xem doc
   // `scrimBack` ở museum_tokens.dart cho lý do việc nối dây này tồn tại.
   // `Listenable` chứ không phải `ValueNotifier<double>` riêng: ScrollController
   // đã LÀ một Listenable, việc thêm một tầng thông báo thứ hai chỉ tạo ra hai
   // nguồn sự thật có thể trôi khỏi nhau.
   final ScrollController _scrollController = ScrollController();
-
-  @override
-  void initState() {
-    super.initState();
-    // Resolve once. Calling watchMajor() inside build() would hand StreamBuilder
-    // a fresh Stream object on every rebuild; it survives today only because
-    // _ControllerStream overrides ==, which is a dart:async implementation
-    // detail we shouldn't depend on.
-    _presence = context.read<ExhibitPresenceProvider>();
-    _presenceStream = _presence.watchMajor(widget.major);
-  }
 
   @override
   void dispose() {
@@ -137,60 +123,52 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
       );
     }
 
+    // Danh sách hiện vật = TRỌN manifest của khu, theo thứ tự manifest. Chỉ cần
+    // đang trong khu (major) là hiện hết — không lọc theo sóng minor. (Trước đây
+    // lọc theo ExhibitPresenceTracker; đã gỡ để hiển thị + audio đều dựa trọn
+    // vào manifest, đồng nhất với auto-tour phát hết hiện vật.)
+    final visible = zone.exhibits;
+
     return Scaffold(
       backgroundColor: t.surface,
-      body: StreamBuilder<Set<int>>(
-        initialData: _presence.currentPresent(widget.major),
-        stream: _presenceStream,
-        builder: (context, snap) {
-          final present = snap.data ?? const <int>{};
-
-          // Filter to heard minors, but keep MANIFEST ORDER (no ranking).
-          final visible = <ExhibitInfo>[
-            for (final e in zone.exhibits)
-              if (present.contains(e.minor)) e,
-          ];
-
-          return CustomScrollView(
-            controller: _scrollController,
-            slivers: [
-              _ZoneHeroBar(
-                zone: zone,
-                content: content,
-                scrollController: _scrollController,
+      body: CustomScrollView(
+        controller: _scrollController,
+        slivers: [
+          _ZoneHeroBar(
+            zone: zone,
+            content: content,
+            scrollController: _scrollController,
+          ),
+          if (visible.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: _ZoneEmpty(),
+            )
+          else
+            SliverPadding(
+              // Trái/phải = gutter ⇒ mép thẻ thẳng hàng với kicker và tên
+              // khu trên hero. Dưới = x6 + inset hệ thống (gesture bar) —
+              // KHÔNG gộp vào một số thô, nó khác nhau trên mỗi máy.
+              // Trên = x6: hero và danh sách là hai KHỐI. Vùng tan đã kết thúc
+              // bên trong hero, nên đây là surface sạch — khe này cho
+              // dải chuyển kịp "hạ cánh" trước khi thẻ đầu tiên xuất hiện.
+              padding: EdgeInsets.fromLTRB(
+                AppSpace.gutter,
+                AppSpace.x6,
+                AppSpace.gutter,
+                AppSpace.x6 + MediaQuery.paddingOf(context).bottom,
               ),
-              if (visible.isEmpty)
-                const SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: _NoneNearby(),
-                )
-              else
-                SliverPadding(
-                  // Trái/phải = gutter ⇒ mép thẻ thẳng hàng với kicker và tên
-                  // khu trên hero. Dưới = x6 + inset hệ thống (gesture bar) —
-                  // KHÔNG gộp vào một số thô, nó khác nhau trên mỗi máy.
-                  // Trên = x6: hero và danh sách là hai KHỐI. Vùng tan đã kết thúc
-                  // bên trong hero, nên đây là surface sạch — khe này cho
-                  // dải chuyển kịp "hạ cánh" trước khi thẻ đầu tiên xuất hiện.
-                  padding: EdgeInsets.fromLTRB(
-                    AppSpace.gutter,
-                    AppSpace.x6,
-                    AppSpace.gutter,
-                    AppSpace.x6 + MediaQuery.paddingOf(context).bottom,
-                  ),
-                  sliver: SliverList.builder(
-                    itemCount: visible.length,
-                    itemBuilder: (context, i) => _StopRow(
-                      exhibit: visible[i],
-                      content: content,
-                      major: widget.major,
-                      onTap: () => _openExhibit(context, visible[i]),
-                    ),
-                  ),
+              sliver: SliverList.builder(
+                itemCount: visible.length,
+                itemBuilder: (context, i) => _StopRow(
+                  exhibit: visible[i],
+                  content: content,
+                  major: widget.major,
+                  onTap: () => _openExhibit(context, visible[i]),
                 ),
-            ],
-          );
-        },
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -772,8 +750,8 @@ class _ZoneIntroButton extends StatelessWidget {
 /// Nếu sau này muốn một hình thật: dùng lại vòng radar của _RadarStandby (màn
 /// 2) — cùng ý nghĩa "chưa nghe thấy gì", và là hình học của chính app. Đừng
 /// đi tìm icon Material khác.
-class _NoneNearby extends StatelessWidget {
-  const _NoneNearby();
+class _ZoneEmpty extends StatelessWidget {
+  const _ZoneEmpty();
 
   @override
   Widget build(BuildContext context) {
@@ -818,7 +796,7 @@ class _NoneNearby extends StatelessWidget {
             //     ở đây:  vạch 48×2 → cardTitle    (serif) → guidance (sans)
             // Đó là lý do tin được rằng đây là tiếng nói của app, không phải
             // một trạng thái rỗng đi mượn từ vựng ở đâu về.
-            Text('Chưa có hiện vật nào ở gần',
+            Text('Khu này chưa có hiện vật',
                 textAlign: TextAlign.center,
                 style: AppText.cardTitle.copyWith(color: t.ink)),
             const SizedBox(height: AppSpace.x2),
@@ -833,8 +811,8 @@ class _NoneNearby extends StatelessWidget {
               //      đọc kỹ hơn nó.
               // Token đã bị dùng ngược hợp đồng của chính nó; con số chỉ là
               // chỗ điều đó lộ ra.
-              'Hãy tiến lại gần một tủ trưng bày. Hiện vật sẽ tự xuất hiện '
-              'trong danh sách khi bạn tới đủ gần.',
+              'Khu trưng bày này hiện chưa có hiện vật nào trong nội dung. '
+              'Vui lòng quay lại sau khi nội dung được cập nhật.',
               textAlign: TextAlign.center,
               style: AppText.guidance.copyWith(color: t.inkMuted),
             ),

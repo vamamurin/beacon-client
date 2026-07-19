@@ -42,7 +42,6 @@ import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
-import 'package:beacon_client/presentation/providers/exhibit_presence_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -276,11 +275,6 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
                 repository: graph.repository,
                 imagePathResolver: graph.imagePathResolver,
               ),
-            ),
-
-            // ── hiện diện beacon: "hiện vật nào đang nghe thấy?" (màn 3)
-            Provider<ExhibitPresenceProvider>(
-              create: (_) => ExhibitPresenceProvider(graph.exhibitPresence),
             ),
 
             // ── khởi động: "đã sẵn sàng bàn giao máy chưa?" (màn 1)

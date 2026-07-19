@@ -58,12 +58,6 @@ enum AudioIntentResult {
 typedef AudioUriResolver = Uri Function(String bundleRelativePath);
 typedef LanguageResolver = String Function();
 
-/// C3-fix — trả về tập minor của [major] đang CÓ SÓNG ngay lúc này (cùng nguồn
-/// nuôi màn 3: ExhibitPresenceTracker). Auto-tour dùng nó để BỎ QUA các hiện
-/// vật không nghe thấy, thay vì đọc tuần tự toàn bộ manifest. Trả tập rỗng khi
-/// chưa nghe thấy hiện vật nào (auto-tour dừng sau intro, chờ tap).
-typedef PresentMinorsResolver = Set<int> Function(int major);
-
 class TourAudioController {
   // Bench-test / demo qua loa ngoài, không cần tai nghe:
   //   flutter run   --dart-define=ASSUME_HEADPHONES=true
@@ -82,14 +76,12 @@ class TourAudioController {
     required AudioUriResolver uriResolver,
     required LanguageResolver language,
     required void Function() onChime,
-    required PresentMinorsResolver presentMinors,
   })  : _repo = repository,
         _engine = engine,
         _headphones = headphones,
         _resolveUri = uriResolver,
         _language = language,
-        _onChime = onChime,
-        _presentMinors = presentMinors {
+        _onChime = onChime {
     _completedSub = _engine.onCompleted.listen(_onClipCompleted);
     _headphoneSub =
         _headphones.onConnectionChanged.listen(_onHeadphoneChanged);
@@ -101,7 +93,6 @@ class TourAudioController {
   final AudioUriResolver _resolveUri;
   final LanguageResolver _language;
   final void Function() _onChime;
-  final PresentMinorsResolver _presentMinors;
 
   late final StreamSubscription<AudioTrackRef> _completedSub;
   late final StreamSubscription<bool> _headphoneSub;
@@ -401,21 +392,26 @@ class TourAudioController {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
     if (!_autoplayAllowed) return;
-    _playNextPresentFrom(zone, _autoIndex);
+    _playNextFrom(zone, _autoIndex);
   }
 
-  /// C3-fix — auto-tour CHỈ phát những hiện vật ĐANG CÓ SÓNG (giống màn 3),
-  /// duyệt theo THỨ TỰ MANIFEST từ [startIndex]. Bỏ qua mọi hiện vật không
-  /// nghe thấy. Hết danh sách mà không còn hiện vật có sóng → im, chờ tap hoặc
-  /// đổi zone. Nguồn "có sóng" là ExhibitPresenceTracker (đã hysteresis chống
-  /// nháy), nên một beacon rớt một packet không làm nhảy cóc hiện vật.
-  void _playNextPresentFrom(ZoneInfo zone, int startIndex) {
-    final Set<int> present = _presentMinors(zone.major);
+  /// Auto-tour phát LẦN LƯỢT MỌI hiện vật của khu theo THỨ TỰ MANIFEST từ
+  /// [startIndex], KHÔNG phụ thuộc việc có nghe thấy sóng minor hay không. Khu
+  /// là một mạch thuyết minh liền: chỉ cần bắt được major (đang trong khu) là
+  /// phát hết hiện vật, đồng nhất với danh sách màn 3 (cũng hiện hết manifest).
+  ///
+  /// Chỉ bỏ qua hiện vật KHÔNG resolve được audio ở ngôn ngữ hiện tại (thiếu
+  /// track) — đi tiếp hiện vật sau. Hết danh sách → dừng auto-tour, chờ tap
+  /// hoặc đổi zone.
+  ///
+  /// (Trước đây bản này lọc theo ExhibitPresenceTracker — "chỉ phát hiện vật
+  /// đang có sóng". Đã gỡ theo quyết định sản phẩm: hiển thị và audio đều dựa
+  /// trọn vào manifest, chỉ cần major.)
+  void _playNextFrom(ZoneInfo zone, int startIndex) {
     for (int i = startIndex; i < zone.exhibits.length; i++) {
       final exhibit = zone.exhibits[i];
-      if (!present.contains(exhibit.minor)) continue; // không có sóng → bỏ qua
       final resolved = exhibit.audio.resolve(_language(), _fallback);
-      if (resolved == null) continue; // không resolve được → bỏ qua, đi tiếp
+      if (resolved == null) continue; // thiếu audio ngôn ngữ này → bỏ qua, đi tiếp
       _autoIndex = i + 1; // lần sau bắt đầu SAU hiện vật này
       _engine.load(
         AudioTrackRef(
@@ -430,7 +426,7 @@ class TourAudioController {
       _tryPlay();
       return;
     }
-    // Không còn hiện vật có sóng phía sau → dừng auto-tour ở đây.
+    // Hết hiện vật trong khu → dừng auto-tour ở đây.
     _autoIndex = zone.exhibits.length;
   }
 
