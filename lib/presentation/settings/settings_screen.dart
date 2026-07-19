@@ -22,6 +22,7 @@ import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/widgets/language_picker.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -52,6 +53,11 @@ class SettingsScreen extends StatelessWidget {
         // màn chưa redesign chỉ tạo ra một lưới thứ ba.
         padding: const EdgeInsets.fromLTRB(AppSpace.gutter, 8, AppSpace.gutter, 24),
         children: [
+          Text('NGÔN NGỮ', style: AppText.kicker.copyWith(color: t.inkFaint)),
+          const SizedBox(height: 12),
+          const LanguagePicker(),
+          const SizedBox(height: 32),
+          
           Text('GIAO DIỆN', style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
           for (final id in MuseumThemeId.values)

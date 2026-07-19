@@ -180,6 +180,8 @@ class MuseumConfig {
   /// `welcomeAccentImage` ⇒ null ⇒ Gate chỉ vẽ một khung ảnh. Không bao giờ
   /// là điều kiện bắt buộc của bundle.
   final String? welcomeAccentImagePath;
+  
+  final Map<String, Map<String, String>> uiStrings; // lang → (key → chuỗi)
 
   /// Available narration languages, e.g. ["vi", "en"]. Gate screen options.
   final List<String> languages;
@@ -213,6 +215,7 @@ class MuseumConfig {
     required this.arbitration,
     required this.policies,
     this.autoSyncHours,
+    this.uiStrings = const {},
   });
 
   @override

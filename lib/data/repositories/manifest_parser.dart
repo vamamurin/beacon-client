@@ -70,6 +70,8 @@ abstract final class ManifestParser {
           'fallbackLanguage "$fallbackLanguage" not in languages $languages');
     }
 
+    final uiStrings = _optUiStrings(root, 'ui');
+
     final museum = _reqMap(root, 'museum', 'root');
     final museumName = _reqLocalized(museum, 'name', 'museum', fallbackLanguage);
     final welcomeImagePath = _optPath(museum, 'welcomeImage', 'museum');
@@ -137,6 +139,7 @@ abstract final class ManifestParser {
         welcomeAccentImagePath: welcomeAccentImagePath,
         languages: List.unmodifiable(languages),
         fallbackLanguage: fallbackLanguage,
+        uiStrings: uiStrings,
         beaconUuid: beaconUuid,
         deskMajor: deskMajor,
         arbitration: arbitration,
@@ -352,6 +355,23 @@ abstract final class ManifestParser {
   static double _optNum(Map<String, dynamic> m, String key, double fallback) {
     final v = m[key];
     return v is num ? v.toDouble() : fallback;
+  }
+
+  static Map<String, Map<String, String>> _optUiStrings(
+      Map<String, dynamic> root, String key) {
+    final raw = root[key];
+    if (raw is! Map) return const {};
+    final out = <String, Map<String, String>>{};
+    raw.forEach((lang, table) {
+      if (lang is String && table is Map) {
+        final t = <String, String>{};
+        table.forEach((k, v) {
+          if (k is String && v is String) t[k] = v;
+        });
+        if (t.isNotEmpty) out[lang] = Map.unmodifiable(t);
+      }
+    });
+    return Map.unmodifiable(out);
   }
 
   static bool _reqBool(Map<String, dynamic> m, String key, String ctx) {

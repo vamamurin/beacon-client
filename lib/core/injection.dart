@@ -57,6 +57,7 @@ import 'package:beacon_client/services/tour_audio_controller.dart';
 import 'package:beacon_client/services/tour_wiring.dart';
 import 'package:beacon_client/services/zone_change_coordinator.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
+import 'package:beacon_client/presentation/providers/language_controller.dart';
 
 enum RunMode { mock, real }
 
@@ -68,6 +69,7 @@ class AppGraph {
   final IAudioEngine audioEngine;
   final SessionController session;
   final ChimePlayer chime;
+  final LanguageController languageController;
   final ContentSyncService? sync; // null in mock mode
 
    /// Keep-alive foreground service — giữ tiến trình sống suốt tour để BLE +
@@ -120,6 +122,7 @@ class AppGraph {
     required this.audioEngine,
     required this.session,
     required this.chime,
+    required this.languageController,
     required this.sync,
     required this.keepAlive,
     required this.zoneChanges,
@@ -174,6 +177,7 @@ class AppGraph {
     await session.dispose();
     await presence.dispose();
     nearbyZones.dispose();
+    languageController.dispose();
     await autoSync?.dispose();
     await audioController.dispose();
     await audioEngine.dispose();
@@ -229,6 +233,10 @@ abstract final class Injection {
 
     await repository.preWarm(); // may set lastError (fresh device) — Gate shows it
     final cfg = repository.config;
+    final languageController = LanguageController(
+      available: cfg?.languages ?? const ['vi'],
+      fallback: cfg?.fallbackLanguage ?? 'vi',
+    );
 
     // ── radio pipeline ──
     final IBeaconScanner scanner = switch (mode) {
@@ -277,10 +285,7 @@ abstract final class Injection {
       engine: engine,
       headphones: headphones,
       uriResolver: _uriResolver(repository),
-      // Đọc từ repository (không phải biến `cfg` đã snapshot ở trên), nên một
-      // lần re-warm sau sync sẽ được nhìn thấy. Khi Settings ra đời, dòng này
-      // thành `() => settings.language` — không cần restart graph.
-      language: () => repository.config?.fallbackLanguage ?? 'vi',
+      language: () => languageController.code,
 
       onChime: chime.play,
     );
@@ -338,6 +343,7 @@ abstract final class Injection {
         keepAlive.start(); // <-- THÊM: giữ tiến trình sống cả tour (kể cả standby)
       } else if (was == SessionPhase.touring && s.phase != SessionPhase.touring) {
         keepAlive.stop(); // <-- THÊM: hết tour → hạ keep-alive (tiết kiệm pin ở dock)
+        languageController.resetToFallback();
       }
     });
 
@@ -389,6 +395,7 @@ abstract final class Injection {
       audioEngine: engine,
       session: session,
       chime: chime,
+      languageController: languageController,
       sync: sync,
       keepAlive: keepAlive,
       zoneChanges: zoneChanges,

@@ -67,13 +67,15 @@ import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
-import 'package:beacon_client/presentation/providers/content_provider.dart';
-import 'package:beacon_client/presentation/providers/session_provider.dart';
-import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/widgets/language_picker.dart';
+import 'package:beacon_client/presentation/providers/language_controller.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/session_provider.dart';
+import 'package:beacon_client/presentation/providers/startup_provider.dart';
 
 /// Điểm neo cho test hình học. KHÔNG phải rác test lẫn vào code sản xuất:
 /// mỗi key ở đây tương ứng ĐÚNG một quan hệ đã từng gãy và đã tốn một lần sửa.
@@ -161,9 +163,25 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
     if (needsSync) {
       return _SyncNotice(startup: startup);
     }
-    return _StartButton(
-      enabled: session.isAtGate,
-      onPressed: session.startTour, // root navigates when phase -> touring
+    return Consumer<LanguageController>(
+      builder: (context, lang, _) {
+        final multi = lang.available.length >= 2;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (multi)
+              const Padding(
+                padding: EdgeInsets.only(bottom: AppSpace.x5),
+                child: LanguagePicker(),
+              ),
+            _StartButton(
+              enabled: session.isAtGate,
+              onPressed: session.startTour, // root navigates when touring
+            ),
+          ],
+        );
+      },
     );
   }
 }

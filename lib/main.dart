@@ -39,9 +39,10 @@ import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
-import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
-import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
+import 'package:beacon_client/presentation/providers/language_controller.dart';
+import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -269,13 +270,18 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
             // `create` chạy đúng một lần cho vòng đời của element này.
             Provider<AppRestarter>(create: (_) => AppRestarter(_restart)),
 
-            // ── nội dung: "hiển thị chữ nào, ảnh nào?" (màn 2, 3, 4)
+            ChangeNotifierProvider<LanguageController>.value(
+              value: graph.languageController,
+            ),
             ChangeNotifierProvider<ContentProvider>(
               create: (_) => ContentProvider(
                 repository: graph.repository,
                 imagePathResolver: graph.imagePathResolver,
+                language: graph.languageController, // <-- Feature B
               ),
             ),
+
+            
 
             // ── khởi động: "đã sẵn sàng bàn giao máy chưa?" (màn 1)
             Provider<StartupProvider>(
