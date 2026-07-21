@@ -66,6 +66,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/startup_status.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
@@ -143,9 +144,13 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
 
     // Dây nối, không bố cục. Mọi thứ hình học sống ở [GateLayout].
     return GateLayout(
-      museumName: content.textOrNull(content.museumName) ?? 'Bảo tàng',
+      museumName: content.textOrNull(content.museumName) ??
+          content.ui(UiKeys.gateMuseumFallback),
       primaryPath: content.welcomeImagePath,
       accentPath: content.welcomeAccentImagePath,
+      welcomeTitle: content.ui(UiKeys.gateWelcomeTitle),
+      welcomeSubtitle: content.ui(UiKeys.gateWelcomeSubtitle),
+      welcomeGuidance: content.ui(UiKeys.gateWelcomeGuidance),
       action: ValueListenableBuilder<StartupStatus>(
         valueListenable: startup.bleStatus,
         builder: (context, bleStatus, _) =>
@@ -228,11 +233,17 @@ class GateLayout extends StatelessWidget {
     required this.primaryPath,
     required this.accentPath,
     required this.action,
+    required this.welcomeTitle,
+    required this.welcomeSubtitle,
+    required this.welcomeGuidance,
   });
 
   final String museumName;
   final String? primaryPath;
   final String? accentPath;
+  final String welcomeTitle;
+  final String welcomeSubtitle;
+  final String welcomeGuidance;
 
   /// Khối đáy màn: nút Bắt đầu, hoặc thẻ nhân viên (BLE chưa sẵn / cần đồng bộ).
   ///
@@ -397,18 +408,15 @@ class GateLayout extends StatelessWidget {
                             //
                             // Muốn thử hai FONT khác nhau: đổi trong AppText, không
                             // đổi ở đây. Xem doc của welcomeTitle/welcomeSubTitle.
-                            Text('Chào mừng',
+                            Text(welcomeTitle,
                                 style: AppText.welcomeTitle.copyWith(color: t.ink)),
-                            Text('quý khách',
+                            Text(welcomeSubtitle,
                                 style:
                                     AppText.welcomeSubTitle.copyWith(color: t.ink)),
 
                             const SizedBox(height: AppSpace.x3),
                             Text(
-                              // Rút từ 3 ý còn 2: "không cần tìm kiếm" là hệ quả
-                              // của "tự nhận biết", không cần nói riêng.
-                              'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
-                              'Đeo tai nghe để bắt đầu nghe thuyết minh.',
+                              welcomeGuidance,
                               style: AppText.lede.copyWith(color: t.inkMuted),
                             ),
                           ],
@@ -945,10 +953,11 @@ class _StartButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final fg = enabled ? t.ctaLabel : t.inkMuted;
+    final label = context.watch<ContentProvider>().ui(UiKeys.gateStart);
     return Semantics(
       button: true,
       enabled: enabled,
-      label: 'Bắt đầu tham quan',
+      label: label,
       // excludeSemantics + onTap ĐI THÀNH CẶP — xem doc ở khối tên bảo tàng.
       // excludeSemantics gỡ cả cây con, kể cả action onTap mà InkWell tự khai;
       // thiếu onTap ở đây là nút không bấm được bằng TalkBack.
@@ -971,7 +980,7 @@ class _StartButton extends StatelessWidget {
                 // label ở Semantics bên ngoài.
                 Icon(Icons.headphones, size: 16, color: fg),
                 const SizedBox(width: AppSpace.x2),
-                Text('Bắt đầu tham quan'.toUpperCase(),
+                Text(label.toUpperCase(),
                     style: AppText.button.copyWith(color: fg)),
               ],
             ),
@@ -1059,37 +1068,40 @@ class _SyncNoticeState extends State<_SyncNotice> {
       },
     );
     if (!mounted) return;
+    final content = context.read<ContentProvider>();
     setState(() {
       _syncing = false;
       _readyToRestart = report.readyToRestart;
       _message = switch (report.status) {
         SyncStatus.updated =>
-          'Đã tải nội dung ${report.version}. Nhấn để khởi động lại và bắt đầu.',
+          content.uif(UiKeys.gateSyncUpdated, {'version': report.version ?? ''}),
         SyncStatus.upToDate =>
-          'Nội dung đã là bản mới nhất (${report.version}). Nhấn để khởi động lại.',
-        SyncStatus.noConnectivity =>
-          'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
-        SyncStatus.failed => 'Đồng bộ thất bại: ${report.error ?? ""}',
-        SyncStatus.mockMode => 'Chế độ mock — không có server.',
+          content.uif(UiKeys.gateSyncUpToDate, {'version': report.version ?? ''}),
+        SyncStatus.noConnectivity => content.ui(UiKeys.gateSyncNoConnectivity),
+        SyncStatus.failed =>
+          content.uif(UiKeys.gateSyncFailed, {'error': report.error ?? ''}),
+        SyncStatus.mockMode => content.ui(UiKeys.gateSyncMockMode),
       };
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final content = context.watch<ContentProvider>();
     return _StaffCard(
-      title: _readyToRestart ? 'Đã tải xong' : 'Chưa sẵn sàng',
-      body: _message ??
-          'Thiết bị chưa có nội dung tham quan. Nhấn Đồng bộ để tải '
-              'dữ liệu trước khi bàn giao cho khách.',
+      title: content.ui(_readyToRestart
+          ? UiKeys.gateSyncDoneTitle
+          : UiKeys.gateSyncNotReadyTitle),
+      body: _message ?? content.ui(UiKeys.gateSyncFreshBody),
       action: _syncing
           ? _ProgressLine(progress: _progress)
           : _readyToRestart
               ? _StaffButton(
-                  label: 'Khởi động lại ứng dụng',
+                  label: content.ui(UiKeys.gateSyncRestartCta),
                   onPressed: () => context.read<AppRestarter>().call(),
                 )
-              : _StaffButton(label: 'Đồng bộ nội dung', onPressed: _sync),
+              : _StaffButton(
+                  label: content.ui(UiKeys.gateSyncSyncCta), onPressed: _sync),
     );
   }
 }
@@ -1110,50 +1122,50 @@ class _BleNotReady extends StatefulWidget {
 class _BleNotReadyState extends State<_BleNotReady> {
   bool _busy = false;
 
-  ({String title, String body, String cta, bool opensSettings}) get _copy {
+({String title, String body, String cta, bool opensSettings}) _copy(
+      ContentProvider content) {
     switch (widget.status) {
       case StartupStatus.permissionDenied:
         return (
-          title: 'Cần quyền Bluetooth',
-          body: 'Ứng dụng cần quyền Bluetooth để nhận diện khu trưng bày. '
-              'Nhấn để cấp quyền.',
-          cta: 'Cấp quyền',
+          title: content.ui(UiKeys.gateBlePermTitle),
+          body: content.ui(UiKeys.gateBlePermBody),
+          cta: content.ui(UiKeys.gateBlePermCta),
           opensSettings: false,
         );
       case StartupStatus.permissionPermanentlyDenied:
         return (
-          title: 'Quyền bị từ chối',
-          body: 'Quyền Bluetooth đã bị tắt. Mở Cài đặt để bật, rồi quay lại — '
-              'ứng dụng sẽ tự nhận.',
-          cta: 'Mở cài đặt',
+          title: content.ui(UiKeys.gateBleDeniedTitle),
+          body: content.ui(UiKeys.gateBleDeniedBody),
+          cta: content.ui(UiKeys.gateBleDeniedCta),
           opensSettings: true,
         );
       case StartupStatus.bluetoothOff:
         return (
-          title: 'Bluetooth đang tắt',
-          body: 'Vui lòng bật Bluetooth để tiếp tục.',
-          cta: 'Thử lại',
+          title: content.ui(UiKeys.gateBleOffTitle),
+          body: content.ui(UiKeys.gateBleOffBody),
+          cta: content.ui(UiKeys.gateBleRetryCta),
           opensSettings: false,
         );
       case StartupStatus.unsupported:
         return (
-          title: 'Thiết bị không hỗ trợ',
-          body: 'Thiết bị này không hỗ trợ Bluetooth Low Energy.',
+          title: content.ui(UiKeys.gateBleUnsupportedTitle),
+          body: content.ui(UiKeys.gateBleUnsupportedBody),
           cta: '',
           opensSettings: false,
         );
       default:
         return (
-          title: 'Đang kiểm tra',
-          body: 'Đang kiểm tra Bluetooth…',
-          cta: 'Thử lại',
+          title: content.ui(UiKeys.gateBleCheckingTitle),
+          body: content.ui(UiKeys.gateBleCheckingBody),
+          cta: content.ui(UiKeys.gateBleRetryCta),
           opensSettings: false,
         );
     }
   }
 
   Future<void> _act() async {
-    final c = _copy;
+    final content = context.read<ContentProvider>();
+    final c = _copy(content);
     setState(() => _busy = true);
 
     if (c.opensSettings) {
@@ -1167,7 +1179,8 @@ class _BleNotReadyState extends State<_BleNotReady> {
 
   @override
   Widget build(BuildContext context) {
-    final c = _copy;
+    final content = context.watch<ContentProvider>();
+    final c = _copy(content);
     return _StaffCard(
       title: c.title,
       body: c.body,

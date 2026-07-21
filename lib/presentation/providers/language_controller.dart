@@ -62,6 +62,7 @@ class LanguageController extends ChangeNotifier {
 /// chưa có (thêm ngôn ngữ nội dung mới mà chưa kịp thêm tên vào đây vẫn hiện
 /// được, chỉ là hiển thị mã thô — không vỡ). Thêm một dòng ở đây là đủ để có
 /// tên đẹp; không cần build lại logic.
+/// Tôi có thử thêm thật nhiều ngôn ngữ, màn hình có hiển thị. Tuy nhiên nếu tôi xóa bớt trong manifest thì màn hình vẫn hiển thị vậy ko xóa đi. Tôi cũng muốn để các dòng này trong file manifest thay vì trong code nên đây sẽ là vấn đề cần xử lý thêm 
 String languageDisplayName(String code) {
   const names = <String, String>{
     'vi': 'Tiếng Việt',

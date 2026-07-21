@@ -70,6 +70,14 @@ class ContentProvider extends ChangeNotifier {
         key;
   }
 
+  /// Như [ui] nhưng thay các placeholder `{name}` bằng giá trị trong [params].
+  /// Vd: uif(UiKeys.gateSyncUpdated, {'version': '2026.07.10-15'}).
+  String uif(String key, Map<String, String> params) {
+    var s = ui(key);
+    params.forEach((k, v) => s = s.replaceAll('{$k}', v));
+    return s;
+  }
+
   // ── tra cứu nội dung ──────────────────────────────────────────────────────
 
   ZoneInfo? zoneByMajor(int major) => _repo.zoneByMajor(major);

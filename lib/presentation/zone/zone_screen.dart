@@ -73,6 +73,7 @@ import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 
 class ZoneScreen extends StatelessWidget {
   const ZoneScreen({super.key});
@@ -130,11 +131,11 @@ class _ZoneRankingView extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('Khu vực quanh bạn',
+                Text(content.ui(UiKeys.zoneNearbyTitle),
                     style: AppText.sheetTitle.copyWith(color: t.ink)),
                 const SizedBox(height: AppSpace.x2),
                 Text(
-                  'Ứng dụng nhận diện các khu trưng bày gần bạn qua sóng beacon.',
+                  content.ui(UiKeys.zoneNearbyGuidance),
                   style: AppText.sheetSub.copyWith(color: t.inkMuted),
                 ),
               ],
@@ -233,9 +234,11 @@ class _CurrentZoneHero extends StatelessWidget {
     return Semantics(
       button: r != null,
       label: r == null
-          ? 'Đang xác định khu trưng bày quanh bạn'
-          : 'Bạn đang ở khu ${content.text(r.zone.name)}, '
-              '${r.zone.exhibits.length} hiện vật',
+          ? content.ui(UiKeys.zoneIdentifyingSemantics)
+          : content.uif(UiKeys.zoneCurrentSemantics, {
+              'zone': content.text(r.zone.name),
+              'count': '${r.zone.exhibits.length}',
+            }),
       // excludeSemantics + onTap ĐI THÀNH CẶP: excludeSemantics gỡ cả cây con
       // khỏi semantics, kể cả action onTap mà InkWell tự khai. Thiếu vế thứ hai
       // là ô thôi bấm được bằng TalkBack — hồi quy im lặng, không test nào bắt
@@ -276,11 +279,11 @@ class _CurrentZoneHero extends StatelessWidget {
           children: [
             // Vai trò kicker tự viết hoa — call site truyền chuỗi thường (luật
             // chữ hoa, xem app_text.dart).
-            Text('Đang xác định'.toUpperCase(),
+            Text(content.ui(UiKeys.zoneIdentifying).toUpperCase(),
                 style: AppText.kicker.copyWith(color: t.inkMuted)),
             const SizedBox(height: AppSpace.x2),
             Text(
-              'Hãy tiến vào một khu trưng bày để bắt đầu nghe thuyết minh.',
+              content.ui(UiKeys.zoneEnterPromptA),
               style: AppText.guidance.copyWith(color: t.inkMuted),
             ),
           ],
@@ -292,7 +295,8 @@ class _CurrentZoneHero extends StatelessWidget {
     final name = content.text(r.zone.name);
     final count = r.zone.exhibits.length;
     final dist = (showDistance && r.distanceMeters != null)
-        ? ' · ~${r.distanceMeters!.toStringAsFixed(1)} m'
+        ? content.uif(UiKeys.zoneDistanceSuffix,
+            {'d': r.distanceMeters!.toStringAsFixed(1)})
         : '';
 
     // Bề ngang hiển thị THẬT = màn trừ hai lề. Bản trước là hằng số 800: đúng
@@ -327,12 +331,14 @@ class _CurrentZoneHero extends StatelessWidget {
               // và sẽ biến mất ở đây. Cùng lý lẽ với inkOnImage.
               Container(width: 88, height: 2, color: t.accentOnImage),
               const SizedBox(height: AppSpace.x3),
-              Text('Đang ở đây'.toUpperCase(),
+              Text(
+                  content.ui(UiKeys.zoneHereBadge).toUpperCase(),
                   style: AppText.kicker.copyWith(color: t.accentOnImage)),
               const SizedBox(height: AppSpace.x2),
               Text(name, style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
               const SizedBox(height: AppSpace.x2),
-              Text('$count hiện vật$dist',
+              Text(
+                  content.uif(UiKeys.zoneExhibitCount, {'count': '$count'}) + dist,
                   style: AppText.meta.copyWith(color: t.mutedOnImage)),
             ],
           ),
@@ -371,7 +377,8 @@ class _NearbyZoneRow extends StatelessWidget {
     final count = row.zone.exhibits.length;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final dist = (showDistance && row.distanceMeters != null)
-        ? ' · ~${row.distanceMeters!.toStringAsFixed(1)} m'
+        ? content.uif(UiKeys.zoneDistanceSuffix,
+            {'d': row.distanceMeters!.toStringAsFixed(1)})
         : '';
 
     return Semantics(
@@ -380,7 +387,8 @@ class _NearbyZoneRow extends StatelessWidget {
       // `showDistance` là cờ debug chỉ dành cho nhân viên: con số đó không đủ
       // tin để đưa cho khách. "Gần bạn thứ 3" nghe như một sự thật; nó là một
       // ước lượng nhiễu. Thứ tự trong danh sách đã nói điều đó, đủ mềm.
-      label: 'Khu $name, $count hiện vật',
+      label: content.uif(UiKeys.zoneRowSemantics,
+          {'zone': name, 'count': '$count'}),
       excludeSemantics: true,
       onTap: onTap,
       child: Padding(
@@ -417,7 +425,7 @@ class _NearbyZoneRow extends StatelessWidget {
                         Text(name,
                             style: AppText.cardTitle.copyWith(color: t.ink)),
                         const SizedBox(height: AppSpace.x1),
-                        Text('$count hiện vật$dist',
+                        Text(content.uif(UiKeys.zoneExhibitCount, {'count': '$count'}) + dist,
                             style: AppText.meta.copyWith(color: t.inkMuted)),
                       ],
                     ),
@@ -490,6 +498,7 @@ class _RadarStandbyState extends State<_RadarStandby>
 
   @override
   Widget build(BuildContext context) {
+    final content = context.read<ContentProvider>();
     final t = context.tokens;
     return Center(
       child: Column(
@@ -509,7 +518,7 @@ class _RadarStandbyState extends State<_RadarStandby>
           // accentOnImage): khối này đứng trên `surface`, không trên ảnh.
           Container(width: 88, height: 2, color: t.accent),
           const SizedBox(height: AppSpace.x3),
-          Text('Đang quét không gian'.toUpperCase(),
+          Text(content.ui(UiKeys.zoneScanning).toUpperCase(),
               style: AppText.kicker.copyWith(color: t.ink)),
           const SizedBox(height: AppSpace.x2),
           Padding(
@@ -518,7 +527,7 @@ class _RadarStandbyState extends State<_RadarStandby>
             // `_NoneNearby` ở màn 3.
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.x10),
             child: Text(
-              'Hãy tiến vào khu trưng bày để bắt đầu nghe thuyết minh.',
+              content.ui(UiKeys.zoneEnterPromptB),
               textAlign: TextAlign.center,
               style: AppText.guidance.copyWith(color: t.inkMuted),
             ),

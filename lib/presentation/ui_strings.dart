@@ -1,43 +1,176 @@
-// Destination: lib/presentation/ui_strings.dart (NEW)
+// Destination: lib/presentation/ui_strings.dart (REPLACES)
 //
-// Feature B — chuỗi GIAO DIỆN (chrome) đi cùng bundle thay vì Flutter .arb, để
-// thêm ngôn ngữ = sửa manifest + sync, KHÔNG build lại app / không codegen.
+// Feature B — chuỗi GIAO DIỆN (chrome) đi cùng bundle thay vì Flutter .arb.
+// Xem doc gốc ở đầu file: 3 lớp (UiKeys / kUiDefaults / resolve), quy ước tách
+// theo widget, {placeholder} + ContentProvider.uif cho chuỗi có biến chạy.
 //
-// BA lớp:
-//   1. [UiKeys] — hằng khóa. Widget gọi `content.ui(UiKeys.gateStart)`, KHÔNG
-//      gõ chuỗi thô; gõ sai khóa là lỗi biên dịch.
-//   2. [kUiDefaults] — bản tiếng Việt NHÚNG trong app cho mọi khóa. Dùng khi
-//      bundle chưa có object `ui` (máy mới chưa sync) hoặc thiếu khóa. App luôn
-//      hiển thị được ngay cả với bundle rỗng — không bao giờ lộ khóa thô.
-//   3. Resolve (trong ContentProvider.ui): ui[lang][key] → ui[fallback][key]
-//      → kUiDefaults[key] → (cùng lắm) chính key.
-//
-// STAGE 1 chỉ khai các khóa cho picker + nhãn liên quan ngôn ngữ. STAGE 2 sẽ
-// bổ sung dần ~93 khóa còn lại (gate/settings/zone/exhibit/banner) — chỉ việc
-// thêm hằng vào [UiKeys], thêm default vào [kUiDefaults], và đổi call site.
-//
-// Muốn tạo template cho người dịch: xuất khóa + default tiếng Việt từ
-// [kUiDefaults] thành JSON, đưa họ điền cột ngôn ngữ mới.
+// TIẾN ĐỘ STAGE 2:
+//   • Gate (khách + BLE/sync nhân viên): XONG.
+//   • zone / exhibit_detail / exhibit_list / banner: XONG (dưới đây), TRỪ vài
+//     nhãn accessibility trong sub-widget không có `content` (progress bar,
+//     định dạng thời lượng cho screen reader) — để sub-pass sau.
+//   • settings: CHƯA.
 
 abstract final class UiKeys {
   // ── ngôn ngữ / picker ──
   static const languageLabel = 'language.label';
   static const languagePickerTitle = 'language.picker.title';
 
-  // ── gate ──
+  // ── gate — khách nhìn ──
+  static const gateWelcomeTitle = 'gate.welcome.title';
+  static const gateWelcomeSubtitle = 'gate.welcome.subtitle';
+  static const gateWelcomeGuidance = 'gate.welcome.guidance';
   static const gateStart = 'gate.start';
+  static const gateMuseumFallback = 'gate.museum.fallback';
+
+  // ── gate — đồng bộ (nhân viên) ──
+  static const gateSyncUpdated = 'gate.sync.updated'; // {version}
+  static const gateSyncUpToDate = 'gate.sync.upToDate'; // {version}
+  static const gateSyncNoConnectivity = 'gate.sync.noConnectivity';
+  static const gateSyncFailed = 'gate.sync.failed'; // {error}
+  static const gateSyncMockMode = 'gate.sync.mockMode';
+  static const gateSyncDoneTitle = 'gate.sync.doneTitle';
+  static const gateSyncNotReadyTitle = 'gate.sync.notReadyTitle';
+  static const gateSyncFreshBody = 'gate.sync.freshBody';
+  static const gateSyncRestartCta = 'gate.sync.restartCta';
+  static const gateSyncSyncCta = 'gate.sync.syncCta';
+
+  // ── gate — Bluetooth (nhân viên) ──
+  static const gateBlePermTitle = 'gate.ble.permTitle';
+  static const gateBlePermBody = 'gate.ble.permBody';
+  static const gateBlePermCta = 'gate.ble.permCta';
+  static const gateBleDeniedTitle = 'gate.ble.deniedTitle';
+  static const gateBleDeniedBody = 'gate.ble.deniedBody';
+  static const gateBleDeniedCta = 'gate.ble.deniedCta';
+  static const gateBleOffTitle = 'gate.ble.offTitle';
+  static const gateBleOffBody = 'gate.ble.offBody';
+  static const gateBleUnsupportedTitle = 'gate.ble.unsupportedTitle';
+  static const gateBleUnsupportedBody = 'gate.ble.unsupportedBody';
+  static const gateBleCheckingTitle = 'gate.ble.checkingTitle';
+  static const gateBleCheckingBody = 'gate.ble.checkingBody';
+  static const gateBleRetryCta = 'gate.ble.retryCta';
+
+  // ── zone (màn 2) ──
+  static const zoneNearbyTitle = 'zone.nearbyTitle';
+  static const zoneNearbyGuidance = 'zone.nearbyGuidance';
+  static const zoneIdentifying = 'zone.identifying';
+  static const zoneScanning = 'zone.scanning';
+  static const zoneEnterPromptA = 'zone.enterPromptA';
+  static const zoneEnterPromptB = 'zone.enterPromptB';
+  static const zoneHereBadge = 'zone.hereBadge';
+  static const zoneExhibitCount = 'zone.exhibitCount'; // {count}
+  static const zoneDistanceSuffix = 'zone.distanceSuffix'; // {d}
+  static const zoneRowSemantics = 'zone.rowSemantics'; // {zone} {count}
+  static const zoneCurrentSemantics = 'zone.currentSemantics'; // {zone} {count}
+  static const zoneIdentifyingSemantics = 'zone.identifyingSemantics';
+
+  // ── exhibit detail (màn 4) ──
+  static const exhibitNotFound = 'exhibit.notFound';
+  static const exhibitBack = 'exhibit.back';
+  static const exhibitRestart = 'exhibit.restart';
+  static const exhibitNext = 'exhibit.next';
+  static const exhibitPlay = 'exhibit.play';
+  static const exhibitPause = 'exhibit.pause';
+  static const exhibitSectionIntro = 'exhibit.section.intro';
+  static const exhibitSectionMeaning = 'exhibit.section.meaning';
+  static const exhibitSectionSpecs = 'exhibit.section.specs';
+
+  // ── exhibit list (màn 3) ──
+  static const exhibitListEmptyTitle = 'exhibitList.emptyTitle';
+  static const exhibitListEmptyBody = 'exhibitList.emptyBody';
+
+  // ── banner đổi khu ──
+  static const bannerTitle = 'banner.title';
+  static const bannerStay = 'banner.stay';
+  static const bannerSwitch = 'banner.switch';
 
   // ── settings ──
   static const settingsLanguage = 'settings.language';
 
-  // STAGE 2: thêm các khóa còn lại ở đây.
+  // STAGE 2 (kế): settings; nhãn accessibility còn lại của progress bar.
 }
 
-/// Bản tiếng Việt nhúng — mạng an toàn cuối cùng. Mỗi khóa trong [UiKeys] PHẢI
-/// có một dòng ở đây.
 const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.languageLabel: 'Ngôn ngữ',
   UiKeys.languagePickerTitle: 'Chọn ngôn ngữ',
+
+  UiKeys.gateWelcomeTitle: 'Chào mừng',
+  UiKeys.gateWelcomeSubtitle: 'quý khách',
+  UiKeys.gateWelcomeGuidance:
+      'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
+          'Đeo tai nghe để bắt đầu nghe thuyết minh.',
   UiKeys.gateStart: 'Bắt đầu tham quan',
+  UiKeys.gateMuseumFallback: 'Bảo tàng',
+
+  UiKeys.gateSyncUpdated:
+      'Đã tải nội dung {version}. Nhấn để khởi động lại và bắt đầu.',
+  UiKeys.gateSyncUpToDate:
+      'Nội dung đã là bản mới nhất ({version}). Nhấn để khởi động lại.',
+  UiKeys.gateSyncNoConnectivity:
+      'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.',
+  UiKeys.gateSyncFailed: 'Đồng bộ thất bại: {error}',
+  UiKeys.gateSyncMockMode: 'Chế độ mock — không có server.',
+  UiKeys.gateSyncDoneTitle: 'Đã tải xong',
+  UiKeys.gateSyncNotReadyTitle: 'Chưa sẵn sàng',
+  UiKeys.gateSyncFreshBody:
+      'Thiết bị chưa có nội dung tham quan. Nhấn Đồng bộ để tải '
+          'dữ liệu trước khi bàn giao cho khách.',
+  UiKeys.gateSyncRestartCta: 'Khởi động lại ứng dụng',
+  UiKeys.gateSyncSyncCta: 'Đồng bộ nội dung',
+
+  UiKeys.gateBlePermTitle: 'Cần quyền Bluetooth',
+  UiKeys.gateBlePermBody:
+      'Ứng dụng cần quyền Bluetooth để nhận diện khu trưng bày. '
+          'Nhấn để cấp quyền.',
+  UiKeys.gateBlePermCta: 'Cấp quyền',
+  UiKeys.gateBleDeniedTitle: 'Quyền bị từ chối',
+  UiKeys.gateBleDeniedBody:
+      'Quyền Bluetooth đã bị tắt. Mở Cài đặt để bật, rồi quay lại — '
+          'ứng dụng sẽ tự nhận.',
+  UiKeys.gateBleDeniedCta: 'Mở cài đặt',
+  UiKeys.gateBleOffTitle: 'Bluetooth đang tắt',
+  UiKeys.gateBleOffBody: 'Vui lòng bật Bluetooth để tiếp tục.',
+  UiKeys.gateBleUnsupportedTitle: 'Thiết bị không hỗ trợ',
+  UiKeys.gateBleUnsupportedBody:
+      'Thiết bị này không hỗ trợ Bluetooth Low Energy.',
+  UiKeys.gateBleCheckingTitle: 'Đang kiểm tra',
+  UiKeys.gateBleCheckingBody: 'Đang kiểm tra Bluetooth…',
+  UiKeys.gateBleRetryCta: 'Thử lại',
+
+  UiKeys.zoneNearbyTitle: 'Khu vực quanh bạn',
+  UiKeys.zoneNearbyGuidance:
+      'Ứng dụng nhận diện các khu trưng bày gần bạn qua sóng beacon.',
+  UiKeys.zoneIdentifying: 'Đang xác định',
+  UiKeys.zoneScanning: 'Đang quét không gian',
+  UiKeys.zoneEnterPromptA:
+      'Hãy tiến vào một khu trưng bày để bắt đầu nghe thuyết minh.',
+  UiKeys.zoneEnterPromptB:
+      'Hãy tiến vào khu trưng bày để bắt đầu nghe thuyết minh.',
+  UiKeys.zoneHereBadge: 'Đang ở đây',
+  UiKeys.zoneExhibitCount: '{count} hiện vật',
+  UiKeys.zoneDistanceSuffix: ' · ~{d} m',
+  UiKeys.zoneRowSemantics: 'Khu {zone}, {count} hiện vật',
+  UiKeys.zoneCurrentSemantics: 'Bạn đang ở khu {zone}, {count} hiện vật',
+  UiKeys.zoneIdentifyingSemantics: 'Đang xác định khu trưng bày quanh bạn',
+
+  UiKeys.exhibitNotFound: 'Không tìm thấy hiện vật',
+  UiKeys.exhibitBack: 'Quay lại',
+  UiKeys.exhibitRestart: 'Về đầu',
+  UiKeys.exhibitNext: 'Tiếp',
+  UiKeys.exhibitPlay: 'Phát',
+  UiKeys.exhibitPause: 'Tạm dừng',
+  UiKeys.exhibitSectionIntro: 'Giới thiệu',
+  UiKeys.exhibitSectionMeaning: 'Ý nghĩa',
+  UiKeys.exhibitSectionSpecs: 'Thông số',
+
+  UiKeys.exhibitListEmptyTitle: 'Khu này chưa có hiện vật',
+  UiKeys.exhibitListEmptyBody:
+      'Khu trưng bày này hiện chưa có hiện vật nào trong nội dung. '
+          'Vui lòng quay lại sau khi nội dung được cập nhật.',
+
+  UiKeys.bannerTitle: 'Bạn đã sang khu vực mới',
+  UiKeys.bannerStay: 'Ở lại',
+  UiKeys.bannerSwitch: 'Chuyển',
+
   UiKeys.settingsLanguage: 'Ngôn ngữ',
 };

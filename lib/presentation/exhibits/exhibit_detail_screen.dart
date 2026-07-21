@@ -37,6 +37,7 @@ import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 
 class ExhibitDetailScreen extends StatelessWidget {
   final int major;
@@ -59,7 +60,7 @@ class ExhibitDetailScreen extends StatelessWidget {
       return Scaffold(
         backgroundColor: t.surface,
         body: Center(
-          child: Text('Không tìm thấy hiện vật',
+          child: Text(content.ui(UiKeys.exhibitNotFound),
               style: AppText.meta.copyWith(color: t.inkMuted)),
         ),
       );
@@ -190,7 +191,7 @@ class _PlayerPane extends StatelessWidget {
                 _RoundIcon(
                   icon: Icons.chevron_left,
                   onTap: () => Navigator.of(context).pop(),
-                  label: 'Quay lại',
+                  label: content.ui(UiKeys.exhibitBack),
                 ),
                 _NumBadge(minor: exhibit.minor),
               ],
@@ -356,7 +357,7 @@ class _Controls extends StatelessWidget {
             children: [
               _SkipButton(
                 icon: Icons.first_page,
-                label: 'Về đầu',
+                label: content.ui(UiKeys.exhibitRestart),
                 onTap: () {
                   final r = isThis
                       ? audio.replay()
@@ -367,6 +368,9 @@ class _Controls extends StatelessWidget {
               const SizedBox(width: AppSpace.x8),
               _PlayButton(
                 playing: isThis && state.isPlaying,
+                label: content.ui((isThis && state.isPlaying)
+                    ? UiKeys.exhibitPause
+                    : UiKeys.exhibitPlay),
                 onTap: () {
                   if (isThis && state.isPlaying) {
                     audio.pause();
@@ -381,7 +385,7 @@ class _Controls extends StatelessWidget {
               const SizedBox(width: AppSpace.x8),
               _SkipButton(
                 icon: Icons.last_page,
-                label: 'Tiếp',
+                label: content.ui(UiKeys.exhibitNext),
                 // Advance to the next exhibit in tour order and open it. Off at
                 // the last exhibit (onTap null greys the control out).
                 onTap: hasNext ? () => _goNext(context, audio) : null,
@@ -576,14 +580,15 @@ class _TrackBarState extends State<_TrackBar> {
 class _PlayButton extends StatelessWidget {
   final bool playing;
   final VoidCallback onTap;
-  const _PlayButton({required this.playing, required this.onTap});
+  final String label;
+  const _PlayButton({required this.playing, required this.onTap, required this.label});
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
     return Semantics(
       button: true,
-      label: playing ? 'Tạm dừng' : 'Phát',
+      label: label,
       // excludeSemantics + onTap ĐI THÀNH CẶP: excludeSemantics gỡ cả cây con
       // khỏi semantics, kể cả action onTap mà InkWell tự khai. Thiếu vế thứ
       // hai là nút thôi bấm được bằng TalkBack — hồi quy im lặng, không test
@@ -772,18 +777,18 @@ class _DetailBody extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _sectionLabel(context, 'Giới thiệu'),
+          _sectionLabel(context, content.ui(UiKeys.exhibitSectionIntro)),
           const SizedBox(height: AppSpace.x2),
           Text(summary, style: AppText.body.copyWith(color: t.inkMuted)),
           if (meaning != null) ...[
             const SizedBox(height: AppSpace.x6),
-            _sectionLabel(context, 'Ý nghĩa'),
+            _sectionLabel(context, content.ui(UiKeys.exhibitSectionMeaning)),
             const SizedBox(height: AppSpace.x2),
             Text(meaning, style: AppText.body.copyWith(color: t.inkMuted)),
           ],
           if (exhibit.specs.isNotEmpty) ...[
             const SizedBox(height: AppSpace.x6),
-            _sectionLabel(context, 'Thông số'),
+            _sectionLabel(context, content.ui(UiKeys.exhibitSectionSpecs)),
             const SizedBox(height: AppSpace.x3),
             ...exhibit.specs.map((s) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpace.x2),

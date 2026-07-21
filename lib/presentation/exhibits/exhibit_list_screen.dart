@@ -77,6 +77,7 @@ import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
@@ -756,6 +757,7 @@ class _ZoneEmpty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final content = context.watch<ContentProvider>();
     return Padding(
       // Lề NGANG không phải gutter — nó là lề đo CHIỀU DÀI DÒNG (measure),
       // không phải lề lưới. x10 (40) giữ dòng ở ~45–55 ký tự, ngưỡng đọc thoải
@@ -796,7 +798,7 @@ class _ZoneEmpty extends StatelessWidget {
             //     ở đây:  vạch 48×2 → cardTitle    (serif) → guidance (sans)
             // Đó là lý do tin được rằng đây là tiếng nói của app, không phải
             // một trạng thái rỗng đi mượn từ vựng ở đâu về.
-            Text('Khu này chưa có hiện vật',
+            Text(content.ui(UiKeys.exhibitListEmptyTitle),
                 textAlign: TextAlign.center,
                 style: AppText.cardTitle.copyWith(color: t.ink)),
             const SizedBox(height: AppSpace.x2),
@@ -811,8 +813,7 @@ class _ZoneEmpty extends StatelessWidget {
               //      đọc kỹ hơn nó.
               // Token đã bị dùng ngược hợp đồng của chính nó; con số chỉ là
               // chỗ điều đó lộ ra.
-              'Khu trưng bày này hiện chưa có hiện vật nào trong nội dung. '
-              'Vui lòng quay lại sau khi nội dung được cập nhật.',
+              content.ui(UiKeys.exhibitListEmptyBody),
               textAlign: TextAlign.center,
               style: AppText.guidance.copyWith(color: t.inkMuted),
             ),

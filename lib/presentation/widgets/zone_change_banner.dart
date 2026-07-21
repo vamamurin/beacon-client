@@ -20,6 +20,7 @@ import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 
 /// Drop this once, high in the widget tree (MuseumApp builder), as the top
 /// child of a Stack over `child`. Renders nothing when no change is pending.
@@ -71,6 +72,7 @@ class _BannerCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = tokens;
+    final content = context.read<ContentProvider>();
     return Material(
       color: t.surface,
       elevation: 6,
@@ -94,7 +96,7 @@ class _BannerCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('Bạn đã sang khu vực mới',
+                  Text(content.ui(UiKeys.bannerTitle),
                       style: AppText.kicker.copyWith(color: t.inkFaint)),
                   const SizedBox(height: 2),
                   Text(toName,
@@ -107,7 +109,7 @@ class _BannerCard extends StatelessWidget {
             const SizedBox(width: 8),
             TextButton(
               onPressed: onDismiss,
-              child: Text('Ở lại',
+              child: Text(content.ui(UiKeys.bannerStay),
                   style: AppText.button.copyWith(color: t.inkMuted)),
             ),
             FilledButton(
@@ -116,7 +118,7 @@ class _BannerCard extends StatelessWidget {
                 foregroundColor: t.ctaLabel,
               ),
               onPressed: onConfirm,
-              child: const Text('Chuyển', style: AppText.button),
+              child: Text(content.ui(UiKeys.bannerSwitch), style: AppText.button),
             ),
           ],
         ),
