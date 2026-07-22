@@ -118,7 +118,7 @@ class _ExhibitListScreenState extends State<ExhibitListScreen> {
       return Scaffold(
         backgroundColor: t.surface,
         body: Center(
-          child: Text('Không tìm thấy khu trưng bày',
+          child: Text(content.ui(UiKeys.exhibitListZoneNotFound),
               style: AppText.meta.copyWith(color: t.inkMuted)),
         ),
       );
@@ -409,7 +409,7 @@ class _ZoneHeroBar extends StatelessWidget {
             child: Center(
               child: Semantics(
                 button: true,
-                label: 'Quay lại',
+                label: content.ui(UiKeys.exhibitBack),
                 // excludeSemantics + onTap ĐI THÀNH CẶP: excludeSemantics gỡ cả
                 // cây con khỏi semantics, kể cả action onTap mà InkWell tự
                 // khai. Thiếu vế thứ hai là nút thôi bấm được bằng TalkBack —
@@ -531,17 +531,17 @@ class _ZoneHeroBar extends StatelessWidget {
                     //
                     // Chuỗi để chữ thường: vai trò kicker lo việc viết hoa
                     // (luật ở app_text.dart). Kết quả hiển thị không đổi.
-                    Text('Khu trưng bày'.toUpperCase(),
+                    Text(content.ui(UiKeys.exhibitListHeroKicker).toUpperCase(),
                         style: AppText.kicker.copyWith(color: t.accentOnImage)),
                     const SizedBox(height: AppSpace.x2),
                     Text(name,
                         style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
                     const SizedBox(height: AppSpace.x2),
                     Text(
-                      // Câu này giờ ngồi ngay TRÊN vùng tan, và nó mô tả đúng
-                      // cái mà gradient đang làm: thứ ở gần thì hiện ra. Hình
-                      // thức và nội dung nói cùng một điều — hiếm khi rẻ thế.
-                      'Hiện vật tự xuất hiện khi bạn tới gần',
+                      // Trước đây mô tả hành vi "hiện vật hiện ra khi tới gần"
+                      // (lọc theo sóng minor). Đã bỏ lọc đó — giờ hiện trọn
+                      // manifest — nên câu này đổi thành lời mời chọn hiện vật.
+                      content.ui(UiKeys.exhibitListHeroSubtitle),
                       style: AppText.meta.copyWith(color: t.mutedOnImage),
                     ),
                     const SizedBox(height: AppSpace.x3),
@@ -656,6 +656,7 @@ class _ZoneIntroButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final content = context.watch<ContentProvider>();
     return Selector<AudioProvider, _IntroButtonState>(
       selector: (_, audio) {
         final c = audio.current;
@@ -689,8 +690,8 @@ class _ZoneIntroButton extends StatelessWidget {
           button: true,
           enabled: tappable,
           label: playing
-              ? 'Tạm dừng giới thiệu khu trưng bày'
-              : 'Nghe giới thiệu khu trưng bày',
+              ? content.ui(UiKeys.exhibitListIntroPause)
+              : content.ui(UiKeys.exhibitListIntroPlay),
           excludeSemantics: true, // + onTap: xem doc ở nút back
           onTap: onTap,
           child: Material(
@@ -915,7 +916,7 @@ class _StopRow extends StatelessWidget {
           // [MuseumTokens.badgeWell]. Làm nó chìm về màu mà để nguyên câu này
           // là giấu vấn đề khỏi người nhìn thấy được, và giữ nguyên nó cho
           // người không nhìn thấy.
-          label: '$name${nowPlaying ? ', đang phát' : ''}',
+          label: '$name${nowPlaying ? content.ui(UiKeys.exhibitListNowPlayingSuffix) : ''}',
           // excludeSemantics + onTap ĐI THÀNH CẶP — xem doc ở nút back. Ở hàng
           // này exclude còn làm một việc thứ hai: `label` phía trên đã gói tên
           // + số + trạng thái thành MỘT câu đọc được; không exclude thì screen
@@ -967,7 +968,7 @@ class _StopRow extends StatelessWidget {
                             const SizedBox(height: AppSpace.x1),
                             Text(
                                 nowPlaying
-                                    ? 'Đang phát thuyết minh'
+                                    ? content.ui(UiKeys.exhibitListNowPlayingMeta)
                                     : _metaLine(),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,

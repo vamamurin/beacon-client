@@ -78,6 +78,13 @@ abstract final class UiKeys {
   // ── exhibit list (màn 3) ──
   static const exhibitListEmptyTitle = 'exhibitList.emptyTitle';
   static const exhibitListEmptyBody = 'exhibitList.emptyBody';
+  static const exhibitListZoneNotFound = 'exhibitList.zoneNotFound';
+  static const exhibitListHeroKicker = 'exhibitList.heroKicker';
+  static const exhibitListHeroSubtitle = 'exhibitList.heroSubtitle';
+  static const exhibitListIntroPlay = 'exhibitList.introPlay';
+  static const exhibitListIntroPause = 'exhibitList.introPause';
+  static const exhibitListNowPlayingSuffix = 'exhibitList.nowPlayingSuffix';
+  static const exhibitListNowPlayingMeta = 'exhibitList.nowPlayingMeta';
 
   // ── banner đổi khu ──
   static const bannerTitle = 'banner.title';
@@ -167,6 +174,13 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.exhibitListEmptyBody:
       'Khu trưng bày này hiện chưa có hiện vật nào trong nội dung. '
           'Vui lòng quay lại sau khi nội dung được cập nhật.',
+  UiKeys.exhibitListZoneNotFound: 'Không tìm thấy khu trưng bày',
+  UiKeys.exhibitListHeroKicker: 'Khu trưng bày',
+  UiKeys.exhibitListHeroSubtitle: 'Chọn một hiện vật để nghe thuyết minh',
+  UiKeys.exhibitListIntroPlay: 'Nghe giới thiệu khu trưng bày',
+  UiKeys.exhibitListIntroPause: 'Tạm dừng giới thiệu khu trưng bày',
+  UiKeys.exhibitListNowPlayingSuffix: ', đang phát',
+  UiKeys.exhibitListNowPlayingMeta: 'Đang phát thuyết minh',
 
   UiKeys.bannerTitle: 'Bạn đã sang khu vực mới',
   UiKeys.bannerStay: 'Ở lại',
