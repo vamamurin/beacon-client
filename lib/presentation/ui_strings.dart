@@ -25,6 +25,14 @@ abstract final class UiKeys {
   static const audioFeedbackNoHeadphones = 'audio.feedback.noHeadphones';
   static const audioFeedbackNotFound = 'audio.feedback.notFound';
 
+  // ── keep-alive foreground service (thông báo nền, Feature A) ──
+  // channelName/Desc đặt MỘT LẦN lúc init service (Android cache tên kênh sau
+  // lần tạo đầu); title/text đặt mỗi lần startService nên đổi theo tour được.
+  static const keepAliveChannelName = 'keepAlive.channelName';
+  static const keepAliveChannelDesc = 'keepAlive.channelDesc';
+  static const keepAliveTitle = 'keepAlive.title';
+  static const keepAliveText = 'keepAlive.text';
+
   // ── gate — khách nhìn ──
   static const gateWelcomeTitle = 'gate.welcome.title';
   static const gateWelcomeSubtitle = 'gate.welcome.subtitle';
@@ -138,6 +146,12 @@ const Map<String, String> kUiDefaults = <String, String>{
 
   UiKeys.audioFeedbackNoHeadphones: 'Cắm tai nghe để nghe thuyết minh.',
   UiKeys.audioFeedbackNotFound: 'Chưa có bản thuyết minh cho hiện vật này.',
+
+  UiKeys.keepAliveChannelName: 'Giữ phiên tham quan',
+  UiKeys.keepAliveChannelDesc:
+      'Giữ ứng dụng chạy để bắt beacon khi màn hình tắt.',
+  UiKeys.keepAliveTitle: 'Đang tham quan',
+  UiKeys.keepAliveText: 'Giữ kết nối beacon khi màn hình tắt',
 
   UiKeys.gateWelcomeTitle: 'Chào mừng',
   UiKeys.gateWelcomeSubtitle: 'quý khách',
@@ -259,3 +273,24 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.settingsSyncMock: 'Chế độ thử — không có máy chủ',
   UiKeys.settingsLastSync: 'Lần đồng bộ gần nhất: {time}',
 };
+
+/// Resolve một chuỗi CHROME theo khóa [UiKeys]:
+///   table[lang] → table[fallback] → [kUiDefaults] → chính khóa (không rỗng).
+///
+/// NGUỒN SỰ THẬT DUY NHẤT cho thứ tự này. Dùng chung bởi:
+///   • [ContentProvider.ui] ở tầng UI (table = config.uiStrings), và
+///   • composition root khi cần chuỗi TRƯỚC lúc có ContentProvider — vd nhãn
+///     thông báo của foreground keep-alive service (Feature A).
+/// Để logic ở MỘT chỗ, tránh hai nơi resolve lệch nhau như từng xảy ra với
+/// LocalizedText trước khi gom vào một hàm.
+String resolveUi(
+  Map<String, Map<String, String>>? table,
+  String lang,
+  String fallback,
+  String key,
+) {
+  return table?[lang]?[key] ??
+      table?[fallback]?[key] ??
+      kUiDefaults[key] ??
+      key;
+}

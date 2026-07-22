@@ -71,13 +71,9 @@ class ContentProvider extends ChangeNotifier {
 
   /// Resolve một chuỗi CHROME theo khóa [UiKeys]. Thứ tự: ngôn ngữ hiện tại →
   /// fallback bảo tàng → default nhúng → chính khóa (không bao giờ trả rỗng).
-  String ui(String key) {
-    final table = _repo.config?.uiStrings;
-    return table?[language]?[key] ??
-        table?[fallbackLanguage]?[key] ??
-        kUiDefaults[key] ??
-        key;
-  }
+  /// Ủy quyền cho [resolveUi] — cùng logic mà composition root dùng cho FGS.
+  String ui(String key) =>
+      resolveUi(_repo.config?.uiStrings, language, fallbackLanguage, key);
 
   /// Như [ui] nhưng thay các placeholder `{name}` bằng giá trị trong [params].
   /// Vd: uif(UiKeys.gateSyncUpdated, {'version': '2026.07.10-15'}).

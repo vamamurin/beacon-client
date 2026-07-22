@@ -58,6 +58,7 @@ import 'package:beacon_client/services/tour_wiring.dart';
 import 'package:beacon_client/services/zone_change_coordinator.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 
 enum RunMode { mock, real }
 
@@ -337,12 +338,23 @@ abstract final class Injection {
     // already listening, and treats a replayed EnteredZone as an immediate
     // arrival (no banner), so the intro reaches the audio.
     SessionPhase lastPhase = session.current.phase;
+    // Feature B — nhãn thông báo keep-alive resolve theo ngôn ngữ ĐANG chọn tại
+    // thời điểm vào tour (composition root resolve, service ở data/platform vẫn
+    // "mù" ngôn ngữ). Đọc languageController.code trong closure nên khách đổi
+    // ngôn ngữ ở Gate là notification của tour này đã đúng.
+    String kaText(String key) => resolveUi(cfg?.uiStrings,
+        languageController.code, cfg?.fallbackLanguage ?? 'vi', key);
     final tourStartSub = session.state.listen((s) {
       final was = lastPhase;
       lastPhase = s.phase;
       if (was != SessionPhase.touring && s.phase == SessionPhase.touring) {
         presence.resyncCurrentZone();
-        keepAlive.start(); // <-- THÊM: giữ tiến trình sống cả tour (kể cả standby)
+        keepAlive.start(
+          channelName: kaText(UiKeys.keepAliveChannelName),
+          channelDescription: kaText(UiKeys.keepAliveChannelDesc),
+          notificationTitle: kaText(UiKeys.keepAliveTitle),
+          notificationText: kaText(UiKeys.keepAliveText),
+        );
       } else if (was == SessionPhase.touring && s.phase != SessionPhase.touring) {
         keepAlive.stop(); // <-- THÊM: hết tour → hạ keep-alive (tiết kiệm pin ở dock)
         languageController.resetToFallback();

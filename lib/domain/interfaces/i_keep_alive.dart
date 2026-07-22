@@ -14,7 +14,17 @@
 // (2) đổi backend (flutter_foreground_task ↔ khác) không đụng phần wiring.
 abstract class IKeepAlive {
   /// Bật keep-alive (idempotent: gọi khi đã chạy là no-op).
-  Future<void> start();
+  ///
+  /// Chuỗi thông báo TÙY CHỌN, đã resolve theo ngôn ngữ ở composition root
+  /// (service này "mù" về ngôn ngữ — giữ ranh giới lớp). Không truyền ⇒ impl
+  /// dùng default tiếng Việt nhúng. [channelName]/[channelDescription] chỉ có
+  /// tác dụng ở LẦN tạo kênh đầu tiên (Android cache tên kênh sau đó).
+  Future<void> start({
+    String? channelName,
+    String? channelDescription,
+    String? notificationTitle,
+    String? notificationText,
+  });
 
   /// Tắt keep-alive (idempotent: gọi khi đã tắt là no-op).
   Future<void> stop();

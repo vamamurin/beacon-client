@@ -51,15 +51,22 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
   /// main.dart không phải biết tới keep-alive.
   static bool _configured = false;
 
-  static void _ensureConfigured() {
+  static void _ensureConfigured({
+    String? channelName,
+    String? channelDescription,
+  }) {
     if (_configured) return;
     _configured = true;
     FlutterForegroundTask.initCommunicationPort();
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'tour_keep_alive',
-        channelName: 'Giữ phiên tham quan',
-        channelDescription:
+        // Đã resolve theo ngôn ngữ ở composition root; default VI nếu không có.
+        // LƯU Ý: Android cache tên/mô tả kênh sau lần tạo đầu — đổi ngôn ngữ ở
+        // các tour sau KHÔNG cập nhật tên kênh (giới hạn nền tảng), chỉ
+        // title/text của notification (đặt ở startService) mới đổi được.
+        channelName: channelName ?? 'Giữ phiên tham quan',
+        channelDescription: channelDescription ??
             'Giữ ứng dụng chạy để bắt beacon khi màn hình tắt.',
         onlyAlertOnce: true,
       ),
@@ -79,14 +86,23 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
   }
 
   @override
-  Future<void> start() async {
-    _ensureConfigured();
+  Future<void> start({
+    String? channelName,
+    String? channelDescription,
+    String? notificationTitle,
+    String? notificationText,
+  }) async {
+    _ensureConfigured(
+      channelName: channelName,
+      channelDescription: channelDescription,
+    );
     try {
       if (await FlutterForegroundTask.isRunningService) return;
       await FlutterForegroundTask.startService(
         serviceId: _serviceId,
-        notificationTitle: 'Đang tham quan',
-        notificationText: 'Giữ kết nối beacon khi màn hình tắt',
+        notificationTitle: notificationTitle ?? 'Đang tham quan',
+        notificationText:
+            notificationText ?? 'Giữ kết nối beacon khi màn hình tắt',
         notificationIcon: null, // dùng icon app mặc định
         callback: tourKeepAliveCallback,
       );
@@ -117,7 +133,12 @@ class NoopKeepAlive implements IKeepAlive {
   const NoopKeepAlive();
 
   @override
-  Future<void> start() async {}
+  Future<void> start({
+    String? channelName,
+    String? channelDescription,
+    String? notificationTitle,
+    String? notificationText,
+  }) async {}
 
   @override
   Future<void> stop() async {}
