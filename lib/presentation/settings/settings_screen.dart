@@ -242,8 +242,8 @@ class _ThemeOption extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Tên theme theo ngôn ngữ hiện tại. Fallback về id.label (nhúng trong enum)
-  /// đã được lo bởi kUiDefaults, nên luôn có chữ.
+  /// Tên theme theo ngôn ngữ hiện tại, lấy từ bundle qua ui(). Fallback (khi
+  /// bundle chưa dịch key) do kUiDefaults lo, nên luôn có chữ.
   String _label(ContentProvider content) => switch (id) {
         MuseumThemeId.dark => content.ui(UiKeys.settingsThemeDark),
         MuseumThemeId.light => content.ui(UiKeys.settingsThemeLight),

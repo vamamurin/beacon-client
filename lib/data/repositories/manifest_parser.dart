@@ -71,6 +71,13 @@ abstract final class ManifestParser {
     }
 
     final uiStrings = _optUiStrings(root, 'ui');
+    // OPTIONAL: tên hiển thị ngôn ngữ (code → name) cho picker. Thiếu ⇒ rỗng ⇒
+    // UI lùi về bảng tên nhúng trong app.
+    final languageNames = _optStringMap(root, 'languageNames');
+    // C2 OPTIONAL: cửa sổ xác nhận đổi khu (giây). Thiếu/sai kiểu ⇒ null ⇒
+    // injection dùng mặc định. Clamp 1..30s để CMS gõ nhầm không tạo UX lạ.
+    final zoneChangeConfirmWindow =
+        _optDurationSeconds(root, 'zoneChangeConfirmSeconds', 1, 30);
 
     final museum = _reqMap(root, 'museum', 'root');
     final museumName = _reqLocalized(museum, 'name', 'museum', fallbackLanguage);
@@ -139,6 +146,8 @@ abstract final class ManifestParser {
         welcomeAccentImagePath: welcomeAccentImagePath,
         languages: List.unmodifiable(languages),
         fallbackLanguage: fallbackLanguage,
+        languageNames: languageNames,
+        zoneChangeConfirmWindow: zoneChangeConfirmWindow,
         uiStrings: uiStrings,
         beaconUuid: beaconUuid,
         deskMajor: deskMajor,
@@ -355,6 +364,26 @@ abstract final class ManifestParser {
   static double _optNum(Map<String, dynamic> m, String key, double fallback) {
     final v = m[key];
     return v is num ? v.toDouble() : fallback;
+  }
+
+  /// Map phẳng lang → chuỗi (vd languageNames). Bỏ qua entry sai kiểu/rỗng.
+  static Map<String, String> _optStringMap(
+      Map<String, dynamic> root, String key) {
+    final raw = root[key];
+    if (raw is! Map) return const {};
+    final out = <String, String>{};
+    raw.forEach((k, v) {
+      if (k is String && v is String && v.isNotEmpty) out[k] = v;
+    });
+    return Map.unmodifiable(out);
+  }
+
+  /// Số giây TÙY CHỌN → Duration, clamp [lo, hi]. Thiếu/sai kiểu ⇒ null.
+  static Duration? _optDurationSeconds(
+      Map<String, dynamic> m, String key, double lo, double hi) {
+    final v = m[key];
+    if (v is! num) return null;
+    return Duration(milliseconds: (v.toDouble().clamp(lo, hi) * 1000).round());
   }
 
   static Map<String, Map<String, String>> _optUiStrings(

@@ -187,6 +187,13 @@ class MuseumConfig {
   final List<String> languages;
   final String fallbackLanguage;
 
+  /// Tên hiển thị của mỗi mã ngôn ngữ cho picker, vd {"vi":"Tiếng Việt",
+  /// "en":"English"}. OPTIONAL: bundle không khai báo ⇒ rỗng ⇒ UI lùi về bảng
+  /// tên nhúng trong app (languageDisplayName). Đưa tên vào ĐÂY để thêm/sửa tên
+  /// ngôn ngữ mà không đụng code; và vì picker luôn do [languages] điều khiển,
+  /// xóa một mã khỏi [languages] là chip biến mất kể cả khi tên còn ở đây.
+  final Map<String, String> languageNames;
+
   /// Museum-wide iBeacon UUID (lowercase).
   final String beaconUuid;
 
@@ -203,6 +210,11 @@ class MuseumConfig {
   /// ghi đè từng máy qua Settings (ưu tiên cao hơn giá trị này).
   final double? autoSyncHours;
 
+  /// C2 — cửa sổ xác nhận đổi khu (banner "Bạn đã sang khu vực mới"). Optional:
+  /// bundle không khai báo ⇒ null ⇒ injection lùi về mặc định 5 giây. Trước đây
+  /// hardcode trong injection; giờ tinh chỉnh tại hiện trường qua CMS.
+  final Duration? zoneChangeConfirmWindow;
+
   const MuseumConfig({
     required this.bundleVersion,
     required this.museumName,
@@ -215,6 +227,8 @@ class MuseumConfig {
     required this.arbitration,
     required this.policies,
     this.autoSyncHours,
+    this.zoneChangeConfirmWindow,
+    this.languageNames = const {},
     this.uiStrings = const {},
   });
 
@@ -232,7 +246,9 @@ class MuseumConfig {
         other.deskMajor == deskMajor &&
         other.arbitration == arbitration &&
         other.policies == policies &&
-        other.autoSyncHours == autoSyncHours;
+        other.autoSyncHours == autoSyncHours &&
+        other.zoneChangeConfirmWindow == zoneChangeConfirmWindow &&
+        mapEquals(other.languageNames, languageNames);
   }
 
   @override
@@ -248,5 +264,9 @@ class MuseumConfig {
         arbitration,
         policies,
         autoSyncHours,
+        zoneChangeConfirmWindow,
+        Object.hashAllUnordered(
+          languageNames.entries.map((e) => Object.hash(e.key, e.value)),
+        ),
       );
 }

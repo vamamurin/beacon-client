@@ -53,6 +53,15 @@ class ContentProvider extends ChangeNotifier {
   /// Ngôn ngữ người dùng đang chọn — từ nguồn sự thật duy nhất.
   String get language => _lang.code;
 
+  /// Tên hiển thị của một mã ngôn ngữ cho picker. Ưu tiên tên khai báo trong
+  /// manifest (`config.languageNames`) để thêm/sửa tên KHÔNG cần đụng code; lùi
+  /// về bảng tên nhúng [languageDisplayName] nếu bundle chưa khai báo mã đó.
+  String languageName(String code) {
+    final fromBundle = _repo.config?.languageNames[code];
+    if (fromBundle != null && fromBundle.isNotEmpty) return fromBundle;
+    return languageDisplayName(code);
+  }
+
   /// Resolve một LocalizedText NỘI DUNG theo thứ tự ưu tiên. Widget dùng cái
   /// này, KHÔNG gọi `resolve()` trực tiếp.
   String text(LocalizedText value) => value.resolve(language, fallbackLanguage);

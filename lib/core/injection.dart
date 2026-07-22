@@ -322,8 +322,10 @@ abstract final class Injection {
       repository: repository,
       isTouring: () => session.current.isTouring,
       isForeground: isForeground,
+      // C2 — từ manifest (zoneChangeConfirmSeconds, clamp 1..30s ở parser),
+      // lùi về 5s nếu bundle không khai báo.
       confirmWindow:
-          const Duration(seconds: 5), // TODO(config): manifest later
+          cfg?.zoneChangeConfirmWindow ?? const Duration(seconds: 5),
     );
 
     // On the gate->touring edge, re-announce the current zone so a visitor who

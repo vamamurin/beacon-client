@@ -534,9 +534,12 @@ class _MuseumNameBar extends StatelessWidget {
           child: Builder(builder: (context) {
             void openSettings() => Navigator.of(context)
                 .pushNamed(AppRouter.settingsRoute);
+            // Feature B: hint đọc-màn-hình lấy từ bundle qua ui().
+            final settingsHint =
+                context.read<ContentProvider>().ui(UiKeys.gateSettingsHint);
             return Semantics(
               label: museumName,
-              onLongPressHint: 'Mở cài đặt (dành cho nhân viên)',
+              onLongPressHint: settingsHint,
               // excludeSemantics + onLongPress ĐI THÀNH CẶP, không
               // bao giờ tách. excludeSemantics gỡ CẢ cây con khỏi
               // semantics — kể cả action long-press mà

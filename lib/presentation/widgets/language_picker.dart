@@ -10,6 +10,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
@@ -21,6 +22,7 @@ class LanguagePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageController>();
+    final content = context.read<ContentProvider>();
     final codes = lang.available;
 
     // Một ngôn ngữ thì không cần picker.
@@ -32,7 +34,8 @@ class LanguagePicker extends StatelessWidget {
       children: [
         for (final code in codes)
           _LangChip(
-            label: languageDisplayName(code),
+            // Tên ưu tiên từ manifest (config.languageNames), lùi về bảng nhúng.
+            label: content.languageName(code),
             selected: code == lang.code,
             onTap: () => lang.setCode(code),
           ),

@@ -533,10 +533,14 @@ class _TrackBarState extends State<_TrackBar> {
           return ExcludeSemantics(child: bar);
         }
 
+        // Feature B: nhãn + giá trị đọc-màn-hình lấy từ bundle qua ui()/uif().
+        // read() đủ vì cả subtree này đã rebuild theo ContentProvider ở tầng trên
+        // (widget cha watch<ContentProvider>()), nên đổi ngôn ngữ vẫn cập nhật.
+        final content = context.read<ContentProvider>();
         return Semantics(
           slider: true,
-          label: 'Tiến trình thuyết minh',
-          value: _fmtShort(widget.duration * frac),
+          label: content.ui(UiKeys.exhibitProgressLabel),
+          value: _spokenDuration(content, widget.duration * frac),
           // Screen reader không kéo được. `onIncrease`/`onDecrease` là cách
           // DUY NHẤT để tua bằng TalkBack, và thiếu chúng thì thanh này là một
           // control chỉ dùng được bằng mắt — tức lại đúng cái lỗi "hứa rồi từ
@@ -570,10 +574,15 @@ class _TrackBarState extends State<_TrackBar> {
     );
   }
 
-  static String _fmtShort(Duration d) {
+  /// Thời lượng cho screen reader, template lấy từ bundle: '{m} phút {s} giây'
+  /// (mặc định VI). `{s}` đã zero-pad 2 chữ số như bản cũ.
+  static String _spokenDuration(ContentProvider content, Duration d) {
     final m = d.inMinutes;
     final s = d.inSeconds % 60;
-    return '$m phút ${s.toString().padLeft(2, '0')} giây';
+    return content.uif(UiKeys.exhibitDurationSpoken, {
+      'm': '$m',
+      's': s.toString().padLeft(2, '0'),
+    });
   }
 }
 

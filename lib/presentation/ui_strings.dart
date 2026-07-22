@@ -4,17 +4,26 @@
 // Xem doc gốc ở đầu file: 3 lớp (UiKeys / kUiDefaults / resolve), quy ước tách
 // theo widget, {placeholder} + ContentProvider.uif cho chuỗi có biến chạy.
 //
-// TIẾN ĐỘ STAGE 2:
+// TIẾN ĐỘ STAGE 2 (cập nhật):
 //   • Gate (khách + BLE/sync nhân viên): XONG.
-//   • zone / exhibit_detail / exhibit_list / banner: XONG (dưới đây), TRỪ vài
-//     nhãn accessibility trong sub-widget không có `content` (progress bar,
-//     định dạng thời lượng cho screen reader) — để sub-pass sau.
-//   • settings: CHƯA.
+//   • zone / exhibit_detail / exhibit_list / banner: XONG.
+//   • settings: XONG (đọc ui() 24 chỗ — theme label lấy từ ui, không còn từ
+//     enum MuseumThemeId.label).
+//   • Nhãn accessibility sub-widget (progress bar, định dạng thời lượng cho
+//     screen reader), snackbar phản hồi audio, hint mở cài đặt: XONG (sub-pass
+//     này). Duration cho screen reader dùng {m}/{s} qua uif().
+//   • CÒN LẠI (ngoài phạm vi manifest): chuỗi notification/FGS ở
+//     foreground_task_keep_alive.dart + main.dart chạy TRƯỚC khi có config nên
+//     chưa lấy từ bundle — xem ghi chú ở hai file đó.
 
 abstract final class UiKeys {
   // ── ngôn ngữ / picker ──
   static const languageLabel = 'language.label';
   static const languagePickerTitle = 'language.picker.title';
+
+  // ── phản hồi phát tiếng (snackbar) ──
+  static const audioFeedbackNoHeadphones = 'audio.feedback.noHeadphones';
+  static const audioFeedbackNotFound = 'audio.feedback.notFound';
 
   // ── gate — khách nhìn ──
   static const gateWelcomeTitle = 'gate.welcome.title';
@@ -22,6 +31,7 @@ abstract final class UiKeys {
   static const gateWelcomeGuidance = 'gate.welcome.guidance';
   static const gateStart = 'gate.start';
   static const gateMuseumFallback = 'gate.museum.fallback';
+  static const gateSettingsHint = 'gate.settingsHint'; // a11y long-press hint
 
   // ── gate — đồng bộ (nhân viên) ──
   static const gateSyncUpdated = 'gate.sync.updated'; // {version}
@@ -74,6 +84,9 @@ abstract final class UiKeys {
   static const exhibitSectionIntro = 'exhibit.section.intro';
   static const exhibitSectionMeaning = 'exhibit.section.meaning';
   static const exhibitSectionSpecs = 'exhibit.section.specs';
+  // accessibility (screen reader)
+  static const exhibitProgressLabel = 'exhibit.progress.label';
+  static const exhibitDurationSpoken = 'exhibit.duration.spoken'; // {m} {s}
 
   // ── exhibit list (màn 3) ──
   static const exhibitListEmptyTitle = 'exhibitList.emptyTitle';
@@ -123,6 +136,9 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.languageLabel: 'Ngôn ngữ',
   UiKeys.languagePickerTitle: 'Chọn ngôn ngữ',
 
+  UiKeys.audioFeedbackNoHeadphones: 'Cắm tai nghe để nghe thuyết minh.',
+  UiKeys.audioFeedbackNotFound: 'Chưa có bản thuyết minh cho hiện vật này.',
+
   UiKeys.gateWelcomeTitle: 'Chào mừng',
   UiKeys.gateWelcomeSubtitle: 'quý khách',
   UiKeys.gateWelcomeGuidance:
@@ -130,6 +146,7 @@ const Map<String, String> kUiDefaults = <String, String>{
           'Đeo tai nghe để bắt đầu nghe thuyết minh.',
   UiKeys.gateStart: 'Bắt đầu tham quan',
   UiKeys.gateMuseumFallback: 'Bảo tàng',
+  UiKeys.gateSettingsHint: 'Mở cài đặt (dành cho nhân viên)',
 
   UiKeys.gateSyncUpdated:
       'Đã tải nội dung {version}. Nhấn để khởi động lại và bắt đầu.',
@@ -191,6 +208,8 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.exhibitSectionIntro: 'Giới thiệu',
   UiKeys.exhibitSectionMeaning: 'Ý nghĩa',
   UiKeys.exhibitSectionSpecs: 'Thông số',
+  UiKeys.exhibitProgressLabel: 'Tiến trình thuyết minh',
+  UiKeys.exhibitDurationSpoken: '{m} phút {s} giây',
 
   UiKeys.exhibitListEmptyTitle: 'Khu này chưa có hiện vật',
   UiKeys.exhibitListEmptyBody:

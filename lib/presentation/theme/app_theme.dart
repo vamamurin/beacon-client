@@ -9,17 +9,16 @@ import 'museum_tokens.dart';
 /// Định danh bền vững của một theme. Lưu vào settings dưới dạng [id], KHÔNG
 /// lưu index — thêm/bớt preset sẽ không làm lệch lựa chọn đã lưu của thiết bị.
 enum MuseumThemeId {
-  dark('dark', 'Tối'),
-  light('light', 'Sáng'),
-  highContrast('high_contrast', 'Tương phản cao');
+  dark('dark'),
+  light('light'),
+  highContrast('high_contrast');
 
-  const MuseumThemeId(this.id, this.label);
+  const MuseumThemeId(this.id);
 
-  /// Khoá bền vững cho lưu trữ.
+  /// Khoá bền vững cho lưu trữ. Nhãn hiển thị KHÔNG còn ở đây: màn Cài đặt lấy
+  /// tên theme từ ContentProvider.ui() (UiKeys.settingsTheme*) để đa ngôn ngữ,
+  /// nên field `label` cũ (chỉ VI, không nơi nào đọc) đã được gỡ.
   final String id;
-
-  /// Nhãn hiển thị trong màn Cài đặt.
-  final String label;
 
   MuseumTokens get tokens => switch (this) {
         MuseumThemeId.dark => MuseumTokens.dark,

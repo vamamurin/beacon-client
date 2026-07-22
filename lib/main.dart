@@ -24,7 +24,6 @@ import 'package:audio_service/audio_service.dart';
 import 'package:beacon_client/data/audio/museum_audio_handler.dart';
 import 'package:beacon_client/data/settings/prefs_settings_store.dart';
 import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
-import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -117,13 +116,18 @@ Future<void> main() async {
 
 /// Dựng metadata cho notification/lock-screen từ trạng thái audio hiện tại.
 /// Sống ở main.dart (chứ không trong handler) để giữ handler khỏi phụ thuộc
-/// repository/ngôn ngữ. FEATURE A dùng ngôn ngữ dự phòng của bảo tàng; FEATURE
-/// B sẽ thay `lang` bằng LanguageController — chỉ đổi đúng một dòng ở đây.
-MediaMetadataResolver _makeMediaResolver(IZoneRepository repo) {
+/// repository/ngôn ngữ.
+///
+/// FEATURE B (đã nối): `lang` đọc THẲNG từ LanguageController mỗi lần resolve,
+/// nên tiêu đề trên màn khóa/notification khớp ngôn ngữ khách đang chọn (không
+/// còn khóa cứng về fallback). Đọc trong closure (không cache) để lần phát kế
+/// sau khi đổi ngôn ngữ tự dùng mã mới; fallback vẫn là lưới an toàn của resolve.
+MediaMetadataResolver _makeMediaResolver(AppGraph graph) {
+  final repo = graph.repository;
   return (AudioQueueState s) {
     final cfg = repo.config;
     final fallback = cfg?.fallbackLanguage ?? 'vi';
-    final lang = fallback; // FEATURE B: () => languageController.code
+    final lang = graph.languageController.code; // <-- FEATURE B: live
     final album =
         cfg?.museumName.resolve(lang, fallback) ?? 'Bảo tàng';
 
@@ -234,7 +238,7 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
     handler.bind(
       engine: graph.audioEngine,
       controller: graph.audioController,
-      metadata: _makeMediaResolver(graph.repository),
+      metadata: _makeMediaResolver(graph),
       sessionState: graph.session.state,
       initialPhase: graph.session.current.phase,
     );
