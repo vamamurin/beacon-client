@@ -33,11 +33,15 @@ class BeaconTrackerRegistry {
     Duration evictionThreshold = const Duration(seconds: 12),
     Duration sweepInterval = const Duration(seconds: 1),
     int maxTrackers = 64,
+    double kalmanProcessNoise = 0.008,
+    double kalmanMeasurementNoise = 4.0,
     DateTime Function()? now,
   })  : _stalenessThreshold = stalenessThreshold,
         _evictionThreshold = evictionThreshold,
         _sweepInterval = sweepInterval,
         _maxTrackers = maxTrackers,
+        _kalmanProcessNoise = kalmanProcessNoise,
+        _kalmanMeasurementNoise = kalmanMeasurementNoise,
         _now = now ?? DateTime.now;
 
   /// Beacon silent longer than this → excluded from the aggregate (its zone
@@ -53,6 +57,9 @@ class BeaconTrackerRegistry {
   /// Defensive ceiling against scan flooding (UUID filter upstream already
   /// limits traffic to museum packets).
   final int _maxTrackers;
+  
+  final double _kalmanProcessNoise;
+  final double _kalmanMeasurementNoise;
 
   /// Injected time authority — swap for a fake in tests.
   final DateTime Function() _now;
@@ -90,7 +97,13 @@ class BeaconTrackerRegistry {
         }
         return;
       }
-      _trackers[key] = BeaconTracker(reading);
+      
+      _trackers[key] = BeaconTracker(
+        reading,
+        processNoise: _kalmanProcessNoise,
+        measurementNoise: _kalmanMeasurementNoise,
+      );
+
       if (kDebugMode) {
         debugPrint('[Registry] + tracker $key (live=${_trackers.length})');
       }

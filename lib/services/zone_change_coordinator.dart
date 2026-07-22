@@ -1,5 +1,9 @@
 // Destination: lib/services/zone_change_coordinator.dart
 //
+// Cửa sổ xác nhận = manifest.zoneChangeConfirmSeconds (clamp 1..30s ở parser),
+// fallback 5s ở injection khi bundle không khai báo. Con số 5s dưới đây chỉ là
+// default cấp-code cho test/khởi tạo trực tiếp — runtime luôn do injection quyết.
+//
 // C2 — the "opinion delay" between the arbiter confirming a zone change and the
 // audio actually switching. Sits in place of the old ZoneEventRouter (which
 // forwarded every ZoneEvent straight to audio) and adds ONE behaviour:
@@ -7,13 +11,13 @@
 //   • EnteredZone / LeftToStandby  -> forwarded to audio IMMEDIATELY, as before
 //     (arriving from standby needs no confirmation; losing signal must stop).
 //   • ChangedZone(A -> B)          -> DEFERRED. Audio keeps playing zone A. A
-//     PendingZoneChange(from A, to B, 20 s) is published for the UI banner.
+//     PendingZoneChange(from A, to B, confirmWindow) is published for the UI banner.
 //     The switch to B fires only when:
 //        - the visitor taps "Chuyển sang B"      (confirm()), OR
-//        - the 20 s deadline elapses AND the arbiter's current major is still
+//        - the confirmWindow deadline elapses AND the arbiter's current major is still
 //          NOT A (auto-accept wherever they ended up), OR
 //        - the arbiter emits ANOTHER ChangedZone to a third zone C while
-//          pending -> the target becomes C and the 20 s restarts (each new
+//          pending -> the target becomes C and the confirmWindow restarts (each new
 //          target is a fresh decision).
 //     Pending is CANCELLED (banner gone, audio A untouched) when:
 //        - the arbiter changes back to A (visitor returned), OR
@@ -78,7 +82,7 @@ class ZoneChangeCoordinator {
     required IZoneRepository repository,
     required bool Function() isTouring,
     required ValueListenable<bool> isForeground,
-    Duration confirmWindow = const Duration(seconds: 20),
+    Duration confirmWindow = const Duration(seconds: 5),
     DateTime Function()? now,
   })  : _audio = audio,
         _repo = repository,
@@ -87,6 +91,7 @@ class ZoneChangeCoordinator {
         _confirmWindow = confirmWindow,
         _now = now ?? DateTime.now {
     _sub = events.listen(_route);
+    _isForeground.addListener(_onForegroundChanged);
   }
 
   final TourAudioController _audio;
@@ -142,7 +147,7 @@ class ZoneChangeCoordinator {
       return;
     }
 
-    // Open or RETARGET the pending window (new target = fresh 20 s).
+    // Open or RETARGET the pending window (new target = fresh confirmWindow).
     final ZoneInfo? toZone = _repo.zoneByMajor(toMajor);
     if (toZone == null) {
       // Can't resolve the destination -> fall back to the old immediate switch

@@ -47,6 +47,11 @@ class ArbitrationParams {
   /// 2.5–3.5 trong nhà nhiều vật cản). Tinh chỉnh tại hiện trường qua CMS.
   final double pathLossExponent;
 
+  /// Kalman 1D — nhiễu hệ thống Q (khách đi chậm ⇒ nhỏ).
+  final double kalmanProcessNoise;
+  /// Kalman 1D — nhiễu đo lường R (RSSI indoor nhảy ⇒ lớn).
+  final double kalmanMeasurementNoise;
+
   const ArbitrationParams({
     required this.minDeltaDb,
     required this.dwell,
@@ -57,6 +62,8 @@ class ArbitrationParams {
     required this.engageAtMeters,
     required this.releaseAtMeters,
     required this.pathLossExponent,
+    required this.kalmanProcessNoise,
+    required this.kalmanMeasurementNoise,
   });
 
   /// Clamp ranges mirror manifest.schema.json (single source documented in
@@ -72,6 +79,8 @@ class ArbitrationParams {
     double engageAtMeters = 5,
     double releaseAtMeters = 8,
     double pathLossExponent = 2.5,
+    double kalmanProcessNoise = 0.008,
+    double kalmanMeasurementNoise = 4.0,
   }) {
     Duration secs(double v, double lo, double hi) =>
         Duration(milliseconds: (v.clamp(lo, hi) * 1000).round());
@@ -95,6 +104,8 @@ class ArbitrationParams {
       engageAtMeters: engage,
       releaseAtMeters: release,
       pathLossExponent: pathLossExponent.clamp(1.5, 4.5),
+      kalmanProcessNoise: kalmanProcessNoise.clamp(0.0001, 1.0),
+      kalmanMeasurementNoise: kalmanMeasurementNoise.clamp(0.5, 50.0),
     );
   }
 
@@ -121,13 +132,15 @@ class ArbitrationParams {
         other.sessionSilence == sessionSilence &&
         other.engageAtMeters == engageAtMeters &&
         other.releaseAtMeters == releaseAtMeters &&
-        other.pathLossExponent == pathLossExponent;
+        other.pathLossExponent == pathLossExponent &&
+        other.kalmanProcessNoise == kalmanProcessNoise &&
+        other.kalmanMeasurementNoise == kalmanMeasurementNoise;
   }
 
   @override
   int get hashCode => Object.hash(minDeltaDb, dwell, lockout, zoneSilence,
       deskDwell, sessionSilence, engageAtMeters, releaseAtMeters,
-      pathLossExponent);
+      pathLossExponent, kalmanProcessNoise, kalmanMeasurementNoise);
 }
 
 /// Museum-wide audio policies — signed off by the museum, shipped in the

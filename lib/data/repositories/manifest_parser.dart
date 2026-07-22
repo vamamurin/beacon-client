@@ -104,6 +104,8 @@ abstract final class ManifestParser {
       engageAtMeters: _optNum(arb, 'engageAtMeters', 4),
       releaseAtMeters: _optNum(arb, 'releaseAtMeters', 7),
       pathLossExponent: _optNum(arb, 'pathLossExponent', 2.5),
+      kalmanProcessNoise: _optNum(arb, 'kalmanProcessNoise', 0.008),
+      kalmanMeasurementNoise: _optNum(arb, 'kalmanMeasurementNoise', 4.0), 
     );
 
     final pol = _reqMap(root, 'policies', 'root');

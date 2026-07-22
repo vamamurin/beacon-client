@@ -29,7 +29,7 @@ class BeaconTracker {
   final int major;
   final int minor;
 
-  final KalmanFilter _filter = KalmanFilter();
+  final KalmanFilter _filter;
 
   double _smoothedRssi = double.negativeInfinity;
   late DateTime _lastSeen;
@@ -39,13 +39,19 @@ class BeaconTracker {
   /// để đổi pin/đổi cấu hình beacon có hiệu lực ngay không cần restart app.
   int _measuredPower = -59;
 
-  BeaconTracker(BeaconReading initial)
-      : key = packKey(initial.major, initial.minor),
+  BeaconTracker(
+    BeaconReading initial, {
+    double processNoise = 0.008,
+    double measurementNoise = 4.0,
+  })  : key = packKey(initial.major, initial.minor),
         major = initial.major,
-        minor = initial.minor {
-    update(initial); // seed the Kalman with the first packet
+        minor = initial.minor,
+        _filter = KalmanFilter(
+          processNoise: processNoise,
+          measurementNoise: measurementNoise,
+        ) {
+    update(initial);
   }
-
   /// Kalman-smoothed RSSI in dBm. The ONLY signal quantity this pipeline
   /// carries from here on.
   double get smoothedRssi => _smoothedRssi;

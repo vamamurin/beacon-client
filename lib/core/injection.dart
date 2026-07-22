@@ -252,7 +252,10 @@ abstract final class Injection {
       RunMode.mock => const NoopKeepAlive(),
       RunMode.real => ForegroundTaskKeepAlive(),
     };
-    final registry = BeaconTrackerRegistry();
+    final registry = BeaconTrackerRegistry(
+      kalmanProcessNoise: cfg?.arbitration.kalmanProcessNoise ?? 0.008,
+      kalmanMeasurementNoise: cfg?.arbitration.kalmanMeasurementNoise ?? 4.0,
+    );
     final arbiter = ZoneArbiter(
       deskMajor: cfg?.deskMajor ?? 99,
       params: cfg?.arbitration ?? ArbitrationParams.defaults(),
