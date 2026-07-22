@@ -91,8 +91,30 @@ abstract final class UiKeys {
   static const bannerStay = 'banner.stay';
   static const bannerSwitch = 'banner.switch';
 
-  // ── settings ──
+  // ── settings (nhân viên) ──
+  static const settingsTitle = 'settings.title';
   static const settingsLanguage = 'settings.language';
+  static const settingsThemeHeader = 'settings.themeHeader';
+  static const settingsThemeDesc = 'settings.themeDesc';
+  static const settingsThemeDark = 'settings.theme.dark';
+  static const settingsThemeLight = 'settings.theme.light';
+  static const settingsThemeHighContrast = 'settings.theme.highContrast';
+  static const settingsCaveatLight = 'settings.caveat.light';
+  static const settingsCaveatHighContrast = 'settings.caveat.highContrast';
+  static const settingsDiagnosticsHeader = 'settings.diagnosticsHeader';
+  static const settingsDistanceToggle = 'settings.distanceToggle';
+  static const settingsDistanceDesc = 'settings.distanceDesc';
+  static const settingsServerHeader = 'settings.serverHeader';
+  static const settingsServerUrlLabel = 'settings.serverUrlLabel';
+  static const settingsServerUrlDesc = 'settings.serverUrlDesc';
+  static const settingsSyncNowBtn = 'settings.syncNowBtn';
+  static const settingsSyncRunning = 'settings.sync.running';
+  static const settingsSyncUpdated = 'settings.sync.updated';
+  static const settingsSyncUpToDate = 'settings.sync.upToDate';
+  static const settingsSyncNoServer = 'settings.sync.noServer';
+  static const settingsSyncFailed = 'settings.sync.failed';
+  static const settingsSyncMock = 'settings.sync.mock';
+  static const settingsLastSync = 'settings.lastSync'; // {time}
 
   // STAGE 2 (kế): settings; nhãn accessibility còn lại của progress bar.
 }
@@ -187,4 +209,34 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.bannerSwitch: 'Chuyển',
 
   UiKeys.settingsLanguage: 'Ngôn ngữ',
+  UiKeys.settingsTitle: 'Cài đặt',
+  UiKeys.settingsThemeHeader: 'Giao diện',
+  UiKeys.settingsThemeDesc:
+      'Giao diện được lưu trên thiết bị và giữ nguyên cho khách tiếp theo.',
+  UiKeys.settingsThemeDark: 'Tối',
+  UiKeys.settingsThemeLight: 'Sáng',
+  UiKeys.settingsThemeHighContrast: 'Tương phản cao',
+  UiKeys.settingsCaveatLight:
+      'Màn hình sáng gây chói trong phòng trưng bày tối và có thể làm phiền '
+          'khách đứng cạnh.',
+  UiKeys.settingsCaveatHighContrast:
+      'Tăng độ tương phản cho khách lớn tuổi hoặc thị lực kém.',
+  UiKeys.settingsDiagnosticsHeader: 'Chẩn đoán',
+  UiKeys.settingsDistanceToggle: 'Hiện khoảng cách ước lượng',
+  UiKeys.settingsDistanceDesc:
+      'Chỉ dùng khi tinh chỉnh khoảng cách tại hiện trường. Hiện số mét ước '
+          'lượng trên màn khu vực. Tắt trước khi giao máy cho khách.',
+  UiKeys.settingsServerHeader: 'Máy chủ nội dung',
+  UiKeys.settingsServerUrlLabel: 'Địa chỉ máy chủ',
+  UiKeys.settingsServerUrlDesc:
+      'Để trống để dùng địa chỉ mặc định của bản cài. Đổi tại đây có hiệu '
+          'lực ngay lần đồng bộ kế tiếp, không cần cài lại app.',
+  UiKeys.settingsSyncNowBtn: 'Đồng bộ ngay',
+  UiKeys.settingsSyncRunning: 'Đang đồng bộ…',
+  UiKeys.settingsSyncUpdated: 'Đã cập nhật nội dung mới',
+  UiKeys.settingsSyncUpToDate: 'Đã là bản mới nhất',
+  UiKeys.settingsSyncNoServer: 'Không gọi được máy chủ',
+  UiKeys.settingsSyncFailed: 'Đồng bộ thất bại',
+  UiKeys.settingsSyncMock: 'Chế độ thử — không có máy chủ',
+  UiKeys.settingsLastSync: 'Lần đồng bộ gần nhất: {time}',
 };

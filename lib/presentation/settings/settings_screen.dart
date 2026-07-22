@@ -1,27 +1,26 @@
-// Destination: lib/presentation/settings/settings_screen.dart (NEW)
+// Destination: lib/presentation/settings/settings_screen.dart
 //
-// Màn Cài đặt. Hôm nay chỉ có chọn giao diện; sau này thêm ngôn ngữ, đồng bộ.
+// Màn Cài đặt (nhân viên). Lối vào: long-press wordmark ở Gate — khách mượn máy
+// không vào đây.
 //
-// AI DÙNG MÀN NÀY: nhân viên bảo tàng, một lần, lúc bàn giao thiết bị. Khách
-// tham quan mượn máy rồi đi 90 phút — họ không vào đây. Vì vậy lối vào là
-// long-press lên wordmark ở Gate, không phải một nút hiện rõ.
+// Theme LƯU BỀN VỮNG (ISettingsStore), KHÔNG reset theo phiên (quyết định sản
+// phẩm). Ngược lại, NGÔN NGỮ là per-session (reset khi hết tour) — picker ở đây
+// chỉ là lối phụ; lối chính là Gate.
 //
-// Lựa chọn được LƯU BỀN VỮNG (ISettingsStore) và KHÔNG tự reset khi hết phiên:
-// đây là quyết định sản phẩm đã chốt. Hệ quả cần biết: thiết bị cho mượn sẽ giữ
-// nguyên giao diện mà khách trước để lại, cho tới khi nhân viên đổi.
-//
-// Màn này chỉ biết ThemeController. Không import ContentProvider, ZoneProvider,
-// hay HeroImage — nếu bạn thấy mình cần chúng, có lẽ thứ bạn đang thêm không
-// thuộc về Cài đặt.
+// Feature B: mọi chữ giao diện đọc qua ContentProvider.ui (chuỗi chrome đi cùng
+// bundle). Đây là lý do màn này GIỜ import ContentProvider — trước kia cố ý
+// không, nhưng l10n toàn app khiến nó thành nguồn chữ duy nhất, kể cả ở đây.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
 import 'package:beacon_client/presentation/widgets/language_picker.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -31,6 +30,7 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final ctrl = context.watch<ThemeController>();
+    final content = context.watch<ContentProvider>();
 
     return Scaffold(
       backgroundColor: t.surface,
@@ -39,52 +39,51 @@ class SettingsScreen extends StatelessWidget {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: t.ink),
-        title:
-            Text('Cài đặt', style: AppText.sheetTitle.copyWith(color: t.ink)),
+        title: Text(content.ui(UiKeys.settingsTitle),
+            style: AppText.sheetTitle.copyWith(color: t.ink)),
       ),
       body: ListView(
-        // AppSpace.gutter (20), KHÔNG phải t.gutter (18 — đã xoá khỏi
-        // MuseumTokens). Màn này là call site DUY NHẤT còn đọc token đó, nên
-        // nó là màn duy nhất trong app đang lệch 2dp so với màn 1 và màn 3.
-        // Một token chỉ có một người đọc thì không ai kiểm nó.
-        //
-        // `8` và `24` vẫn là số thô: màn Cài đặt chưa qua đợt tái cấu trúc thị
-        // giác (mới làm màn 1 và 3). Để nguyên có chủ đích — sửa nửa vời một
-        // màn chưa redesign chỉ tạo ra một lưới thứ ba.
-        padding: const EdgeInsets.fromLTRB(AppSpace.gutter, 8, AppSpace.gutter, 24),
+        padding:
+            const EdgeInsets.fromLTRB(AppSpace.gutter, 8, AppSpace.gutter, 24),
         children: [
-          Text('NGÔN NGỮ', style: AppText.kicker.copyWith(color: t.inkFaint)),
+          // ── NGÔN NGỮ (per-session; lối phụ, lối chính ở Gate) ──
+          Text(content.ui(UiKeys.settingsLanguage).toUpperCase(),
+              style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
           const LanguagePicker(),
           const SizedBox(height: 32),
-          
-          Text('GIAO DIỆN', style: AppText.kicker.copyWith(color: t.inkFaint)),
+
+          // ── GIAO DIỆN ──
+          Text(content.ui(UiKeys.settingsThemeHeader).toUpperCase(),
+              style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
           for (final id in MuseumThemeId.values)
             _ThemeOption(
               id: id,
               selected: id == ctrl.id,
-              // Đổi ngay, không cần nút Lưu: thay đổi là khả nghịch, thấy được
-              // tức thì, và lerp của MuseumTokens làm nó mượt.
               onTap: () => ctrl.select(id),
             ),
           const SizedBox(height: 24),
           Text(
-            'Giao diện được lưu trên thiết bị và giữ nguyên cho khách tiếp theo.',
+            content.ui(UiKeys.settingsThemeDesc),
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
           const SizedBox(height: 32),
-          Text('CHẨN ĐOÁN', style: AppText.kicker.copyWith(color: t.inkFaint)),
+
+          // ── CHẨN ĐOÁN ──
+          Text(content.ui(UiKeys.settingsDiagnosticsHeader).toUpperCase(),
+              style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
           _DistanceToggle(),
           const SizedBox(height: 12),
           Text(
-            'Chỉ dùng khi tinh chỉnh khoảng cách tại hiện trường. Hiện số mét ước '
-            'lượng trên màn khu vực. Tắt trước khi giao máy cho khách.',
+            content.ui(UiKeys.settingsDistanceDesc),
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
           const SizedBox(height: 32),
-          Text('MÁY CHỦ NỘI DUNG',
+
+          // ── MÁY CHỦ NỘI DUNG ──
+          Text(content.ui(UiKeys.settingsServerHeader).toUpperCase(),
               style: AppText.kicker.copyWith(color: t.inkFaint)),
           const SizedBox(height: 12),
           const _ServerSection(),
@@ -94,8 +93,7 @@ class SettingsScreen extends StatelessWidget {
   }
 }
 
-/// Content-server URL override + manual "sync now". Staff-only (this screen is
-/// reached by long-pressing the Gate wordmark).
+/// Content-server URL override + manual "sync now". Staff-only.
 class _ServerSection extends StatefulWidget {
   const _ServerSection();
 
@@ -119,19 +117,20 @@ class _ServerSectionState extends State<_ServerSection> {
     super.dispose();
   }
 
-  String _syncLabel(ManualSyncState s) => switch (s) {
-        ManualSyncState.running => 'Đang đồng bộ…',
-        ManualSyncState.updated => 'Đã cập nhật nội dung mới',
-        ManualSyncState.upToDate => 'Đã là bản mới nhất',
-        ManualSyncState.noServer => 'Không gọi được máy chủ',
-        ManualSyncState.failed => 'Đồng bộ thất bại',
-        ManualSyncState.mock => 'Chế độ thử — không có máy chủ',
+  String _syncLabel(ContentProvider content, ManualSyncState s) => switch (s) {
+        ManualSyncState.running => content.ui(UiKeys.settingsSyncRunning),
+        ManualSyncState.updated => content.ui(UiKeys.settingsSyncUpdated),
+        ManualSyncState.upToDate => content.ui(UiKeys.settingsSyncUpToDate),
+        ManualSyncState.noServer => content.ui(UiKeys.settingsSyncNoServer),
+        ManualSyncState.failed => content.ui(UiKeys.settingsSyncFailed),
+        ManualSyncState.mock => content.ui(UiKeys.settingsSyncMock),
         ManualSyncState.idle => '',
       };
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final content = context.watch<ContentProvider>();
     final settings = context.watch<SettingsProvider>();
     final last = settings.lastSuccessfulSyncAt;
 
@@ -145,25 +144,21 @@ class _ServerSectionState extends State<_ServerSection> {
           enableSuggestions: false,
           style: AppText.sheetSub.copyWith(color: t.ink),
           decoration: InputDecoration(
-            labelText: 'Địa chỉ máy chủ',
+            labelText: content.ui(UiKeys.settingsServerUrlLabel),
             hintText: 'http://192.168.1.8:8000',
             labelStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
             hintStyle: AppText.stopMeta.copyWith(color: t.inkFaint),
             enabledBorder: UnderlineInputBorder(
-                // Viền ô nhập là ranh giới CONTROL ⇒ t.outline (3.55:1).
-                // t.line là hairline trang trí: 1.17:1 — ô nhập không có viền.
                 borderSide: BorderSide(color: t.outline)),
             focusedBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: t.ctaFill)),
           ),
           onSubmitted: settings.setBaseUrlOverride,
-          onEditingComplete: () =>
-              settings.setBaseUrlOverride(_urlCtrl.text),
+          onEditingComplete: () => settings.setBaseUrlOverride(_urlCtrl.text),
         ),
         const SizedBox(height: 6),
         Text(
-          'Để trống để dùng địa chỉ mặc định của bản cài. Đổi tại đây có hiệu '
-          'lực ngay lần đồng bộ kế tiếp, không cần cài lại app.',
+          content.ui(UiKeys.settingsServerUrlDesc),
           style: AppText.stopMeta.copyWith(color: t.inkFaint),
         ),
         const SizedBox(height: 16),
@@ -178,12 +173,13 @@ class _ServerSectionState extends State<_ServerSection> {
                 onPressed: settings.isSyncing
                     ? null
                     : () {
-                        // Commit any typed URL before syncing.
                         settings.setBaseUrlOverride(_urlCtrl.text);
                         settings.syncNow();
                       },
                 child: Text(
-                  settings.isSyncing ? 'ĐANG ĐỒNG BỘ…' : 'ĐỒNG BỘ NGAY',
+                  settings.isSyncing
+                      ? content.ui(UiKeys.settingsSyncRunning).toUpperCase()
+                      : content.ui(UiKeys.settingsSyncNowBtn).toUpperCase(),
                   style: AppText.button,
                 ),
               ),
@@ -192,13 +188,13 @@ class _ServerSectionState extends State<_ServerSection> {
         ),
         if (settings.syncState != ManualSyncState.idle) ...[
           const SizedBox(height: 10),
-          Text(_syncLabel(settings.syncState),
+          Text(_syncLabel(content, settings.syncState),
               style: AppText.sheetSub.copyWith(color: t.ink)),
         ],
         if (last != null) ...[
           const SizedBox(height: 6),
           Text(
-            'Lần đồng bộ gần nhất: ${_fmt(last)}',
+            content.uif(UiKeys.settingsLastSync, {'time': _fmt(last)}),
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
         ],
@@ -213,12 +209,12 @@ class _ServerSectionState extends State<_ServerSection> {
   }
 }
 
-/// Staff toggle: show estimated distance (metres) on the zone screen. Persisted
-/// via SettingsProvider -> ISettingsStore. Off by default.
+/// Staff toggle: show estimated distance (metres) on the zone screen.
 class _DistanceToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final content = context.watch<ContentProvider>();
     final settings = context.watch<SettingsProvider>();
     return Material(
       color: Colors.transparent,
@@ -227,16 +223,14 @@ class _DistanceToggle extends StatelessWidget {
         value: settings.showDistanceDebug,
         onChanged: settings.setShowDistanceDebug,
         activeThumbColor: t.ctaFill,
-        title: Text('Hiện khoảng cách ước lượng',
+        title: Text(content.ui(UiKeys.settingsDistanceToggle),
             style: AppText.sheetSub.copyWith(color: t.ink)),
       ),
     );
   }
 }
 
-/// Một dòng chọn theme. Tự vẽ thay vì dùng RadioListTile: RadioListTile kéo
-/// theo màu Material mặc định (không phải token của ta), và trên Flutter mới
-/// groupValue/onChanged của nó đã deprecate.
+/// Một dòng chọn theme. Tự vẽ thay vì RadioListTile (giữ token của ta).
 class _ThemeOption extends StatelessWidget {
   final MuseumThemeId id;
   final bool selected;
@@ -248,26 +242,34 @@ class _ThemeOption extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Cảnh báo vận hành cho light mode. Sếp yêu cầu tính năng này; người bấm nút
-  /// vẫn xứng đáng biết đánh đổi. Đây là thông tin, không phải rào cản.
-  String? get _caveat => switch (id) {
-        MuseumThemeId.light =>
-          'Màn hình sáng gây chói trong phòng trưng bày tối và có thể làm phiền '
-              'khách đứng cạnh.',
+  /// Tên theme theo ngôn ngữ hiện tại. Fallback về id.label (nhúng trong enum)
+  /// đã được lo bởi kUiDefaults, nên luôn có chữ.
+  String _label(ContentProvider content) => switch (id) {
+        MuseumThemeId.dark => content.ui(UiKeys.settingsThemeDark),
+        MuseumThemeId.light => content.ui(UiKeys.settingsThemeLight),
         MuseumThemeId.highContrast =>
-          'Tăng độ tương phản cho khách lớn tuổi hoặc thị lực kém.',
+          content.ui(UiKeys.settingsThemeHighContrast),
+      };
+
+  /// Cảnh báo vận hành. Thông tin, không phải rào cản.
+  String? _caveat(ContentProvider content) => switch (id) {
+        MuseumThemeId.light => content.ui(UiKeys.settingsCaveatLight),
+        MuseumThemeId.highContrast =>
+          content.ui(UiKeys.settingsCaveatHighContrast),
         MuseumThemeId.dark => null,
       };
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final caveat = _caveat;
+    final content = context.watch<ContentProvider>();
+    final label = _label(content);
+    final caveat = _caveat(content);
 
     return Semantics(
       button: true,
       selected: selected,
-      label: id.label,
+      label: label,
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -280,7 +282,6 @@ class _ThemeOption extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Vòng tròn chọn — cùng ngôn ngữ thị giác với badge số hiện vật.
                 Container(
                   width: 20,
                   height: 20,
@@ -294,8 +295,8 @@ class _ThemeOption extends StatelessWidget {
                       ? Container(
                           width: 10,
                           height: 10,
-                          decoration:
-                              BoxDecoration(shape: BoxShape.circle, color: t.ink),
+                          decoration: BoxDecoration(
+                              shape: BoxShape.circle, color: t.ink),
                         )
                       : null,
                 ),
@@ -304,8 +305,7 @@ class _ThemeOption extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(id.label,
-                          style: AppText.body.copyWith(color: t.ink)),
+                      Text(label, style: AppText.body.copyWith(color: t.ink)),
                       if (caveat != null) ...[
                         const SizedBox(height: 4),
                         Text(caveat,
