@@ -208,7 +208,6 @@ abstract final class ManifestParser {
     return ZoneInfo(
       major: major,
       id: id,
-      nearestExhibitHint: (z['nearestExhibitHint'] as bool?) ?? false,
       name: _reqLocalized(z, 'name', ctx, fallbackLang),
       welcomeText: _reqLocalized(z, 'welcomeText', ctx, fallbackLang),
       heroImagePath: _reqPath(z, 'heroImage', ctx),

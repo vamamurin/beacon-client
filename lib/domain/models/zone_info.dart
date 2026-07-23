@@ -13,17 +13,23 @@ import 'localized_text.dart';
 ///
 /// [exhibits] order IS the tour order (manifest array order — the single
 /// source of truth, no separate "order" field by design).
+///
+/// NOTE (removed field): `nearestExhibitHint` used to live here — a per-zone
+/// flag meant to let the UI softly highlight the exhibit the visitor stood
+/// closest to. It was parsed and stored but never read by any consumer, and
+/// implementing it would have reshaped the current zone layout, so it was
+/// removed rather than left as a flag that looks live but isn't. If it comes
+/// back: the per-minor smoothed RSSI it needs is already available on
+/// ZoneSignal.rssiByMinor, and it will need its own hysteresis on "which
+/// exhibit is nearest" — the same flapping problem the zone arbiter solves
+/// with engage/release thresholds shows up again one level down, since indoor
+/// RSSI error (±30–50%) easily swaps two exhibits standing 3–4 m apart.
 @immutable
 class ZoneInfo {
   final int major;
 
   /// Slug ("vu-khi-khang-chien") — asset folder name, logs, debugging.
   final String id;
-
-  /// Phase-0 rule: only true for zones whose minor beacons sit >= 3-4 m
-  /// apart. When true the UI may softly highlight the nearest exhibit —
-  /// a HINT only, never navigation and never an audio interrupt.
-  final bool nearestExhibitHint;
 
   final LocalizedText name;
 
@@ -44,7 +50,6 @@ class ZoneInfo {
   const ZoneInfo({
     required this.major,
     required this.id,
-    this.nearestExhibitHint = false,
     required this.name,
     required this.welcomeText,
     required this.heroImagePath,
@@ -74,7 +79,6 @@ class ZoneInfo {
     return other is ZoneInfo &&
         other.major == major &&
         other.id == id &&
-        other.nearestExhibitHint == nearestExhibitHint &&
         other.name == name &&
         other.welcomeText == welcomeText &&
         other.heroImagePath == heroImagePath &&
@@ -87,7 +91,6 @@ class ZoneInfo {
   int get hashCode => Object.hash(
         major,
         id,
-        nearestExhibitHint,
         name,
         welcomeText,
         heroImagePath,

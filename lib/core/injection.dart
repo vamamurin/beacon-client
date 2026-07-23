@@ -59,6 +59,11 @@ import 'package:beacon_client/services/zone_change_coordinator.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
+import 'package:beacon_client/domain/interfaces/i_analytics_sink.dart';
+import 'package:beacon_client/data/analytics/analytics_uploader.dart';
+import 'package:beacon_client/data/analytics/buffering_analytics_sink.dart';
+import 'package:beacon_client/data/analytics/noop_analytics_sink.dart';
+import 'package:beacon_client/services/analytics_recorder.dart';
 
 enum RunMode { mock, real }
 
@@ -92,6 +97,9 @@ class AppGraph {
   /// Bluetooth readiness gate (permission + adapter). The Gate screen shows
   /// its status and lets staff retry / open settings.
   final IBluetoothGate bluetoothGate;
+  
+  final IAnalyticsSink analytics;
+  final AnalyticsRecorder analyticsRecorder;
 
   /// Resolves a bundle-relative asset path (from the manifest) to an absolute
   /// file path for HeroImage, or null when it can't (mock mode / no bundle).
@@ -130,6 +138,8 @@ class AppGraph {
     required this.nearbyZones,
     required this.autoSync,
     required this.bluetoothGate,
+    required this.analytics,
+    required this.analyticsRecorder,
     required StartupStatus startupStatus,
     required this.imagePathResolver,
     required IPowerMonitor power,
@@ -144,6 +154,7 @@ class AppGraph {
   /// Gate (atDesk/gate only — never mid-tour). Returns null in mock mode.
   Future<SyncResult?> runSync({void Function(double)? onProgress}) async {
     final s = sync;
+    unawaited(analytics.drain());
     if (s == null) return null;
     return s.syncIfNeeded(onProgress: onProgress);
   }
@@ -186,6 +197,8 @@ class AppGraph {
     await _headphones.dispose();
     await chime.dispose();
     bluetoothGate.dispose();
+    await analyticsRecorder.dispose();
+    await analytics.dispose();
     _ble.dispose();
   }
 }
@@ -405,6 +418,34 @@ abstract final class Injection {
       autoSync.kick(); // device may boot already docked
     }
 
+    // ── analytics (thuần additive: chỉ lắng nghe stream sẵn có) ──
+    final IAnalyticsSink analytics;
+    switch (mode) {
+      case RunMode.mock:
+        analytics = const NoopAnalyticsSink();
+        break;
+      case RunMode.real:
+        final docs = await getApplicationDocumentsDirectory();
+        analytics = BufferingFileAnalyticsSink(
+          dir: Directory(p.join(docs.path, 'analytics')),
+          // Tái dùng cùng nguồn URL với content sync; đổi '/events' server-side.
+          uploader: HttpAnalyticsUploader(
+            baseUrl: () => SyncConfig.baseUrl(settingsStore),
+          ),
+        );
+        break;
+    }
+
+    final analyticsRecorder = AnalyticsRecorder(
+      sessionState: session.state,
+      zoneEvents: presence.events,
+      audioState: engine.onStateChanged,
+      audioCompleted: engine.onCompleted,
+      sink: analytics,
+      languageCode: () => languageController.code,
+      headphonesConnected: () => headphones.isConnected,
+    );
+
     return AppGraph._(
       repository: repository,
       presence: presence,
@@ -419,6 +460,8 @@ abstract final class Injection {
       nearbyZones: nearbyZones,
       autoSync: autoSync,
       bluetoothGate: bluetoothGate,
+      analytics: analytics,
+      analyticsRecorder: analyticsRecorder,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,
       power: power,
