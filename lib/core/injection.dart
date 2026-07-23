@@ -153,8 +153,8 @@ class AppGraph {
   /// Runs a content sync if in real mode (no-op in mock). Safe to call from the
   /// Gate (atDesk/gate only — never mid-tour). Returns null in mock mode.
   Future<SyncResult?> runSync({void Function(double)? onProgress}) async {
-    final s = sync;
     unawaited(analytics.drain());
+    final s = sync;
     if (s == null) return null;
     return s.syncIfNeeded(onProgress: onProgress);
   }
@@ -401,6 +401,24 @@ abstract final class Injection {
       return null;
     }
 
+    // ── analytics sink (dựng sớm: cả autoSync lẫn runSync đều cần) ──
+    final IAnalyticsSink analytics;
+    switch (mode) {
+      case RunMode.mock:
+        analytics = const NoopAnalyticsSink();
+        break;
+      case RunMode.real:
+        final docs = await getApplicationDocumentsDirectory();
+        analytics = BufferingFileAnalyticsSink(
+          dir: Directory(p.join(docs.path, 'analytics')),
+          uploader: HttpAnalyticsUploader(
+            baseUrl: () => SyncConfig.baseUrl(settingsStore),
+          ),
+        );
+        break;
+    }
+    
+
     // D — docked auto-sync ("charging = sync"). Only when a real sync exists.
     // Reads threshold at decision time (Settings override -> manifest -> default)
     // and only fires while atDesk + charging, never mid-tour.
@@ -413,27 +431,15 @@ abstract final class Injection {
         initialCharging: power.isCharging,
         settings: settingsStore,
         manifestAutoSyncHours: () => repository.config?.autoSyncHours,
-        runSync: () => syncRef.syncIfNeeded(),
+        runSync: () async {
+          // Về dock = cửa sổ an toàn duy nhất để đẩy analytics lên (không bao
+          // giờ giữa tour). Chạy độc lập với kết quả content sync: kể cả khi
+          // không có bundle mới, event của các tour vừa rồi vẫn phải lên server.
+          unawaited(analytics.drain());
+          return syncRef.syncIfNeeded();
+        },
       );
       autoSync.kick(); // device may boot already docked
-    }
-
-    // ── analytics (thuần additive: chỉ lắng nghe stream sẵn có) ──
-    final IAnalyticsSink analytics;
-    switch (mode) {
-      case RunMode.mock:
-        analytics = const NoopAnalyticsSink();
-        break;
-      case RunMode.real:
-        final docs = await getApplicationDocumentsDirectory();
-        analytics = BufferingFileAnalyticsSink(
-          dir: Directory(p.join(docs.path, 'analytics')),
-          // Tái dùng cùng nguồn URL với content sync; đổi '/events' server-side.
-          uploader: HttpAnalyticsUploader(
-            baseUrl: () => SyncConfig.baseUrl(settingsStore),
-          ),
-        );
-        break;
     }
 
     final analyticsRecorder = AnalyticsRecorder(

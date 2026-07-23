@@ -99,7 +99,8 @@ class AutoSyncScheduler {
         await _settings.setLastSuccessfulSyncAt(_now());
       }
       if (kDebugMode) {
-        debugPrint('[AutoSyncScheduler] docked sync -> ${res?.outcome}');
+        debugPrint('[AutoSyncScheduler] docked sync -> ${res?.outcome}'
+            '${res?.error != null ? ' (${res!.error})' : ''}');
       }
     } catch (e) {
       if (kDebugMode) debugPrint('[AutoSyncScheduler] sync error: $e');

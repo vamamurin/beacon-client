@@ -45,3 +45,6 @@ flutter:
         weight: 600
       - asset: assets/fonts/CormorantGaramond-Bold.ttf
         weight: 700
+
+  assets:
+    - assets/audio/
