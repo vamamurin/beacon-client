@@ -23,5 +23,5 @@ class TourAudioSinkAdapter implements TourAudioSink {
   void stopAll() => _audio.leaveToStandby(); // stops playback + flushes queue
 
   @override
-  void resetSessionMemory() => _audio.resetVisitedZones();
+  void resetSessionMemory() => _audio.resetSessionMemory();
 }

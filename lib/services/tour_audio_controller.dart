@@ -104,10 +104,12 @@ class TourAudioController {
   /// the exhibit that will play NEXT when the current clip completes.
   int _autoIndex = 0;
 
-  /// Zones whose intro has been heard this session (rule 5). RAM-only — the
-  /// session boundary (Phase 3) constructs a fresh controller, so revisit
-  /// memory dies with the session exactly as intended.
+  /// Zones whose intro has been heard THIS TOUR (rule 5). RAM-only.
+  /// LƯU Ý: controller sống suốt vòng đời app (Injection dựng một lần), KHÔNG
+  /// dựng lại mỗi phiên. Bộ nhớ này được SessionController.userStartedTour()
+  /// dọn ở đầu mỗi tour — đừng giả định nó tự chết theo phiên.
   final Set<int> _visitedZones = {};
+  bool _userPaused = false;
 
   MuseumConfig? get _config => _repo.config;
 
@@ -171,10 +173,7 @@ class TourAudioController {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
 
-    // Judge intent BEFORE we tear anything down (confirmed: state at the
-    // instant the change event arrives).
-    final bool wasPlaying = _engine.state.status == PlaybackStatus.playing;
-    final bool shouldPlayIntro = forcePlay ?? wasPlaying;
+    final bool shouldPlayIntro = forcePlay ?? !_userPaused;
 
     _flushQueue(); // stop + unload old zone's queue (supreme physical sync)
     _activeZoneMajor = major;
@@ -206,9 +205,13 @@ class TourAudioController {
 
     if (chime && !alreadyChimed) _chime();
 
-    // Rule 5: revisiting a seen zone -> chime only (chime already handled by
-    // caller for change; enterZone passes chime:false), no intro, wait for tap.
-    if (revisit && !(_config?.policies.revisitPlaysWelcome ?? false)) {
+    // forcePlay = true nghĩa là khách BẤM nút "Chuyển" (mệnh lệnh tường minh).
+    // Nó phải thắng Rule 5 (revisit) như đã hứa ở banner.
+    final bool explicitCommand = forcePlay == true;
+
+    // SỬA: Nếu khách đã thăm khu này, KHÔNG có lệnh bấm ép phát, và bảo tàng 
+    // không cho phép chào lại -> thì mới im lặng.
+    if (revisit && !explicitCommand && !(_config?.policies.revisitPlaysWelcome ?? false)) {
       // Nothing loaded/played; the grid awaits a manual tap.
       return;
     }
@@ -279,6 +282,7 @@ class TourAudioController {
   /// chỉ unique trong một zone, nên resolve theo _activeZoneMajor sẽ phát nhầm
   /// hiện vật cùng số của zone khác.
   AudioIntentResult tapExhibit({required int major, required int minor}) {
+    _userPaused = false; // Bấm chọn bài tức là muốn nghe
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return AudioIntentResult.notFound;
     final idx = zone.tourIndexOf(minor);
@@ -328,6 +332,7 @@ class TourAudioController {
   /// (rule 1). Intro của zone khác: phát xong thì im, chờ tap —
   /// [_onClipCompleted] đã chặn advance cho ref lệch zone.
   AudioIntentResult tapZoneIntro({required int major}) {
+    _userPaused = false; // Bấm chọn khu tức là muốn nghe
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return AudioIntentResult.notFound;
     final resolved = zone.introAudio.resolve(_language(), _fallback);
@@ -351,6 +356,7 @@ class TourAudioController {
 
   /// Visitor bấm play (resume, hoặc khởi động một intro đã load nhưng im).
   AudioIntentResult userPlay() {
+    _userPaused = false; // Ghi nhận: Khách muốn tiếp tục nghe
     if (_engine.state.current == null) return AudioIntentResult.noClip;
     return _tryPlay()
         ? AudioIntentResult.started
@@ -358,11 +364,15 @@ class TourAudioController {
   }
 
   /// Visitor bấm pause.
-  void userPause() => _engine.pause();
+  void userPause() {
+    _userPaused = true; // Ghi nhận: Khách không muốn ồn ào lúc này
+    _engine.pause();
+  }
 
   /// Visitor bấm "Về đầu". Tua về 0 LUÔN được phép (đây là thao tác vị trí,
   /// không phải phát tiếng); chỉ việc phát mới đi qua cổng chính sách.
   AudioIntentResult userReplay() {
+    _userPaused = false; // Đã tua lại tức là muốn nghe
     if (_engine.state.current == null) return AudioIntentResult.noClip;
     _engine.seek(Duration.zero);
     return _tryPlay()
@@ -437,6 +447,7 @@ class TourAudioController {
     if (kDebugAssumeHeadphones) return;
 
     if (!connected) {
+      _userPaused = true; // Rút tai nghe = Khách muốn dừng
       // Becoming noisy -> pause immediately (never blast the loudspeaker).
       if (_engine.state.status == PlaybackStatus.playing) {
         _engine.pause();
@@ -451,7 +462,10 @@ class TourAudioController {
     _engine.stop();
   }
 
-  void resetVisitedZones() => _visitedZones.clear();
+  void resetSessionMemory() {
+    _visitedZones.clear();
+    _userPaused = false; // Khách mới vào mặc định là muốn nghe
+  }
 
   String get _fallback => _config?.fallbackLanguage ?? _language();
 

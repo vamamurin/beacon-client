@@ -196,6 +196,8 @@ class ZoneChangeCoordinator {
     // Chốt như đường hết-giờ (không forcePlay, không set nav target: người dùng
     // không chủ động bấm nên đừng giật màn của họ khi bật lại).
     _clearPending();
+
+    if (!_isTouring()) return;
     _audio.changeZone(p.toMajor);
   }
 
@@ -206,6 +208,11 @@ class ZoneChangeCoordinator {
     // wandered further, accept the pending target (the arbiter would already
     // have retargeted us to their newest zone if it changed).
     _clearPending();
+
+
+    // Chốt chặn: Nếu máy đã cắm sạc (không còn ở trạng thái touring),
+    // lập tức giết chết cái lệnh chuyển khu ngầm này.
+    if (!_isTouring()) return;
     _audio.changeZone(p.toMajor);
   }
 

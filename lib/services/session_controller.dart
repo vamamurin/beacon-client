@@ -32,7 +32,9 @@
 //  (4) Start grace: from userStartedTour() until the FIRST EnteredZone,
 //      deskStable is ignored (so standing near the desk at start can't kill the
 //      fresh session).
-//  (5) ending -> cleanup(stop audio, wipe visited) -> atDesk.
+//  (5) touring -> ending -> cleanup(stop audio, wipe visited) -> atDesk.
+//      LƯU Ý THÊM: userStartedTour() cũng wipe. Bất biến "bộ nhớ revisit rỗng"
+//      được thực thi ở ĐIỂM ĐỌC (bắt đầu), không phụ thuộc phiên trước đã dọn sạch hay chưa.
 //
 // Time is injected; silence is checked on a 1 Hz sweep.
 
@@ -134,6 +136,17 @@ class SessionController {
   void userStartedTour() {
     if (_state.phase != SessionPhase.gate) return;
     final now = _now();
+
+    // Về dock = đổi khách. Tour mới LUÔN khởi hành với bộ nhớ trắng: không tồn
+    // tại khái niệm "quay lại khu cũ" xuyên qua ranh giới phiên.
+    //
+    // Dọn Ở ĐÂY, không chỉ ở _endSession. Dọn ở cuối phiên trước không đảm bảo
+    // gì về trạng thái tại lúc phiên sau ĐỌC nó — mọi thứ chạy trong khe giữa
+    // hai phiên (Timer banner, listener foreground, event còn trong hàng) đều
+    // ghi bẩn lại được.
+    _audio.stopAll();
+    _audio.resetSessionMemory();
+
     _graceStartedAt = now;
     _touringSince = now;
     _setState(_state.copyWith(
