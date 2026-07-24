@@ -101,6 +101,8 @@ class AppGraph {
   final IAnalyticsSink analytics;
   final AnalyticsRecorder analyticsRecorder;
 
+  final StreamSubscription<SessionState>? _analyticsDockSub;
+  
   /// Resolves a bundle-relative asset path (from the manifest) to an absolute
   /// file path for HeroImage, or null when it can't (mock mode / no bundle).
   /// UI uses this instead of guessing the repository's concrete type.
@@ -145,10 +147,12 @@ class AppGraph {
     required IPowerMonitor power,
     required IHeadphoneMonitor headphones,
     required StreamSubscription<SessionState> tourStartSub,
+    required StreamSubscription<SessionState>? analyticsDockSub,
   })  : _ble = ValueNotifier<StartupStatus>(startupStatus),
         _power = power,
         _headphones = headphones,
-        _tourStartSub = tourStartSub;
+        _tourStartSub = tourStartSub,
+        _analyticsDockSub = analyticsDockSub;
 
   /// Runs a content sync if in real mode (no-op in mock). Safe to call from the
   /// Gate (atDesk/gate only — never mid-tour). Returns null in mock mode.
@@ -185,6 +189,7 @@ class AppGraph {
   Future<void> dispose() async {
     await keepAlive.stop();
     await _tourStartSub.cancel();
+    await _analyticsDockSub?.cancel();
     await zoneChanges.dispose();
     await session.dispose();
     await presence.dispose();
@@ -432,10 +437,8 @@ abstract final class Injection {
         settings: settingsStore,
         manifestAutoSyncHours: () => repository.config?.autoSyncHours,
         runSync: () async {
-          // Về dock = cửa sổ an toàn duy nhất để đẩy analytics lên (không bao
-          // giờ giữa tour). Chạy độc lập với kết quả content sync: kể cả khi
-          // không có bundle mới, event của các tour vừa rồi vẫn phải lên server.
-          unawaited(analytics.drain());
+          // Chỉ lo content. Analytics drain nay đi đường riêng (xem analyticsDockSub)
+          // vì nó KHÔNG được phụ thuộc vào isAutoSyncDue.
           return syncRef.syncIfNeeded();
         },
       );
@@ -451,6 +454,27 @@ abstract final class Injection {
       languageCode: () => languageController.code,
       headphonesConnected: () => headphones.isConnected,
     );
+
+    // Về dock = cửa sổ an toàn để đẩy analytics. LUÔN chạy, độc lập content sync.
+    //
+    // Nghe session.state (KHÔNG phải onChargingChanged): recorder subscribe trước
+    // sub này nên nó đã emit TourEnded vào _pending khi ta chạy tới đây. Nghe
+    // charging trực tiếp sẽ drain SỚM HƠN lúc TourEnded ra đời -> lỡ một chuyến.
+    StreamSubscription<SessionState>? analyticsDockSub;
+    if (mode == RunMode.real) {
+      var lastAnalyticsPhase = session.current.phase;
+      analyticsDockSub = session.state.listen((s) {
+        final was = lastAnalyticsPhase;
+        lastAnalyticsPhase = s.phase;
+        if (was != SessionPhase.atDesk && s.phase == SessionPhase.atDesk) {
+          unawaited(analytics.drain());
+        }
+      });
+      // Boot khi đã cắm sẵn / còn tồn đọng từ phiên trước.
+      if (session.current.phase == SessionPhase.atDesk && power.isCharging) {
+        unawaited(analytics.drain());
+      }
+    }
 
     return AppGraph._(
       repository: repository,
@@ -473,6 +497,7 @@ abstract final class Injection {
       power: power,
       headphones: headphones,
       tourStartSub: tourStartSub,
+      analyticsDockSub: analyticsDockSub,
     );
   }
 

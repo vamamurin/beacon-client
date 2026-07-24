@@ -41,8 +41,10 @@
 // them in a debug-only guard is exactly what made the profile-mode bug
 // invisible for two test cycles.
 
-import 'dart:async';
 import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
+
 
 import 'package:flutter/foundation.dart';
 
@@ -120,9 +122,11 @@ class HttpAnalyticsUploader implements AnalyticsUploader {
 
     final client = HttpClient()..connectionTimeout = _timeout;
     try {
+      final body = utf8.encode(ndjsonLines.join('\n'));
       final req = await client.postUrl(uri).timeout(_timeout);
       req.headers.set(HttpHeaders.contentTypeHeader, 'application/x-ndjson');
-      req.write(ndjsonLines.join('\n'));
+      req.contentLength = body.length;   // ← DÒNG QUYẾT ĐỊNH
+      req.add(body);                     // add(bytes) thay vì write(String)
       final resp = await req.close().timeout(_timeout);
       // Drain the body so the socket can be reused/closed cleanly.
       await resp.drain<void>();
