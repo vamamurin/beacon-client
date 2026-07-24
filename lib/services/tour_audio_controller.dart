@@ -11,16 +11,46 @@
 //  (2a) TAP exhibit -> interrupt immediately, flush pending auto-queue, play
 //      that clip; when it ends, resume auto-tour FROM THE NEXT exhibit.
 //  (3+4) CHANGE zone -> ALWAYS interrupt + flush old queue + chime. Then judge
-//      the engine's status AT THAT INSTANT: was playing -> autoplay new intro;
-//      was paused (user or unplug) -> load new intro but stay silent until the
-//      visitor presses play. Physical-space sync is supreme; the paused
-//      visitor's intent is still honoured for "start new sound or not".
-//  (5) REVISIT a zone already seen this session (revisitPlaysWelcome=false)
-//      -> chime only, no intro, wait for a tap.
+//      the visitor's INTENT (not the engine's mechanical state): if they have
+//      not deliberately paused, the new zone's intro plays; if they paused
+//      (button or unplug), the intro loads but stays silent until they press
+//      play. Physical-space sync is supreme; the paused visitor's intent is
+//      still honoured for "start new sound or not".
+//  (5) REVISIT a zone already seen this tour (revisitPlaysWelcome=false)
+//      -> chime only, no intro, wait for a tap. EXCEPTION: an explicit
+//      "Chuyển sang B" tap beats rule 5 — the banner promised a switch, so
+//      silence would read as a broken button.
 //  (6) UNPLUG headphones -> pause now; REPLUG -> wait for explicit play.
 //
 // Chime policy (confirmed): chime fires on zone CHANGE and REVISIT, not on the
 // first entry from standby (there the intro itself is the arrival cue).
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// FIX B8 — KHÔNG CÒN stop() + load() KHÔNG-AWAIT CẠNH NHAU.
+//
+// Bản trước gọi `_flushQueue()` (→ `_engine.stop()`) ngay trước `_loadIntro`
+// (→ `_engine.load()`), cả hai đều async và cả hai đều KHÔNG await, trên CÙNG
+// một AudioPlayer. Hai coroutine interleave và sinh ra hai hỏng hóc, tuỳ thứ
+// tự tiếp đất của plugin:
+//
+//   • Phần đuôi của stop() đặt lại `_completedSignalled = false` trong khi
+//     player còn nằm ở ProcessingState.completed của clip CŨ ⇒ engine bắn
+//     onCompleted mang ref của clip MỚI (chưa hề phát) ⇒ controller tưởng intro
+//     vừa nghe xong và nhảy thẳng sang hiện vật kế tiếp. Triệu chứng thực địa:
+//     đổi khu thì bỏ qua intro và phát hiện vật thứ hai của khu mới.
+//   • Ngược lại, nếu đuôi của stop() tiếp đất SAU setAudioSource thì nó gỡ
+//     luôn nguồn vừa nạp ⇒ player về idle, play() thành no-op, UI kẹt ở
+//     "loading". Cùng một cửa sổ, hai kết cục khác nhau.
+//
+// Sửa ở ĐÂY (nguyên nhân), song song với cờ `_sourceReady` bên
+// just_audio_engine.dart (hậu quả):
+//   `load()` VỐN ĐÃ thay nguồn — một AudioPlayer chỉ giữ một nguồn tại một
+//   thời điểm — nên `stop()` trước nó là thừa. Bỏ đi là cửa sổ đóng kín.
+//   Nhưng vẫn PHẢI stop tường minh ở nhánh KHÔNG có clip mới nào thế chỗ
+//   (khu đã ghé theo luật 5, hoặc intro không resolve được ngôn ngữ hiện tại),
+//   nếu không thuyết minh khu CŨ sẽ phát tiếp sau khi khách đã sang khu mới.
+//   Vì thế [_beginZoneAudio] và [_loadIntro] trả về bool "đã giao clip mới cho
+//   engine hay chưa", và người gọi tự quyết định có cần stop hay không.
 
 import 'dart:async';
 
@@ -109,6 +139,14 @@ class TourAudioController {
   /// dựng lại mỗi phiên. Bộ nhớ này được SessionController.userStartedTour()
   /// dọn ở đầu mỗi tour — đừng giả định nó tự chết theo phiên.
   final Set<int> _visitedZones = {};
+
+  /// Ý ĐỊNH của khách, không phải trạng thái cơ học của engine.
+  ///
+  /// Vì sao cần cờ này thay vì đọc `_engine.state.status == playing`: một clip
+  /// vừa nghe HẾT được engine map thành `paused` (ProcessingState.completed →
+  /// PlaybackStatus.paused). Nên khách nghe trọn vẹn khu A rồi sang khu B sẽ bị
+  /// đánh giá nhầm là "đang tạm dừng" và khu B im lặng một cách khó hiểu.
+  /// "Nghe xong" KHÔNG phải "muốn dừng".
   bool _userPaused = false;
 
   MuseumConfig? get _config => _repo.config;
@@ -134,7 +172,6 @@ class TourAudioController {
     return true;
   }
 
-  
   /// Reading mode: no private-listening route AND the museum forbids the
   /// loudspeaker. In this mode NOTHING plays sound — not autoplay, not a
   /// manual tap (rule (a)): the difference between listening and reading is
@@ -159,29 +196,59 @@ class TourAudioController {
     _autoIndex = 0;
 
     // First entry from standby: NO chime (intro is the arrival cue).
-    _beginZoneAudio(zone, chime: false);
+    final bool tookOver = _beginZoneAudio(zone, chime: false);
+
+    // B8 — chỉ stop khi KHÔNG có clip mới nào thế chỗ (khu đã ghé, luật 5).
+    // Bình thường engine đã idle sẵn ở đây (leaveToStandby / kết thúc phiên đã
+    // dọn), nên đây là dây an toàn chứ không phải đường chính.
+    if (!tookOver) _flushQueue();
   }
 
   /// Visitor moved from one zone to another. Rules 3+4 (+5 for revisits).
-  /// ALWAYS interrupt + flush + chime.
   ///
-  /// [forcePlay]: null (mặc định, đường auto-switch khi hết 20s) → phát-hay-im
-  /// theo trạng thái engine tại thời điểm này (wasPlaying). true (khách BẤM
+  /// [forcePlay]: null (mặc định — đường auto-switch khi banner hết giờ) →
+  /// phát-hay-im theo Ý ĐỊNH của khách ([_userPaused]). true (khách BẤM
   /// "Chuyển" trên banner) → luôn phát intro B: bấm nút là mệnh lệnh phát, chỉ
-  /// reading-mode mới chặn được. false thì để dành, chưa dùng.
+  /// reading-mode mới chặn được, và nó THẮNG cả luật 5. false thì để dành.
   void changeZone(int major, {bool? forcePlay}) {
     final zone = _repo.zoneByMajor(major);
     if (zone == null) return;
 
+    // ⚠ HAI CỜ NÀY KHÁC NHAU — đừng suy cái sau ra từ cái trước.
+    //
+    // `explicit` = "khách có thực sự BẤM nút không". CHỈ nó mới được phép
+    // thắng luật 5 (khu đã ghé thì không chào lại).
+    //
+    // `shouldPlayIntro` = "có phát tiếng ngay không". Trên đường auto nó bằng
+    // `!_userPaused`, tức THƯỜNG LÀ true.
+    //
+    // Một bản trước suy `explicitCommand = forcePlay == true` từ BÊN TRONG
+    // [_beginZoneAudio], SAU khi `shouldPlayIntro` đã được truyền vào chính
+    // tham số `forcePlay`. Vì `shouldPlayIntro` là bool đặc (không bao giờ
+    // null), cờ "khách đã bấm" hoá thành true trên CẢ đường auto ⇒ luật 5 bị
+    // vô hiệu ⇒ đi A → B → A và để banner hết giờ sẽ nghe lại toàn bộ lời chào
+    // khu A. Giữ hai cờ tách bạch, tính ở ĐÂY, truyền xuống riêng.
+    final bool explicit = forcePlay == true;
     final bool shouldPlayIntro = forcePlay ?? !_userPaused;
 
-    _flushQueue(); // stop + unload old zone's queue (supreme physical sync)
+    // B8 — KHÔNG _flushQueue() ở đây nữa (xem ghi chú đầu file). load() bên
+    // dưới đã thay nguồn; thêm một stop() không-await vào đó chính là cửa sổ
+    // race đã sinh ra lỗi "đổi khu bỏ qua intro".
     _activeZoneMajor = major;
     _autoIndex = 0;
     _chime(); // zone change always chimes (trừ reading mode — cấm mọi tiếng)
 
-    _beginZoneAudio(zone,
-        chime: false, forcePlay: shouldPlayIntro, alreadyChimed: true);
+    final bool tookOver = _beginZoneAudio(
+      zone,
+      chime: false,
+      forcePlay: shouldPlayIntro,
+      explicitCommand: explicit,
+      alreadyChimed: true,
+    );
+
+    // Không có clip mới nào thế chỗ → phải cắt thuyết minh khu CŨ tường minh,
+    // nếu không nó sẽ phát tiếp trong khi khách đã sang khu mới.
+    if (!tookOver) _flushQueue();
   }
 
   /// Radio dropped to standby (Phase 1 rule 4). Stop audio; keep visited memory.
@@ -193,35 +260,39 @@ class TourAudioController {
 
   /// Shared entry/change audio logic.
   ///
-  /// [forcePlay]: when set (zone change), overrides the autoplay decision with
-  /// the pre-change playing state (honours a paused visitor).
-  void _beginZoneAudio(
+  /// [forcePlay]: khi có giá trị (đường đổi khu), ghi đè quyết định autoplay.
+  /// [explicitCommand]: khách BẤM nút tường minh — CHỈ cờ này mới thắng luật 5.
+  ///
+  /// Trả về TRUE khi một clip mới đã được giao cho engine (người gọi KHÔNG cần
+  /// stop nữa), FALSE khi không có gì được nạp (khu đã ghé theo luật 5, hoặc
+  /// intro không resolve được ở ngôn ngữ hiện tại). Giá trị trả về này là thứ
+  /// cho phép [changeZone] bỏ được lệnh stop() không-await — xem B8 đầu file.
+  bool _beginZoneAudio(
     ZoneInfo zone, {
     required bool chime,
     bool? forcePlay,
+    bool explicitCommand = false,
     bool alreadyChimed = false,
   }) {
     final bool revisit = _visitedZones.contains(zone.major);
 
     if (chime && !alreadyChimed) _chime();
 
-    // forcePlay = true nghĩa là khách BẤM nút "Chuyển" (mệnh lệnh tường minh).
-    // Nó phải thắng Rule 5 (revisit) như đã hứa ở banner.
-    final bool explicitCommand = forcePlay == true;
-
-    // SỬA: Nếu khách đã thăm khu này, KHÔNG có lệnh bấm ép phát, và bảo tàng 
-    // không cho phép chào lại -> thì mới im lặng.
-    if (revisit && !explicitCommand && !(_config?.policies.revisitPlaysWelcome ?? false)) {
+    // Luật 5: khu đã ghé thì chỉ chime, chờ tap. NGOẠI LỆ: khách bấm "Chuyển"
+    // trên banner — banner đã hứa chuyển khu, im lặng sẽ đọc thành nút hỏng.
+    if (revisit &&
+        !explicitCommand &&
+        !(_config?.policies.revisitPlaysWelcome ?? false)) {
       // Nothing loaded/played; the grid awaits a manual tap.
-      return;
+      return false;
     }
 
     _visitedZones.add(zone.major);
 
     // Decide whether to actually START sound.
     //
-    // FIX B5: forcePlay là mệnh lệnh "khách ĐANG nghe khi đổi zone → intro mới
-    // phát tiếp" (rule 3+4). Bản cũ AND thêm _autoplayAllowed nên forcePlay
+    // FIX B5: forcePlay là mệnh lệnh "khách ĐANG muốn nghe khi đổi zone → intro
+    // mới phát tiếp" (rule 3+4). Bản cũ AND thêm _autoplayAllowed nên forcePlay
     // chỉ phủ quyết được, không ép được — khách nghe qua loa (bảo tàng cho
     // phép) sang zone mới bị im lặng khó hiểu. Giờ forcePlay đi thẳng vào
     // _loadIntro; cổng cuối cùng vẫn là _tryPlay (reading mode phủ quyết
@@ -231,12 +302,14 @@ class TourAudioController {
 
     // Load the intro either way (so a paused visitor can press play, and so
     // reading mode has a "current" ref to show the transcript for).
-    _loadIntro(zone, play: shouldPlay);
+    return _loadIntro(zone, play: shouldPlay);
   }
 
-  void _loadIntro(ZoneInfo zone, {required bool play}) {
+  /// Trả về TRUE khi intro đã được giao cho engine; FALSE khi khu này không có
+  /// track intro dùng được ở ngôn ngữ hiện tại (người gọi phải tự stop).
+  bool _loadIntro(ZoneInfo zone, {required bool play}) {
     final resolved = zone.introAudio.resolve(_language(), _fallback);
-    if (resolved == null) return;
+    if (resolved == null) return false;
     _autoIndex = 0; // exhibits start after the intro
     _engine.load(
       AudioTrackRef.zoneIntro(zone.major),
@@ -245,6 +318,7 @@ class TourAudioController {
           milliseconds: (resolved.track.durationSec * 1000).round()),
     );
     if (play) _tryPlay();
+    return true;
   }
 
   // ========================================================================
@@ -299,6 +373,9 @@ class TourAudioController {
       _autoIndex = idx + 1;
     }
 
+    // B8: load() thay nguồn trực tiếp — KHÔNG stop() trước. Đây cũng từng là
+    // một ổ của cùng lỗi: chạm hiện vật đúng lúc clip trước vừa kết thúc sẽ
+    // khiến engine bắn onCompleted cho clip mới và nhảy dư một hiện vật.
     _engine.load(
       AudioTrackRef(
         zoneMajor: major, // ref mang major ĐÚNG -> `isThis` ở màn 4 khớp
@@ -328,9 +405,9 @@ class TourAudioController {
   /// zone đã rời đi — nó sẽ cướp auto-queue của zone visitor đang thực sự
   /// đứng. Quy tắc giữ nguyên từ tapExhibit: chỉ đụng `_autoIndex` khi major
   /// trùng zone vật lý hiện tại; khi đó reset về 0 để intro phát xong,
-  /// auto-tour đi lại từ hiện vật có sóng đầu tiên — y hệt lần vào zone
-  /// (rule 1). Intro của zone khác: phát xong thì im, chờ tap —
-  /// [_onClipCompleted] đã chặn advance cho ref lệch zone.
+  /// auto-tour đi lại từ hiện vật đầu tiên — y hệt lần vào zone (rule 1).
+  /// Intro của zone khác: phát xong thì im, chờ tap — [_onClipCompleted] đã
+  /// chặn advance cho ref lệch zone.
   AudioIntentResult tapZoneIntro({required int major}) {
     _userPaused = false; // Bấm chọn khu tức là muốn nghe
     final zone = _repo.zoneByMajor(major);
@@ -447,7 +524,15 @@ class TourAudioController {
     if (kDebugAssumeHeadphones) return;
 
     if (!connected) {
-      _userPaused = true; // Rút tai nghe = Khách muốn dừng
+      // Rút tai nghe = khách muốn dừng.
+      //
+      // ⚠ LƯU Ý PHẠM VI: cờ này SỐNG TIẾP sau khi cắm lại, nên nó không chỉ
+      // dừng clip hiện tại mà còn khiến MỌI khu tiếp theo im lặng cho tới khi
+      // khách bấm play / chạm một hiện vật. Đó là luật 6 được mở rộng, và trên
+      // máy bỏ túi màn tắt khách có thể không hiểu vì sao tour "chết". Nếu thực
+      // địa báo lỗi này, chỗ sửa là ở ĐÂY (ví dụ: cắm lại trong ~10 giây thì
+      // coi như cùng một thao tác vật lý và hạ cờ), không phải ở tầng engine.
+      _userPaused = true;
       // Becoming noisy -> pause immediately (never blast the loudspeaker).
       if (_engine.state.status == PlaybackStatus.playing) {
         _engine.pause();
@@ -462,6 +547,12 @@ class TourAudioController {
     _engine.stop();
   }
 
+  /// Dọn TOÀN BỘ trí nhớ thuộc về một tour. Gọi ở ĐÚNG MỘT chỗ —
+  /// SessionController, ở đầu mỗi tour — và phải chạy kể cả khi tour trước kết
+  /// thúc bất thường (sạc / về bàn / im lặng / staff).
+  ///
+  /// ⚠ Tên này đã đổi từ `resetVisitedZones()`: kiểm tra `tour_wiring.dart`
+  /// (TourAudioSinkAdapter.resetSessionMemory) đang gọi đúng tên mới.
   void resetSessionMemory() {
     _visitedZones.clear();
     _userPaused = false; // Khách mới vào mặc định là muốn nghe
@@ -481,4 +572,6 @@ class TourAudioController {
   Set<int> get visitedZones => Set.unmodifiable(_visitedZones);
   @visibleForTesting
   int? get activeZoneMajor => _activeZoneMajor;
+  @visibleForTesting
+  bool get userPaused => _userPaused;
 }

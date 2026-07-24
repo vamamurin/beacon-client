@@ -6,6 +6,34 @@
 // TourAudioController; letting the plugin auto-advance a playlist would move
 // that logic out of our control. The engine "just plays" one clip and reports.
 //
+// FIX B8 — CỔNG `_sourceReady` CHO onCompleted (lỗi "đổi khu bị bỏ qua intro"):
+// B7 bên dưới bảo vệ ĐƯỜNG EMIT bằng generation token, nhưng KHÔNG bảo vệ
+// đường `_completedCtrl.add()`. Hậu quả tái hiện được:
+//
+//   1. Khách nghe HẾT clip cuối của khu A ⇒ player nằm ở ProcessingState
+//      .completed, `_completedSignalled == true`.
+//   2. changeZone(B) gọi stop() (không await). stop() đặt
+//      `_completedSignalled = false` — LÊN CÒ lại cái bẫy — trong khi player
+//      VẪN đang ở `completed`, rồi treo ở `await _player.stop()`.
+//   3. Controller chạy tiếp ngay: load(introB) đặt `_currentRef = introB`,
+//      `_completedSignalled = false`, rồi treo ở `await setAudioSource`.
+//   4. Một PlayerState `completed` còn sót của clip CŨ được giao. Điều kiện
+//      `completed && !_completedSignalled` đúng ⇒ bắn onCompleted với ref
+//      `introB` — một clip CHƯA HỀ PHÁT.
+//   5. TourAudioController thấy ref.zoneMajor == zone hiện hành ⇒ guard cho
+//      qua ⇒ _playNextFrom(B, 0) ⇒ nạp hiện vật 0, `_autoIndex = 1`. load()
+//      này lại bump generation ⇒ setAudioSource(introB) đang bay bị hủy
+//      (PlayerInterruptedException, trước đây bị NUỐT im lặng).
+//   6. Event `completed` sót thứ hai lặp lại ⇒ _playNextFrom(B, 1) ⇒ hiện vật
+//      thứ HAI của khu B. Đúng triệu chứng đã báo: intro B bị bỏ qua.
+//
+// Sửa: thêm `_sourceReady` — chỉ TRUE sau khi setAudioSource của thế hệ HIỆN
+// HÀNH hoàn tất. Trước mốc đó, mọi `completed` đều là dư âm của clip trước và
+// bị nuốt. Cờ được hạ ĐỒNG BỘ ở đầu load()/stop() (trước mọi `await`), nên cửa
+// sổ race đóng kín: không có điểm treo nào nằm giữa lúc hạ cờ và lúc bẫy có
+// thể nổ. Sau khi setAudioSource xong, player đã mang NGUỒN MỚI nên nó không
+// còn có thể ở trạng thái `completed` của clip cũ nữa.
+//
 // FIX B7 (đợt 1) — GENERATION TOKEN: changeZone gọi stop() (không await) rồi
 // load() ngay trên cùng một AudioPlayer. Hai coroutine interleave: phần đuôi
 // của stop() (`_emit(idle)` sau khi await _player.stop()) chạy SAU khi load()
@@ -49,6 +77,18 @@ class JustAudioEngine implements IAudioEngine {
   AudioQueueState _state = AudioQueueState.idle;
   bool _completedSignalled = false;
 
+  /// B8 — nguồn của [_currentRef] đã thực sự nạp xong hay chưa.
+  ///
+  /// Hạ xuống false ĐỒNG BỘ ở đầu mỗi load()/stop() (trước mọi `await`), nâng
+  /// lên true CHỈ khi `setAudioSource` của thế hệ hiện hành trả về. Mọi
+  /// `ProcessingState.completed` nhận được trong lúc cờ này false đều là dư âm
+  /// của clip TRƯỚC — gán nó cho [_currentRef] mới là bịa ra một sự kiện
+  /// "nghe hết" chưa từng xảy ra, và đó chính là lỗi B8 ở đầu file.
+  ///
+  /// KHÔNG dùng cờ này để chặn [_emit]: một clip đang nạp vẫn phải báo
+  /// `loading` cho UI. Nó chỉ gác đúng một cửa: [_completedCtrl].
+  bool _sourceReady = false;
+
   /// B7: thế hệ lệnh hiện hành. Mỗi load()/stop() bump nó lên; code chạy sau
   /// một `await` chỉ được emit/side-effect nếu thế hệ nó giữ vẫn là mới nhất.
   int _generation = 0;
@@ -91,13 +131,23 @@ class JustAudioEngine implements IAudioEngine {
       status = PlaybackStatus.loading;
     }
 
-    _emit(_state.copyWith(
+    // Dựng state TƯỜNG MINH thay vì copyWith: copyWith dùng `current ?? this
+    // .current`, nên khi _currentRef vừa bị stop() đặt về null nó GIỮ LẠI ref
+    // cũ — UI nhận `status: idle` kèm một clip vẫn còn đó. Ở đây _currentRef và
+    // _durationHint là nguồn sự thật, kể cả khi chúng null.
+    _emit(AudioQueueState(
       status: status,
       current: _currentRef,
       duration: _durationHint,
+      position: _state.position,
     ));
 
+    // B8 — CHỈ tin `completed` khi nguồn của clip hiện hành đã nạp xong. Xem
+    // ghi chú đầu file: trong cửa sổ stop()→load() player còn mang trạng thái
+    // `completed` của clip TRƯỚC, và nếu bắn ra ở đó thì controller sẽ tưởng
+    // clip mới vừa nghe hết và nhảy thẳng sang hiện vật kế tiếp.
     if (ps.processingState == ProcessingState.completed &&
+        _sourceReady &&
         !_completedSignalled) {
       _completedSignalled = true;
       final ref = _currentRef;
@@ -137,6 +187,9 @@ class JustAudioEngine implements IAudioEngine {
     _currentRef = ref;
     _durationHint = durationHint;
     _completedSignalled = false;
+    // B8 — HẠ CỜ ĐỒNG BỘ, trước mọi `await`. Từ đây tới lúc setAudioSource trả
+    // về, mọi `completed` là của clip cũ và phải bị nuốt.
+    _sourceReady = false;
     _emit(AudioQueueState(
       current: ref,
       status: PlaybackStatus.loading,
@@ -146,11 +199,20 @@ class JustAudioEngine implements IAudioEngine {
       // setAudioSource loads but does NOT play — matches the interface
       // contract that lets a paused visitor keep a queued-but-silent intro.
       await _player.setAudioSource(AudioSource.uri(source));
+      // B8 — chỉ mở cổng khi lệnh này VẪN là mới nhất. Nếu đã bị một load()/
+      // stop() khác vượt mặt, thế hệ đó tự lo cờ của nó; ta không được nâng cờ
+      // hộ một nguồn không còn là nguồn hiện hành.
+      if (gen == _generation) _sourceReady = true;
     } on PlayerException catch (e) {
       if (kDebugMode) debugPrint('[JustAudioEngine] load error: $e');
       if (gen == _generation) _emit(AudioQueueState.idle);
     } on PlayerInterruptedException {
-      // A newer load() superseded this one — expected, ignore.
+      // Một load() mới hơn đã vượt mặt lệnh này — bình thường khi đổi khu.
+      // Nhưng KHÔNG im lặng nữa: chính sự im lặng này đã giấu việc intro của
+      // khu mới bị hủy giữa chừng trong lỗi B8.
+      if (kDebugMode) {
+        debugPrint('[JustAudioEngine] load bị vượt mặt (gen $gen): $ref');
+      }
     } catch (e) {
       if (kDebugMode) debugPrint('[JustAudioEngine] load failed: $e');
       if (gen == _generation) _emit(AudioQueueState.idle);
@@ -185,6 +247,7 @@ class JustAudioEngine implements IAudioEngine {
     _currentRef = null;
     _durationHint = null;
     _completedSignalled = false;
+    _sourceReady = false; // B8 — hạ cờ đồng bộ, trước `await`
     await _player.stop();
     // B7: nếu một load() đã vượt mặt trong lúc await, phần đuôi này KHÔNG
     // được phép đè trạng thái loading của clip mới bằng idle.
