@@ -50,11 +50,17 @@
 // `band.height == 111`. Quan hệ thì đúng với mọi font; con số thì không —
 // và cả dự án này là một chuỗi bài học về đúng chuyện đó.
 
+import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
+import 'package:beacon_client/domain/models/museum_config.dart';
+import 'package:beacon_client/domain/models/zone_info.dart';
+import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Giàn dựng
@@ -72,6 +78,40 @@ const _longName = 'Bảo tàng Lịch sử Quốc gia Việt Nam';
 const _ctaHeight = AppSpace.ctaHeight; // 72 — nút "Bắt đầu tham quan"
 const _staffCardHeight = 210.0; // ≈ thẻ nhân viên (BLE chưa sẵn / cần sync)
 
+/// Repository rỗng — đủ để dựng cây widget. `config: null` khiến
+/// `ContentProvider.ui()` rơi về `kUiDefaults`, đúng cái test hình học cần:
+/// không quan tâm nội dung bundle, chỉ quan tâm bố cục.
+class _FakeZoneRepository implements IZoneRepository {
+  @override
+  Future<void> preWarm() async {}
+  @override
+  bool get isWarmed => true;
+  @override
+  String? get lastError => null;
+  @override
+  List<String> get warnings => const [];
+  @override
+  MuseumConfig? get config => null;
+  @override
+  ZoneInfo? zoneByMajor(int major) => null;
+  @override
+  List<ZoneInfo> get allZones => const [];
+}
+
+/// `_MuseumNameBar` (bên trong `GateLayout`) đọc `ContentProvider` để lấy
+/// hint đọc-màn-hình cho long-press — nên mọi test dựng `GateLayout` cần
+/// provider này phía trên, kể cả khi test chỉ đo hình học.
+Widget _withContentProvider(Widget child) {
+  return ChangeNotifierProvider<ContentProvider>(
+    create: (_) => ContentProvider(
+      repository: _FakeZoneRepository(),
+      imagePathResolver: (_) => null,
+      language: LanguageController(available: const ['vi'], fallback: 'vi'),
+    ),
+    child: child,
+  );
+}
+
 Future<void> _pumpGate(
   WidgetTester tester, {
   required Size logicalSize,
@@ -86,30 +126,36 @@ Future<void> _pumpGate(
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    MaterialApp(
-      theme: buildMuseumTheme(theme),
-      // MediaQuery phải nằm TRONG MaterialApp: MaterialApp tự dựng một
-      // MediaQuery từ View và sẽ đè lên bất cứ cái nào bọc ngoài nó.
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: TextScaler.linear(textScale),
-          // Tai thỏ + gesture bar. KHÔNG để 0: cả `_MuseumNameBar` lẫn khối
-          // CTA đều đọc SafeArea, và bug band trôi chỉ lộ khi có inset trên.
-          padding: const EdgeInsets.only(top: 47, bottom: 34),
-          viewPadding: const EdgeInsets.only(top: 47, bottom: 34),
+    _withContentProvider(
+      MaterialApp(
+        theme: buildMuseumTheme(theme),
+        // MediaQuery phải nằm TRONG MaterialApp: MaterialApp tự dựng một
+        // MediaQuery từ View và sẽ đè lên bất cứ cái nào bọc ngoài nó.
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(textScale),
+            // Tai thỏ + gesture bar. KHÔNG để 0: cả `_MuseumNameBar` lẫn khối
+            // CTA đều đọc SafeArea, và bug band trôi chỉ lộ khi có inset trên.
+            padding: const EdgeInsets.only(top: 47, bottom: 34),
+            viewPadding: const EdgeInsets.only(top: 47, bottom: 34),
+          ),
+          child: child!,
         ),
-        child: child!,
-      ),
-      home: GateLayout(
-        museumName: museumName,
-        // null ⇒ HeroImage trả fallback gradient ĐỒNG BỘ: không I/O, không
-        // async, không phụ thuộc bundle. Ta đang đo hình học, không đo ảnh.
-        primaryPath: null,
-        // KHÔNG null: `_WelcomeFrames` bỏ hẳn khung phụ khi accentPath == null
-        // (suy biến có chủ đích cho bundle cũ). Cần một chuỗi để khung được
-        // dựng; HeroImage vẫn rơi về fallback vì file không tồn tại.
-        accentPath: 'stub',
-        action: SizedBox(height: actionHeight),
+        home: GateLayout(
+          museumName: museumName,
+          // null ⇒ HeroImage trả fallback gradient ĐỒNG BỘ: không I/O, không
+          // async, không phụ thuộc bundle. Ta đang đo hình học, không đo ảnh.
+          primaryPath: null,
+          // KHÔNG null: `_WelcomeFrames` bỏ hẳn khung phụ khi accentPath == null
+          // (suy biến có chủ đích cho bundle cũ). Cần một chuỗi để khung được
+          // dựng; HeroImage vẫn rơi về fallback vì file không tồn tại.
+          accentPath: 'stub',
+          welcomeTitle: 'Chào mừng',
+          welcomeSubtitle: 'quý khách',
+          welcomeGuidance: 'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
+              'Đeo tai nghe để bắt đầu nghe thuyết minh.',
+          action: SizedBox(height: actionHeight),
+        ),
       ),
     ),
   );
@@ -343,15 +389,19 @@ void main() {
         ..physicalSize = const Size(390, 844) * 3.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(MaterialApp(
+      await tester.pumpWidget(_withContentProvider(MaterialApp(
         theme: buildMuseumTheme(MuseumThemeId.dark),
         home: const GateLayout(
           museumName: _longName,
           primaryPath: null,
           accentPath: null, // bundle cũ
+          welcomeTitle: 'Chào mừng',
+          welcomeSubtitle: 'quý khách',
+          welcomeGuidance: 'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
+              'Đeo tai nghe để bắt đầu nghe thuyết minh.',
           action: SizedBox(height: _ctaHeight),
         ),
-      ));
+      )));
       await tester.pump();
 
       expect(find.byKey(GateKeys.accentFrame), findsNothing);

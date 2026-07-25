@@ -159,7 +159,9 @@ void main() {
         async.flushMicrotasks();
         expect(rig.ctrl.current.phase, SessionPhase.atDesk);
         expect(rig.ctrl.current.endReason, SessionEndReason.charging);
-        expect(rig.audio.stops, 1);
+        // P1 fix: stopAll() now runs once at userStartedTour() (clearing
+        // dock residue) and once here at _endSession() — two calls, not one.
+        expect(rig.audio.stops, 2);
         expect(rig.audio.resets, 1);
         rig.dispose();
       });
@@ -284,7 +286,10 @@ void main() {
         rig.desk.add(true);
         async.flushMicrotasks();
         expect(rig.ctrl.current.endReason, SessionEndReason.charging);
-        expect(rig.audio.stops, 1); // cleanup ran exactly once
+        // 1 from userStartedTour()'s dock-residue cleanup + 1 from the
+        // charging-triggered _endSession(); the trailing desk edge below
+        // must NOT add a third.
+        expect(rig.audio.stops, 2);
         rig.dispose();
       });
     });

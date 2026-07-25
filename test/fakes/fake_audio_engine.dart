@@ -119,6 +119,9 @@ class FakeHeadphoneMonitor implements IHeadphoneMonitor {
   Future<void> start() async {}
 
   @override
+  Future<void> refresh() async {}
+
+  @override
   Future<void> dispose() async => _ctrl.close();
 
   /// Simulate plug/unplug. false edge == "becoming noisy".

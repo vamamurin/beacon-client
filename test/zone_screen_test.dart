@@ -31,6 +31,7 @@ import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
@@ -141,6 +142,7 @@ Widget _app({
         create: (_) => ContentProvider(
           repository: repo,
           imagePathResolver: (_) => null,
+          language: LanguageController(available: const ['vi'], fallback: 'vi'),
         ),
       ),
       ChangeNotifierProvider<SettingsProvider>(
@@ -178,7 +180,8 @@ void main() {
       await tester.pump();
 
       expect(find.text('Khu Thử'), findsOneWidget);
-      expect(find.text('0 hiện vật · Đang ở đây'), findsOneWidget);
+      expect(find.text('ĐANG Ở ĐÂY'), findsOneWidget);
+      expect(find.text('0 hiện vật'), findsOneWidget);
       expect(find.text('ĐANG QUÉT KHÔNG GIAN'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
@@ -243,12 +246,13 @@ void main() {
       ));
       await tester.pump();
 
-      // A pinned with "Đang ở đây"; B present as a numbered nearby row.
-      expect(find.text('0 hiện vật · Đang ở đây'), findsOneWidget);
+      // A pinned with the "Đang ở đây" badge; B present as a numbered nearby
+      // row without that badge. Only the pinned card carries it.
+      expect(find.text('ĐANG Ở ĐÂY'), findsOneWidget);
       expect(find.text('Khu A'), findsOneWidget);
       expect(find.text('Khu B'), findsOneWidget);
-      // B's meta is just the count (no "Đang ở đây").
-      expect(find.text('0 hiện vật'), findsOneWidget);
+      // Both cards' meta is just the count (A pinned + B nearby, same text).
+      expect(find.text('0 hiện vật'), findsNWidgets(2));
       // Rank badge "2" for the single nearby row.
       expect(find.text('2'), findsOneWidget);
 
@@ -379,7 +383,7 @@ void main() {
       ));
       await tester.pump();
 
-      final meta = tester.widget<Text>(find.text('0 hiện vật · Đang ở đây'));
+      final meta = tester.widget<Text>(find.text('0 hiện vật'));
       expect(meta.style!.color, MuseumTokens.light.mutedOnImage);
       expect(meta.style!.color, isNot(MuseumTokens.light.inkMuted));
 

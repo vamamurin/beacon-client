@@ -23,25 +23,14 @@ import 'fakes/fake_audio_engine.dart';
 // which must never happen in CI — the flag disables reading mode outright and
 // every reading-mode test here would (correctly) fail.
 //
-// C3 NOTE: auto-tour now only plays exhibits that are CURRENTLY IN RANGE
-// (ExhibitPresenceTracker). These unit tests exercise the ordering/policy
-// logic, not presence, so the harness injects a presentMinors resolver that
-// reports EVERY minor of the zone as present — reproducing the pre-C3 "play
-// them all in order" behaviour these cases were written against. A dedicated
-// group at the bottom covers the new "skip out-of-range" behaviour.
+// Auto-tour plays every exhibit of the zone in manifest order, independent of
+// beacon presence (the old ExhibitPresenceTracker/presentMinors filtering was
+// removed as a product decision — see tour_audio_controller.dart's
+// _playNextFrom doc comment).
 
 Uri _resolve(String path) => Uri.parse('file:///bundle/$path');
 
-/// All minors defined for [major] in the repo — used as the default
-/// "everything is in range" presence resolver.
-Set<int> _allMinorsOf(MockZoneRepository repo, int major) {
-  final zone = repo.zoneByMajor(major);
-  if (zone == null) return const {};
-  return {for (final e in zone.exhibits) e.minor};
-}
-
 /// Builds a warmed controller + fakes. [headphones] toggles listening route.
-/// [present] optionally overrides which minors are "in range" (defaults to all).
 Future<
     ({
       TourAudioController ctrl,
@@ -50,7 +39,6 @@ Future<
       MockZoneRepository repo,
     })> harness({
   bool headphones = true,
-  Set<int> Function(int major)? present,
 }) async {
   final repo = MockZoneRepository(simulatedLatency: Duration.zero);
   await repo.preWarm();
@@ -64,7 +52,6 @@ Future<
     uriResolver: _resolve,
     language: () => 'vi',
     onChime: () => chimes++,
-    presentMinors: present ?? (major) => _allMinorsOf(repo, major),
   );
   return (ctrl: ctrl, engine: engine, hp: hp, repo: repo);
 }
@@ -84,7 +71,6 @@ Future<({TourAudioController ctrl, FakeAudioEngine engine, int Function() chimes
     uriResolver: _resolve,
     language: () => 'vi',
     onChime: () => chimes++,
-    presentMinors: (major) => _allMinorsOf(repo, major),
   );
   return (ctrl: ctrl, engine: engine, chimes: () => chimes);
 }
@@ -210,7 +196,11 @@ void main() {
       h.ctrl.changeZone(2);
       await pumpEventQueue();
 
-      expect(h.engine.stopCount, greaterThan(0)); // old queue flushed
+      // B8 fix: when a new intro takes over immediately, load() itself
+      // replaces the source — no separate stop() call (that gap was the
+      // race that caused skipped zone intros). stop() is reserved for the
+      // no-replacement branch (see leaveToStandby / revisit tests below).
+      expect(h.engine.stopCount, 0);
       expect(h.chimes(), 1); // zone change chimes
       expect(h.engine.loadLog.last.zoneMajor, 2);
       expect(h.engine.loadLog.last.isIntro, isTrue);
@@ -462,54 +452,4 @@ void main() {
     });
   });
 
-  // ==========================================================================
-  // C3 — auto-tour only plays IN-RANGE exhibits, still in manifest order.
-  // ==========================================================================
-
-  group('C3 — auto-tour skips out-of-range exhibits', () {
-    test('only minor 5 in range -> intro then minor 5, skipping 1 and 2',
-        () async {
-      // Zone 1 has minors 1,2,5. Report ONLY minor 5 present.
-      final h = await harness(present: (major) => major == 1 ? {5} : const {});
-      h.ctrl.enterZone(1);
-      await pumpEventQueue();
-      expect(h.engine.loadLog.first.isIntro, isTrue);
-
-      h.engine.completeCurrent(); // intro done -> next in-range exhibit
-      await pumpEventQueue();
-      expect(h.engine.loadLog.last.exhibitMinor, 5); // 1 and 2 skipped
-      expect(h.engine.loadLog.last.clipKind, AudioClipKind.exhibitAuto);
-
-      // Nothing else in range -> quiet.
-      final count = h.engine.loadLog.length;
-      h.engine.completeCurrent();
-      await pumpEventQueue();
-      expect(h.engine.loadLog.length, count);
-    });
-
-    test('in-range subset played in manifest order (2 before 5)', () async {
-      // Minors 2 and 5 present (not 1). Order must follow manifest: 2 then 5.
-      final h =
-          await harness(present: (major) => major == 1 ? {2, 5} : const {});
-      h.ctrl.enterZone(1);
-      await pumpEventQueue();
-      h.engine.completeCurrent(); // intro -> first in-range = minor 2
-      await pumpEventQueue();
-      expect(h.engine.loadLog.last.exhibitMinor, 2);
-      h.engine.completeCurrent(); // -> minor 5
-      await pumpEventQueue();
-      expect(h.engine.loadLog.last.exhibitMinor, 5);
-    });
-
-    test('no exhibit in range -> intro plays, then quiet', () async {
-      final h = await harness(present: (_) => const <int>{});
-      h.ctrl.enterZone(1);
-      await pumpEventQueue();
-      expect(h.engine.loadLog.first.isIntro, isTrue);
-      final count = h.engine.loadLog.length;
-      h.engine.completeCurrent(); // intro done -> nothing in range
-      await pumpEventQueue();
-      expect(h.engine.loadLog.length, count); // no exhibit loaded
-    });
-  });
 }
