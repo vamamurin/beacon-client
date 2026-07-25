@@ -32,9 +32,7 @@
 //  (4) Start grace: from userStartedTour() until the FIRST EnteredZone,
 //      deskStable is ignored (so standing near the desk at start can't kill the
 //      fresh session).
-//  (5) touring -> ending -> cleanup(stop audio, wipe visited) -> atDesk.
-//      LƯU Ý THÊM: userStartedTour() cũng wipe. Bất biến "bộ nhớ revisit rỗng"
-//      được thực thi ở ĐIỂM ĐỌC (bắt đầu), không phụ thuộc phiên trước đã dọn sạch hay chưa.
+//  (5) ending -> cleanup(stop audio, wipe visited) -> atDesk.
 //
 // Time is injected; silence is checked on a 1 Hz sweep.
 
@@ -136,19 +134,25 @@ class SessionController {
   void userStartedTour() {
     if (_state.phase != SessionPhase.gate) return;
     final now = _now();
+    _graceStartedAt = now;
+    _touringSince = now;
 
-    // Về dock = đổi khách. Tour mới LUÔN khởi hành với bộ nhớ trắng: không tồn
-    // tại khái niệm "quay lại khu cũ" xuyên qua ranh giới phiên.
+    // FIX P1 — DỌN TRÍ NHỚ TOUR Ở ĐÂY, KHÔNG PHẢI Ở _endSession.
     //
-    // Dọn Ở ĐÂY, không chỉ ở _endSession. Dọn ở cuối phiên trước không đảm bảo
-    // gì về trạng thái tại lúc phiên sau ĐỌC nó — mọi thứ chạy trong khe giữa
-    // hai phiên (Timer banner, listener foreground, event còn trong hàng) đều
-    // ghi bẩn lại được.
+    // Trước đây reset chạy ở cuối tour trước. Khoảng thời gian máy nằm trên
+    // dock giữa hai tour KHÔNG hề yên tĩnh: nhân viên rút/cắm tai nghe, hệ điều
+    // hành gỡ audio session khi tour kết thúc và có ROM bắn becomingNoisy giả.
+    // Mọi sự kiện đó đều đi thẳng vào TourAudioController (nó nghe tai nghe ở
+    // MỌI phase, không có cổng chặn theo phiên) và đầu độc state của tour SAU.
+    // Triệu chứng thực địa: tour thứ hai không tự phát, bấm tay thì vẫn phát.
+    //
+    // Dọn ở ĐẦU tour thì mọi thứ xảy ra trên dock đều bị xoá sạch, bất kể tour
+    // trước kết thúc bằng đường nào (sạc / về bàn / im lặng / staff / crash).
+    // stopAll() trước reset để chắc chắn không còn tiếng nào sót lại từ những
+    // gì đã bị nạp trong lúc chờ ở dock.
     _audio.stopAll();
     _audio.resetSessionMemory();
 
-    _graceStartedAt = now;
-    _touringSince = now;
     _setState(_state.copyWith(
       phase: SessionPhase.touring,
       inStartGrace: true,
@@ -254,7 +258,14 @@ class SessionController {
     _setState(SessionState(phase: SessionPhase.ending, endReason: reason));
 
     _audio.stopAll();
-    _audio.resetSessionMemory();
+    // FIX P1 — KHÔNG resetSessionMemory() ở đây nữa.
+    //
+    // Dọn ở cuối tour tạo cảm giác an toàn giả: bất kỳ thứ gì xảy ra SAU thời
+    // điểm này mà vẫn trước tour kế tiếp (rút tai nghe ở quầy, becomingNoisy
+    // giả sinh ra bởi chính việc gỡ audio session ngay bên dưới) sẽ đặt lại
+    // state và sống sót sang tour sau. Điểm dọn duy nhất giờ là
+    // userStartedTour(). stopAll() thì VẪN phải ở đây — tour kết thúc là phải
+    // im ngay, không đợi tới lúc ai đó bấm Bắt đầu.
     _graceStartedAt = null;
     _touringSince = null;
     _deskStable = false;

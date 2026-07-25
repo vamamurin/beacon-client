@@ -22,5 +22,18 @@ abstract interface class IHeadphoneMonitor {
   /// Begin monitoring. Idempotent.
   Future<void> start();
 
+  /// Đọc LẠI tuyến nghe thật từ hệ thống và sửa [isConnected] nếu nó đã lệch.
+  ///
+  /// Vì sao cần: [isConnected] là một cờ CHỐT, chỉ đổi theo sự kiện cạnh
+  /// (becomingNoisy hạ nó, devicesChanged nâng nó). becomingNoisy là tín hiệu
+  /// MỘT CHIỀU — không có sự kiện ngược lại — nên chỉ cần nó bắn nhầm một lần
+  /// (ví dụ khi audio session bị gỡ lúc tour kết thúc) là cờ kẹt ở false vĩnh
+  /// viễn: tai nghe chưa từng bị rút nên devicesChanged sẽ không bao giờ tới
+  /// để sửa. Hậu quả: autoplay chết trong khi bấm tay vẫn phát.
+  ///
+  /// Gọi ở các mốc mà một lần đọc chậm vài trăm ms là vô hại và một cờ sai là
+  /// tai hại — cụ thể là khi phiên về màn Gate, trước lúc khách bấm Bắt đầu.
+  Future<void> refresh();
+
   Future<void> dispose();
 }

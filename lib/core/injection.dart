@@ -369,6 +369,12 @@ abstract final class Injection {
       final was = lastPhase;
       lastPhase = s.phase;
       if (was != SessionPhase.touring && s.phase == SessionPhase.touring) {
+        // FIX P1 — đường radio về trắng TRƯỚC, rồi mới resync. Arbiter sống
+        // suốt vòng đời app nên nếu không reset, "khu hiện tại" mà máy chốt
+        // được trong lúc nằm ở dock sẽ trôi sang tour mới: khách bước vào khu
+        // đầu tiên thì arbiter coi là TAKEOVER (ChangedZone → banner 5 giây)
+        // thay vì ACQUISITION (EnteredZone → phát intro ngay).
+        presence.resetForNewSession();
         presence.resyncCurrentZone();
         keepAlive.start(
           channelName: kaText(UiKeys.keepAliveChannelName),
@@ -379,6 +385,18 @@ abstract final class Injection {
       } else if (was == SessionPhase.touring && s.phase != SessionPhase.touring) {
         keepAlive.stop(); // <-- THÊM: hết tour → hạ keep-alive (tiết kiệm pin ở dock)
         languageController.resetToFallback();
+      }
+
+      // FIX P1 — đọc lại tuyến nghe THẬT mỗi khi về màn Gate.
+      //
+      // `headphones.isConnected` là cờ chốt chỉ đổi theo sự kiện cạnh, và
+      // becomingNoisy là tín hiệu một chiều không có sự kiện ngược. Một lần
+      // bắn nhầm (hay gặp khi audio session bị gỡ lúc tour kết thúc) là cờ kẹt
+      // false vĩnh viễn ⇒ _autoplayAllowed luôn false ⇒ autoplay chết mà bấm
+      // tay vẫn phát. Ở Gate máy đang chờ khách bấm Bắt đầu nên có thừa thời
+      // gian cho một lần đọc bất đồng bộ; đây là chỗ rẻ nhất để tự sửa.
+      if (s.phase == SessionPhase.gate) {
+        unawaited(headphones.refresh());
       }
     });
 

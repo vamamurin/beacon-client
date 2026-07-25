@@ -45,8 +45,26 @@ class AudioSessionHeadphoneMonitor implements IHeadphoneMonitor {
 
     // becomingNoisy == a route that was carrying audio was removed. This is
     // the reliable "unplugged" signal (rule 6): pause immediately.
-    _noisySub ??= session.becomingNoisyEventStream.listen((_) {
+    //
+    // FIX P1 — NHƯNG NÓ LÀ CHỐT MỘT CHIỀU. Không có sự kiện "hết noisy". Nếu
+    // ROM bắn nhầm — hay gặp nhất là đúng lúc audio session bị gỡ khi tour kết
+    // thúc — thì _connected kẹt ở false mãi mãi, vì tai nghe chưa từng bị rút
+    // nên devicesChanged sẽ không bao giờ tới để nâng nó lên. Từ đó
+    // _autoplayAllowed luôn false: autoplay chết, bấm tay vẫn phát (nếu bảo
+    // tàng cho loa ngoài). Đó chính là triệu chứng "tour thứ hai im lặng".
+    //
+    // Nên: phản ứng NGAY (an toàn là trên hết — không bao giờ để tiếng phọt ra
+    // loa), rồi kiểm chứng lại bằng danh sách thiết bị thật và tự sửa nếu sai.
+    _noisySub ??= session.becomingNoisyEventStream.listen((_) async {
       _update(false);
+      final actual = await _hasPrivateRoute(session);
+      if (actual && !_connected) {
+        if (kDebugMode) {
+          debugPrint('[HeadphoneMonitor] becomingNoisy GIẢ — tuyến nghe vẫn còn, '
+              'khôi phục cờ');
+        }
+        _update(true);
+      }
     });
 
     // devicesChanged fills in the POSITIVE edge (a route was added) and also
@@ -54,6 +72,20 @@ class AudioSessionHeadphoneMonitor implements IHeadphoneMonitor {
     _devicesSub ??= session.devicesChangedEventStream.listen((_) async {
       _update(await _hasPrivateRoute(session));
     });
+  }
+
+  /// FIX P1 — đọc lại tuyến nghe THẬT và sửa cờ nếu đã lệch. Xem ghi chú ở
+  /// [IHeadphoneMonitor.refresh]. Phát ra sự kiện qua [_update] nếu có thay
+  /// đổi, nên controller cũng biết mà cập nhật chính sách.
+  @override
+  Future<void> refresh() async {
+    final session = _session;
+    if (session == null) return; // chưa start() — không có gì để đọc
+    final before = _connected;
+    _update(await _hasPrivateRoute(session));
+    if (kDebugMode && before != _connected) {
+      debugPrint('[HeadphoneMonitor] refresh sửa cờ: $before -> $_connected');
+    }
   }
 
   /// True if any private-listening output (wired headset/headphones or a

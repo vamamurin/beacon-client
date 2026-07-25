@@ -274,6 +274,39 @@ class ZoneArbiter {
   /// Current presence snapshot (for late subscribers / debug).
   ZonePresence get current => _last;
 
+  /// FIX P1 — XOÁ TOÀN BỘ STATE THUỘC VỀ MỘT PHIÊN. Gọi ở đầu mỗi tour.
+  ///
+  /// Vấn đề: arbiter sống suốt vòng đời app (Injection dựng một lần), nên
+  /// [_currentMajor] và [_lockoutUntil] SỐNG SÓT qua ranh giới phiên. Nếu quầy
+  /// nằm trong tầm engage của một khu — rất hay gặp, quầy thường ở sảnh mà sảnh
+  /// cũng là một khu — thì suốt thời gian máy nằm trên dock [_currentMajor]
+  /// vẫn là khu đó. Tour sau bắt đầu, khách bước vào khu đầu tiên, và arbiter
+  /// coi đó là TAKEOVER chứ không phải ACQUISITION ⇒ phát ra ChangedZone ⇒
+  /// coordinator mở banner 5 giây thay vì phát intro ngay. Khách chỉ thấy
+  /// "không tự động phát".
+  ///
+  /// Sau reset, tour mới luôn khởi hành từ standby: bước vào khu đầu tiên là
+  /// instant entry (luật 1) ⇒ EnteredZone ⇒ intro phát ngay, không banner.
+  ///
+  /// [_lastBeaconAt] KHÔNG bị xoá: đó là dữ kiện phần cứng ("lần cuối nghe
+  /// thấy bất kỳ beacon nào"), không phải state phiên. Xoá nó sẽ làm
+  /// SessionController tưởng radio vừa chết và tính nhầm mốc im lặng.
+  void resetForNewSession() {
+    _currentMajor = null;
+    _currentLastHeard = null;
+    _lockoutUntil = null;
+    _currentFarSince = null;
+    _candidateMajor = null;
+    _candidateSince = null;
+    // Desk cũng phải về trắng: máy vừa rời dock nên deskStable còn true từ
+    // phiên trước. Reset buộc deskDwell chạy lại từ đầu trước khi quầy có thể
+    // kết thúc phiên MỚI — nó gia cố cho start-grace chứ không phá.
+    _deskLeadingSince = null;
+    _deskStable = false;
+    _last = ZonePresence.none;
+    if (kDebugMode) debugPrint('[Arbiter] reset cho phiên mới');
+  }
+
   void dispose() {
     if (!_controller.isClosed) _controller.close();
   }

@@ -180,6 +180,23 @@ class ZonePresenceService {
     _onPresence(_arbiter.current);
   }
 
+  /// FIX P1 — đưa TOÀN BỘ đường radio về trắng cho một tour mới.
+  ///
+  /// Gọi ở đầu mỗi tour, TRƯỚC [resyncCurrentZone]. Xoá state phiên của arbiter
+  /// (xem [ZoneArbiter.resetForNewSession]) và cả mốc diff ở tầng này, để tour
+  /// mới không thừa hưởng "khu hiện tại" mà máy đã chốt trong lúc nằm ở dock.
+  ///
+  /// Hệ quả có chủ đích: sau reset, [resyncCurrentZone] thành no-op (arbiter
+  /// đang standby). Khách đứng sẵn trong một khu lúc bấm Bắt đầu sẽ chờ tối đa
+  /// một nhịp snapshot (~1 s) rồi nhận EnteredZone tự nhiên từ luật 1 — đúng
+  /// đường đi thật, thay vì một sự kiện được dựng lại từ state cũ.
+  void resetForNewSession() {
+    _arbiter.resetForNewSession();
+    _lastMajor = null;
+    _lastStatus = ZoneStatus.standby;
+    if (kDebugMode) debugPrint('[ZonePresenceService] reset cho phiên mới');
+  }
+
   /// UUID guard, then feed the registry hot path. O(1) per packet.
   void _onReading(BeaconReading r) {
     if (r.uuid.toLowerCase() != _museumUuid) return;
