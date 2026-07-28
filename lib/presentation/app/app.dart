@@ -25,6 +25,7 @@ import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
+import 'package:beacon_client/presentation/widgets/bluetooth_lost_overlay.dart';
 import 'package:beacon_client/presentation/widgets/zone_change_banner.dart';
 
 /// Global route observer, available for any RouteAware screen that wants to
@@ -92,6 +93,11 @@ class _MuseumAppState extends State<MuseumApp> {
               right: 0,
               child: ZoneChangeBanner(),
             ),
+            // ABOVE the zone banner on purpose: "the radio is gone" outranks
+            // "you may have changed zone", and the latter is meaningless
+            // without a radio. Renders nothing unless a tour is live AND BLE
+            // is unavailable.
+            const BluetoothLostOverlay(),
           ],
         ),
       ),

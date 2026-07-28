@@ -91,13 +91,10 @@ class BeaconTrackerRegistry {
     final existing = _trackers[key];
 
     if (existing == null) {
-      if (_trackers.length >= _maxTrackers) {
-        if (kDebugMode) {
-          debugPrint('[Registry] saturated ($_maxTrackers) — drop new $key');
-        }
-        return;
+      if (_trackers.length >= _maxTrackers && !_makeRoomFor(reading)) {
+        return; // ceiling reached and the newcomer is the weakest — ignore it
       }
-      
+
       _trackers[key] = BeaconTracker(
         reading,
         processNoise: _kalmanProcessNoise,
@@ -112,6 +109,59 @@ class BeaconTrackerRegistry {
     }
 
     existing.update(reading); // O(1); next heartbeat carries the new value
+  }
+
+  /// Free one slot for [incoming], or report that it doesn't deserve one.
+  ///
+  /// WHY THIS EXISTS. The old policy was "at the ceiling, drop the newcomer".
+  /// That is the wrong beacon to drop, and the failure is permanent rather than
+  /// transient: incumbents keep advertising, so they never reach the eviction
+  /// threshold, so the population freezes as "the first [_maxTrackers] beacons
+  /// this device happened to hear". A visitor could then stand directly in
+  /// front of an exhibit whose beacon is invisible for the rest of the tour —
+  /// and it fails worst exactly where it matters most, in a large open hall
+  /// where many beacons are in RF range at once.
+  ///
+  /// The old justification ("the UUID filter upstream already limits traffic")
+  /// does not apply. That guard lives in ZonePresenceService._onReading and
+  /// filters to the MUSEUM's UUID — but every museum beacon shares that one
+  /// UUID, so the ceiling is consumed entirely by legitimate beacons.
+  ///
+  /// New policy: the ceiling bounds MEMORY, so who occupies it should be
+  /// decided by usefulness, not arrival order. Evict the weakest incumbent, and
+  /// only if the newcomer is actually stronger — so a distant stray can't evict
+  /// a beacon the visitor is standing next to, and a saturated registry still
+  /// converges on the NEAREST [_maxTrackers] beacons.
+  ///
+  /// Comparison is on RAW rssi: the newcomer has no Kalman estimate yet, and
+  /// one raw sample is the only thing the two have in common.
+  bool _makeRoomFor(BeaconReading incoming) {
+    int? weakestKey;
+    double weakestRssi = double.infinity;
+    for (final e in _trackers.entries) {
+      final rssi = e.value.smoothedRssi;
+      if (rssi < weakestRssi) {
+        weakestRssi = rssi;
+        weakestKey = e.key;
+      }
+    }
+
+    if (weakestKey == null) return false; // ceiling is 0 — nothing to do
+    if (incoming.rssi <= weakestRssi) {
+      if (kDebugMode) {
+        debugPrint('[Registry] saturated ($_maxTrackers) — ${incoming.rssi} dBm '
+            'is weaker than the weakest tracked (${weakestRssi.toStringAsFixed(1)}), keep it out');
+      }
+      return false;
+    }
+
+    _trackers.remove(weakestKey);
+    if (kDebugMode) {
+      debugPrint('[Registry] saturated ($_maxTrackers) — evict weakest '
+          '$weakestKey (${weakestRssi.toStringAsFixed(1)} dBm) for a '
+          '${incoming.rssi} dBm newcomer');
+    }
+    return true;
   }
 
   /// 1 Hz temporal authority: evict dead trackers, then emit the heartbeat
@@ -174,10 +224,23 @@ class BeaconTrackerRegistry {
   }
 
   /// Cancel the sweep and drop all state (stop→start cycle).
+  ///
+  /// Publishes ONE final empty snapshot before going quiet. Without it the last
+  /// value consumers ever saw is the populated one from just before the stop,
+  /// and since the heartbeat is what drives every downstream expiry clock
+  /// (NearbyZonesTracker's hold window, the arbiter's silence timers), they
+  /// would hold that stale world FOREVER — no further snapshot ever arrives to
+  /// age it out.
+  ///
+  /// This is what made stopping the pipeline on Bluetooth-off freeze the exhibit
+  /// list mid-tour, while the older "let the radio go silent" path drained
+  /// correctly: silence still produced empty heartbeats, an explicit stop did
+  /// not. A stopped registry must state that it now knows nothing.
   void stop() {
     _sweepTimer?.cancel();
     _sweepTimer = null;
     _trackers.clear();
+    _emitSnapshot(); // "we hear nothing" — lets downstream clocks start draining
   }
 
   void dispose() {

@@ -68,6 +68,14 @@ abstract final class UiKeys {
   static const gateBleCheckingBody = 'gate.ble.checkingBody';
   static const gateBleRetryCta = 'gate.ble.retryCta';
 
+  // ── mất Bluetooth GIỮA TOUR (overlay chặn, khách nhìn) ──
+  // Khác họ `gate.ble.*`: chuỗi ở đó viết cho NHÂN VIÊN lúc bàn giao máy, còn
+  // ở đây là khách đang đi giữa bảo tàng và vừa tự tắt Bluetooth. Giọng phải là
+  // trấn an + một hành động rõ ràng, không phải chẩn đoán kỹ thuật.
+  static const tourBleLostTitle = 'tour.bleLost.title';
+  static const tourBleLostBody = 'tour.bleLost.body';
+  static const tourBleLostCta = 'tour.bleLost.cta';
+
   // ── zone (màn 2) ──
   static const zoneNearbyTitle = 'zone.nearbyTitle';
   static const zoneNearbyGuidance = 'zone.nearbyGuidance';
@@ -196,6 +204,12 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.gateBleCheckingTitle: 'Đang kiểm tra',
   UiKeys.gateBleCheckingBody: 'Đang kiểm tra Bluetooth…',
   UiKeys.gateBleRetryCta: 'Thử lại',
+
+  UiKeys.tourBleLostTitle: 'Đã tắt Bluetooth',
+  UiKeys.tourBleLostBody:
+      'Máy cần Bluetooth để biết bạn đang đứng trước hiện vật nào. '
+          'Thuyết minh đã tạm dừng — bật lại Bluetooth để tiếp tục tham quan.',
+  UiKeys.tourBleLostCta: 'Bật Bluetooth',
 
   UiKeys.zoneNearbyTitle: 'Khu vực quanh bạn',
   UiKeys.zoneNearbyGuidance:

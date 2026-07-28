@@ -102,6 +102,14 @@ class AppGraph {
   final AnalyticsRecorder analyticsRecorder;
 
   final StreamSubscription<SessionState>? _analyticsDockSub;
+
+  /// Watches the adapter's on/off edges for the whole app lifetime. Assigned
+  /// once by [_watchAdapter] right after construction (it needs `this`).
+  StreamSubscription<bool>? _adapterSub;
+
+  /// Set in [dispose] so an in-flight async adapter callback can't publish into
+  /// a disposed ValueNotifier.
+  bool _disposed = false;
   
   /// Resolves a bundle-relative asset path (from the manifest) to an absolute
   /// file path for HeroImage, or null when it can't (mock mode / no bundle).
@@ -173,6 +181,62 @@ class AppGraph {
     _ble.value = status; // notifies the Gate
   }
 
+  /// Watch the adapter for the REST OF THE RUN, not just at boot.
+  ///
+  /// [IBluetoothGate.adapterOn] existed and was implemented on both gateways
+  /// from the start, but nothing subscribed to it — so readiness was only ever
+  /// sampled at boot and on an explicit retry. Field symptom: switching
+  /// Bluetooth off BEFORE opening the app was caught and offered a retry, while
+  /// switching it off DURING a tour was not detected at all. The pipeline kept
+  /// running against a dead radio and the Gate kept reporting `ready`.
+  ///
+  /// Off  -> HARD STOP. Not just "stop scanning": the visitor must not be left
+  ///         with a screen that still lists exhibits and narration still
+  ///         playing, because that teaches them Bluetooth doesn't matter. We
+  ///         drain presence to standby, clear the nearby ranking, cut audio,
+  ///         and publish `bluetoothOff` — which the Gate turns into a retry and
+  ///         BluetoothLostOverlay turns into a blocking notice mid-tour.
+  /// On   -> re-derive readiness PROMPT-SAFELY, exactly like
+  ///         [refreshBluetoothOnResume]: never re-pop the permission dialog
+  ///         just because the user toggled the radio.
+  void _watchAdapter() {
+    _adapterSub = bluetoothGate.adapterOn.listen((on) async {
+      if (_disposed) return;
+
+      if (!on) {
+        // Order matters for what the visitor perceives: silence first, then let
+        // the screens empty. The reverse briefly narrates an exhibit that has
+        // already vanished from the list.
+        audioController.leaveToStandby(); // stop playback + flush the queue
+        presence.stopAndClear(); //          radio down => we know nothing
+        nearbyZones.clear(); //              drop the ranking immediately
+        _ble.value = StartupStatus.bluetoothOff;
+        return;
+      }
+
+      // Adapter came back. Permission may still be missing (or revoked while
+      // we were off), so check WITHOUT prompting before doing anything.
+      if (!await bluetoothGate.hasPermissions()) return;
+      final status = await bluetoothGate.ensureReady(); // won't prompt now
+      if (_disposed) return; // graph torn down while we awaited
+      if (status == StartupStatus.ready) presence.start(); // idempotent
+      _ble.value = status;
+    });
+  }
+
+  /// The radio refused to start (see ZonePresenceService._startScanGuarded).
+  /// Re-derive readiness so the Gate shows WHY instead of the app quietly
+  /// scanning nothing. Prompt-safe for the same reason as [_watchAdapter].
+  Future<void> _onScanFailure() async {
+    if (_disposed) return;
+    if (!await bluetoothGate.hasPermissions()) {
+      if (!_disposed) _ble.value = StartupStatus.permissionDenied;
+      return;
+    }
+    final status = await bluetoothGate.ensureReady();
+    if (!_disposed) _ble.value = status;
+  }
+
   /// Called when the app returns to the foreground (e.g. back from Settings).
   /// PROMPT-SAFE: only re-derives readiness once permission is already granted,
   /// so we never re-pop the permission dialog on every resume. This is what
@@ -187,7 +251,9 @@ class AppGraph {
   }
 
   Future<void> dispose() async {
+    _disposed = true; // stop in-flight adapter callbacks from touching _ble
     await keepAlive.stop();
+    await _adapterSub?.cancel();
     await _tourStartSub.cancel();
     await _analyticsDockSub?.cancel();
     await zoneChanges.dispose();
@@ -278,12 +344,19 @@ abstract final class Injection {
       deskMajor: cfg?.deskMajor ?? 99,
       params: cfg?.arbitration ?? ArbitrationParams.defaults(),
     );
+    // Late-bound so the service can report a radio failure UP to the graph that
+    // owns BLE readiness. The graph doesn't exist yet (it needs `presence`), so
+    // the closure reads a holder filled in at the bottom of build(). Null until
+    // then — a scan can't fail before the pipeline is started anyway.
+    AppGraph? graphRef;
+
     final presence = ZonePresenceService(
       scanner: scanner,
       repository: repository,
       museumUuidLower: (cfg?.beaconUuid ?? '').toLowerCase(),
       registry: registry,
       arbiter: arbiter,
+      onScanFailure: (_) => graphRef?._onScanFailure(),
     );
 
     // C3 — display-tier zone ranking. Same heartbeat source as the exhibit
@@ -494,7 +567,7 @@ abstract final class Injection {
       }
     }
 
-    return AppGraph._(
+    final graph = AppGraph._(
       repository: repository,
       presence: presence,
       audioController: audioController,
@@ -517,6 +590,12 @@ abstract final class Injection {
       tourStartSub: tourStartSub,
       analyticsDockSub: analyticsDockSub,
     );
+
+    // Close the two loops that need the finished graph.
+    graphRef = graph;      // scan failures can now reach _onScanFailure
+    graph._watchAdapter(); // adapter on/off now drives readiness for the whole run
+
+    return graph;
   }
 
   /// Resolves bundle-relative asset paths to file URIs. For the real repo this

@@ -172,6 +172,16 @@ class ContentSyncService {
           error: 'version.json missing bundleVersion/sha256');
     }
 
+    // TRUST BOUNDARY. `version` is server-controlled and is about to become a
+    // filesystem path segment (versionDir / tempDir / archiveTempFile) and a
+    // URL path segment (transport). Refuse it here, BEFORE any of those are
+    // built, so there is exactly one gate and it sits at the point of entry.
+    // See BundleLayout.isValidVersion for what "safe" means and why.
+    if (!BundleLayout.isValidVersion(version)) {
+      return SyncResult(SyncOutcome.failed,
+          error: 'unsafe bundleVersion from server: "$version"');
+    }
+
     // 1. Already current?
     if (await _layout.activeVersion() == version) {
       return SyncResult(SyncOutcome.upToDate, version: version);

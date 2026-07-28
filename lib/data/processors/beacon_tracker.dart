@@ -32,7 +32,11 @@ class BeaconTracker {
   final KalmanFilter _filter;
 
   double _smoothedRssi = double.negativeInfinity;
-  late DateTime _lastSeen;
+
+  /// Non-late: the Kalman step now READS this to derive its time delta, and the
+  /// constructor's own `update(initial)` call would otherwise touch it before
+  /// assignment. Seeded from the first packet, so that first step sees dt = 0.
+  DateTime _lastSeen;
 
   /// C1 — Measured Power mới nhất beacon này tự khai (Phase 2 đã validate ở
   /// Scanner). Về lý thuyết là hằng số của phần cứng; lấy theo gói mới nhất
@@ -46,6 +50,7 @@ class BeaconTracker {
   })  : key = packKey(initial.major, initial.minor),
         major = initial.major,
         minor = initial.minor,
+        _lastSeen = initial.timestamp,
         _filter = KalmanFilter(
           processNoise: processNoise,
           measurementNoise: measurementNoise,
@@ -64,8 +69,16 @@ class BeaconTracker {
   /// HOT PATH — feed one packet. O(1): a single Kalman step.
   /// [lastSeen] is stamped from the packet's own timestamp so the registry
   /// sweep detects signal loss against its injected clock.
+  ///
+  /// That same packet clock now also drives the filter: the gap between THIS
+  /// packet and the previous one from THIS beacon is how much real time the
+  /// estimate was allowed to go stale. Feeding it in is what stops the filter's
+  /// responsiveness from silently tracking the BLE packet rate — see the header
+  /// of [KalmanFilter]. Using packet timestamps rather than DateTime.now() also
+  /// keeps the whole pipeline deterministic under FakeAsync.
   void update(BeaconReading reading) {
-    _smoothedRssi = _filter.update(reading.rssi.toDouble());
+    final elapsed = reading.timestamp.difference(_lastSeen);
+    _smoothedRssi = _filter.update(reading.rssi.toDouble(), elapsed: elapsed);
     _lastSeen = reading.timestamp;
     _measuredPower = reading.measuredPower;
   }

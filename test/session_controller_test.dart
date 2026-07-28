@@ -42,7 +42,10 @@ class Rig {
   late final SessionController ctrl;
   final DateTime Function() now;
 
-  Rig(this.now, {bool initialCharging = true, Duration? silence}) {
+  Rig(this.now,
+      {bool initialCharging = true,
+      Duration? silence,
+      Duration endingHold = Duration.zero}) {
     ctrl = SessionController(
       zoneEvents: zones.stream,
       chargingChanges: charging.stream,
@@ -53,6 +56,7 @@ class Rig {
       sessionSilence: silence ?? const Duration(seconds: 5),
       startGraceTimeout: const Duration(seconds: 20),
       now: now,
+      endingHold: endingHold,
     );
   }
 
@@ -291,6 +295,154 @@ void main() {
         // must NOT add a third.
         expect(rig.audio.stops, 2);
         rig.dispose();
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Pins the contract documented on SessionPhase.ending and
+  // SessionController._endSession: an EDGE by default, a real held state when
+  // `endingHold` is set (which is what an end screen will need).
+  // ─────────────────────────────────────────────────────────────────────────
+  group('SessionPhase.ending with the default zero hold', () {
+    test('it is never the settled phase a listener can observe at rest', () {
+      fakeAsync((async) {
+        final rig = Rig(() => DateTime(2026).add(async.elapsed));
+        final seen = <SessionPhase>[];
+        rig.ctrl.state.listen((s) => seen.add(s.phase));
+
+        rig.ctrl.start();
+        rig.charging.add(false);
+        async.flushMicrotasks();
+        rig.ctrl.userStartedTour();
+        rig.zones.add(const EnteredZone(1));
+        async.flushMicrotasks();
+
+        rig.charging.add(true); // end the tour
+        async.flushMicrotasks();
+
+        // The edge WAS published (analytics depends on seeing it)...
+        expect(seen, contains(SessionPhase.ending));
+        // ...but it is immediately superseded, and never the resting phase.
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        expect(seen.last, SessionPhase.atDesk);
+        rig.dispose();
+      });
+    });
+
+    test('atDesk follows it with no other phase in between', () {
+      fakeAsync((async) {
+        final rig = Rig(() => DateTime(2026).add(async.elapsed));
+        final seen = <SessionPhase>[];
+        rig.ctrl.state.listen((s) => seen.add(s.phase));
+
+        rig.ctrl.start();
+        rig.charging.add(false);
+        async.flushMicrotasks();
+        rig.ctrl.userStartedTour();
+        rig.zones.add(const EnteredZone(1));
+        async.flushMicrotasks();
+
+        rig.desk.add(true); // end via the desk beacon this time
+        async.flushMicrotasks();
+
+        final i = seen.indexOf(SessionPhase.ending);
+        expect(i, isNonNegative);
+        expect(seen[i + 1], SessionPhase.atDesk,
+            reason: 'nothing may be interleaved between the edge and the rest');
+        rig.dispose();
+      });
+    });
+
+    test('it carries the end reason — that is its whole job', () {
+      fakeAsync((async) {
+        final rig = Rig(() => DateTime(2026).add(async.elapsed));
+        SessionEndReason? reasonOnEdge;
+        rig.ctrl.state.listen((s) {
+          if (s.phase == SessionPhase.ending) reasonOnEdge = s.endReason;
+        });
+
+        rig.ctrl.start();
+        rig.charging.add(false);
+        async.flushMicrotasks();
+        rig.ctrl.userStartedTour();
+        rig.zones.add(const EnteredZone(1));
+        async.flushMicrotasks();
+
+        rig.desk.add(true);
+        async.flushMicrotasks();
+
+        expect(reasonOnEdge, SessionEndReason.desk);
+        rig.dispose();
+      });
+    });
+  });
+
+  group('SessionPhase.ending with a non-zero hold (end-screen support)', () {
+    const hold = Duration(seconds: 3);
+
+    /// Drives a rig to the moment a tour ends, without settling.
+    Rig endedRig(FakeAsync async) {
+      final rig = Rig(() => DateTime(2026).add(async.elapsed), endingHold: hold);
+      rig.ctrl.start();
+      rig.charging.add(false);
+      async.flushMicrotasks();
+      rig.ctrl.userStartedTour();
+      rig.zones.add(const EnteredZone(1));
+      async.flushMicrotasks();
+      rig.desk.add(true); // end the tour
+      async.flushMicrotasks();
+      return rig;
+    }
+
+    test('the phase is HELD, giving an end screen a window to paint in', () {
+      fakeAsync((async) {
+        final rig = endedRig(async);
+
+        // This is the whole point: a settled, observable state.
+        expect(rig.ctrl.current.phase, SessionPhase.ending);
+        expect(rig.ctrl.current.endReason, SessionEndReason.desk);
+
+        async.elapse(const Duration(seconds: 2)); // still inside the window
+        expect(rig.ctrl.current.phase, SessionPhase.ending);
+
+        async.elapse(const Duration(seconds: 2)); // past it
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        expect(rig.ctrl.current.endReason, SessionEndReason.desk);
+        rig.dispose();
+      });
+    });
+
+    test('audio is cut immediately, NOT after the hold', () {
+      fakeAsync((async) {
+        final rig = endedRig(async);
+        // 1 from userStartedTour's dock-residue cleanup + 1 from _endSession.
+        // A visitor must not keep hearing narration through the end screen.
+        expect(rig.audio.stops, 2);
+        rig.dispose();
+      });
+    });
+
+    test('a re-plug during the hold wins; the late settle cannot stomp it', () {
+      fakeAsync((async) {
+        final rig = endedRig(async);
+        expect(rig.ctrl.current.phase, SessionPhase.ending);
+
+        // Staff docks the device before the end screen finishes.
+        rig.charging.add(true);
+        async.flushMicrotasks();
+
+        async.elapse(const Duration(seconds: 5)); // the timer fires in here
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        rig.dispose();
+      });
+    });
+
+    test('dispose during the hold does not publish afterwards', () {
+      fakeAsync((async) {
+        final rig = endedRig(async);
+        rig.dispose(); // tear down mid-window
+        async.elapse(const Duration(seconds: 10)); // must not throw
       });
     });
   });

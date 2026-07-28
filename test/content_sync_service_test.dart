@@ -257,4 +257,80 @@ void main() {
       expect(repo.lastError, isNotNull); // gate screen shows "needs sync"
     });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // The server names the version, and that name becomes a PATH. These prove
+  // the name is checked before it can steer where bytes land.
+  // ─────────────────────────────────────────────────────────────────────────
+  group('bundleVersion is untrusted input', () {
+    test('accepts the shapes a real CMS emits', () {
+      for (final v in ['v1', '1.0.0', '2026-07-28', 'v1.2.3-rc1', 'A_b-1.0']) {
+        expect(BundleLayout.isValidVersion(v), isTrue, reason: v);
+      }
+    });
+
+    test('rejects traversal, separators and absolute paths', () {
+      for (final v in [
+        '../evil',
+        '..',
+        '.',
+        'a/../../b',
+        'a/b',
+        r'a\b',
+        '/etc/passwd',
+        '.hidden', // leading dot: never a version, always a hint
+        '-rf', //     leading dash: never a version, sometimes a flag
+        '',
+      ]) {
+        expect(BundleLayout.isValidVersion(v), isFalse, reason: v);
+      }
+    });
+
+    test('rejects names that would collide with the layout itself', () {
+      // `active` is the pointer file; `<v>.tmp` / `<v>.part` are scratch
+      // namespaces that boot GC is allowed to delete on sight.
+      for (final v in ['active', 'active.tmp', '1.0.tmp', '1.0.part', 'x.tar.gz']) {
+        expect(BundleLayout.isValidVersion(v), isFalse, reason: v);
+      }
+    });
+
+    test('rejects an over-long name', () {
+      expect(BundleLayout.isValidVersion('v${'9' * 100}'), isFalse);
+    });
+
+    test('a traversing version is refused BEFORE anything touches the disk',
+        () async {
+      await seedActive('v1');
+      final bytes = buildBundleTarGz(manifestFor('v2'));
+      final t = FakeTransport(
+        version: '../../../escaped',
+        archiveBytes: bytes,
+        advertisedSha: sha256Hex(bytes),
+      );
+
+      final r = await serviceWith(t).syncIfNeeded();
+
+      expect(r.outcome, SyncOutcome.failed);
+      expect(r.error, contains('unsafe bundleVersion'));
+      // The active bundle is untouched...
+      expect(await layout.activeVersion(), 'v1');
+      // ...and nothing was created outside the bundle root.
+      final escaped = Directory(p.join(tempRoot.path, 'escaped'));
+      expect(await escaped.exists(), isFalse);
+      final siblings = await tempRoot.list().toList();
+      expect(siblings.map((e) => p.basename(e.path)), ['bundles']);
+    });
+
+    test('setActive refuses to persist an unsafe pointer', () async {
+      expect(() => layout.setActive('../evil'), throwsArgumentError);
+    });
+
+    test('an unsafe pointer already on disk reads back as "no bundle"',
+        () async {
+      // Simulates a pointer written by a build that predates this validation.
+      await File(p.join(layout.rootDir.path, 'active'))
+          .writeAsString('../../../etc');
+      expect(await layout.activeVersion(), isNull);
+    });
+  });
 }

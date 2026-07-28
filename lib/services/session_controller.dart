@@ -74,12 +74,21 @@ class SessionController {
     Duration startGraceTimeout = const Duration(seconds: 20),
     DateTime Function()? now,
     Duration sweepInterval = const Duration(seconds: 1),
+
+    /// How long [SessionPhase.ending] is HELD before settling to atDesk.
+    ///
+    /// Zero (default) = the historical behaviour: `ending` is published and
+    /// superseded in the same synchronous call, so it is an EDGE only. Set it
+    /// non-zero to give the phase a real window an end screen can render in —
+    /// see the note on [_endSession] for what else that requires.
+    Duration endingHold = Duration.zero,
   })  : _audio = audioSink,
         _lastBeaconAt = lastBeaconAt,
         _sessionSilence = sessionSilence,
         _startGraceTimeout = startGraceTimeout,
         _now = now ?? DateTime.now,
-        _sweepInterval = sweepInterval {
+        _sweepInterval = sweepInterval,
+        _endingHold = endingHold {
     _zoneSub = zoneEvents.listen(_onZoneEvent);
     _chargeSub = chargingChanges.listen(_onChargingChanged);
     _deskSub = deskStableChanges.listen(_onDeskStableChanged);
@@ -101,6 +110,12 @@ class SessionController {
   final Duration _startGraceTimeout;
   final DateTime Function() _now;
   final Duration _sweepInterval;
+  final Duration _endingHold;
+
+  /// Pending settle from `ending` to `atDesk`. Non-null only while the hold
+  /// window is open; cancelled on dispose so a torn-down controller can't
+  /// publish afterwards.
+  Timer? _endingTimer;
 
   late final StreamSubscription<ZoneEvent> _zoneSub;
   late final StreamSubscription<bool> _chargeSub;
@@ -250,11 +265,43 @@ class SessionController {
 
   // ------------------------------------------------------------- transitions
 
-  /// The single atomic cleanup: stop audio -> wipe visited -> show end -> rest.
+  /// The single atomic cleanup: stop audio -> wipe visited -> rest.
+  ///
+  /// ─────────────────────────────────────────────────────────────────────────
+  /// ABOUT [SessionPhase.ending] AND `endingHold`
+  ///
+  /// `ending` always carries [SessionEndReason] out of the touring phase, and
+  /// AnalyticsRecorder emits TourEnded on the first non-touring state it sees —
+  /// which is this one. That role is unconditional.
+  ///
+  /// Whether it is also RENDERABLE depends on `endingHold`:
+  ///
+  ///   • hold == zero (default): `ending` is published and superseded inside
+  ///     this one synchronous call. The state stream is a broadcast controller,
+  ///     so both values are queued before any listener runs — subscribers see
+  ///     `ending` then `atDesk` in back-to-back microtasks with no frame pumped
+  ///     between them. A widget keyed on `ending` would be replaced before it
+  ///     could paint. Treat it as an EDGE.
+  ///
+  ///   • hold > zero: the settle to `atDesk` is deferred, so the phase is a
+  ///     real state with a real window and an end screen CAN render in it.
+  ///
+  /// TO ADD AN END SCREEN, three things are needed together:
+  ///   1. pass `endingHold:` (a few seconds) where this is constructed
+  ///      (Injection.build),
+  ///   2. a route for it, and
+  ///   3. a branch in MuseumApp._syncNavigation — which today treats every
+  ///      non-touring phase as "go to the gate", so `ending` would flash past
+  ///      to the Gate even with a hold in place.
+  /// Doing only (1) buys nothing visible; that is the trap this note exists to
+  /// prevent.
+  ///
+  /// ⚠ The order of statements below does NOT establish an order for listeners.
+  /// `_setState` only enqueues; [_audio.stopAll] runs before ANY subscriber
+  /// observes `ending`, at any hold value.
   void _endSession(SessionEndReason reason) {
     if (_state.phase != SessionPhase.touring) return;
 
-    // ending phase (transient) so the UI can show an end screen if it wants.
     _setState(SessionState(phase: SessionPhase.ending, endReason: reason));
 
     _audio.stopAll();
@@ -270,9 +317,23 @@ class SessionController {
     _touringSince = null;
     _deskStable = false;
 
-    // Settle to atDesk. Keep endReason for the end screen / analytics until the
-    // next tour starts (cleared in userStartedTour).
-    _setState(SessionState(phase: SessionPhase.atDesk, endReason: reason));
+    // Settle to atDesk. Keep endReason for analytics until the next tour starts
+    // (cleared in userStartedTour).
+    void settle() =>
+        _setState(SessionState(phase: SessionPhase.atDesk, endReason: reason));
+
+    _endingTimer?.cancel();
+    if (_endingHold <= Duration.zero) {
+      settle();
+    } else {
+      // Hold `ending` so an end screen has a window to live in. Guarded on
+      // phase: a re-plug (or any other transition) during the hold wins, and
+      // must not be stomped by a late settle.
+      _endingTimer = Timer(_endingHold, () {
+        _endingTimer = null;
+        if (_state.phase == SessionPhase.ending) settle();
+      });
+    }
 
     if (kDebugMode) debugPrint('[SessionController] ended: $reason');
   }
@@ -286,6 +347,8 @@ class SessionController {
   Future<void> dispose() async {
     _sweepTimer?.cancel();
     _sweepTimer = null;
+    _endingTimer?.cancel();
+    _endingTimer = null;
     await _zoneSub.cancel();
     await _chargeSub.cancel();
     await _deskSub.cancel();

@@ -27,8 +27,14 @@ enum SessionPhase {
   /// Active tour. Audio + zone pipeline live.
   touring,
 
-  /// Transient cleanup: stop audio -> wipe visited memory -> show end screen
-  /// -> atDesk.
+  /// Carries [SessionEndReason] out of [touring]. Always consumable as an EDGE
+  /// (AnalyticsRecorder emits TourEnded here).
+  ///
+  /// ⚠ Whether it is also RENDERABLE depends on SessionController's
+  /// `endingHold`. At the default of zero it is superseded by [atDesk] within
+  /// one synchronous call — no frame is pumped, so a screen keyed on it can
+  /// never paint. Read SessionController._endSession BEFORE building an end
+  /// screen: it takes three coordinated changes, not just a non-zero hold.
   ending,
 }
 

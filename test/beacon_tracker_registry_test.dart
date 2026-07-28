@@ -154,11 +154,21 @@ void main() {
       reg.onReading(reading(1, 1, -60, t0.add(async.elapsed)));
       async.elapse(const Duration(seconds: 1));
 
+      final beforeStop = emits.length;
       reg.stop();
       expect(reg.trackerCount, 0);
+      async.flushMicrotasks();
+
+      // stop() publishes ONE final empty snapshot. Downstream expiry clocks
+      // (NearbyZonesTracker's hold, the arbiter's silence timers) are driven by
+      // this heartbeat, so without it they would hold the pre-stop world
+      // forever — that is what froze the exhibit list on Bluetooth-off.
+      expect(emits.length, beforeStop + 1);
+      expect(emits.last, isEmpty, reason: 'a stopped registry knows nothing');
+
       final afterStop = emits.length;
       async.elapse(const Duration(seconds: 3));
-      expect(emits.length, afterStop); // no heartbeats while stopped
+      expect(emits.length, afterStop); // ...and then genuinely goes quiet
 
       reg.start();
       async.elapse(const Duration(seconds: 2));
@@ -166,6 +176,118 @@ void main() {
       expect(emits.length, afterStop + 2); // heartbeats resumed (empty)
 
       reg.dispose();
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // The tracker ceiling bounds MEMORY. It must not become a first-come-first-
+  // served lock-in, because incumbents keep advertising and so never age out —
+  // that would make a beacon the visitor is standing next to permanently
+  // invisible. The occupant set must converge on the NEAREST beacons.
+  // ───────────────────────────────────────────────────────────────────────────
+  group('at the tracker ceiling', () {
+    BeaconTrackerRegistry smallRegistry(FakeAsync async) =>
+        BeaconTrackerRegistry(
+          maxTrackers: 3,
+          now: () => t0.add(async.elapsed),
+        );
+
+    test('a STRONGER newcomer displaces the weakest incumbent', () {
+      fakeAsync((async) {
+        final reg = smallRegistry(async);
+        final emits = <List<ZoneSignal>>[];
+        reg.zoneSignals.listen(emits.add);
+        reg.start();
+
+        final now = t0.add(async.elapsed);
+        reg.onReading(reading(1, 1, -60, now));
+        reg.onReading(reading(2, 1, -70, now));
+        reg.onReading(reading(3, 1, -85, now)); // weakest — the one to lose
+        expect(reg.trackerCount, 3);
+
+        // Visitor walks up to zone 4's exhibit. Under the old drop-the-newcomer
+        // policy this beacon was invisible forever.
+        reg.onReading(reading(4, 1, -50, now));
+
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+
+        expect(reg.trackerCount, 3); // ceiling still honoured
+        final majors = emits.last.map((z) => z.major).toSet();
+        expect(majors, contains(4), reason: 'the near beacon must be tracked');
+        expect(majors, isNot(contains(3)), reason: 'the far one was evicted');
+      });
+    });
+
+    test('a WEAKER newcomer cannot evict a beacon we are standing next to', () {
+      fakeAsync((async) {
+        final reg = smallRegistry(async);
+        final emits = <List<ZoneSignal>>[];
+        reg.zoneSignals.listen(emits.add);
+        reg.start();
+
+        final now = t0.add(async.elapsed);
+        reg.onReading(reading(1, 1, -55, now));
+        reg.onReading(reading(2, 1, -58, now));
+        reg.onReading(reading(3, 1, -61, now));
+
+        // A distant stray from across the hall. It must stay out — otherwise a
+        // crowded room could churn the table and evict the nearest beacon.
+        reg.onReading(reading(9, 9, -95, now));
+
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+
+        expect(reg.trackerCount, 3);
+        final majors = emits.last.map((z) => z.major).toSet();
+        expect(majors, {1, 2, 3});
+        expect(majors, isNot(contains(9)));
+      });
+    });
+
+    test('repeated pressure converges on the nearest set, not the first set',
+        () {
+      fakeAsync((async) {
+        final reg = smallRegistry(async);
+        final emits = <List<ZoneSignal>>[];
+        reg.zoneSignals.listen(emits.add);
+        reg.start();
+
+        final now = t0.add(async.elapsed);
+        // Seed with three far beacons (arrival order would lock these in).
+        for (var m = 1; m <= 3; m++) {
+          reg.onReading(reading(m, 1, -90, now));
+        }
+        // Then hear three near ones, one at a time.
+        for (var m = 4; m <= 6; m++) {
+          reg.onReading(reading(m, 1, -55, now));
+        }
+
+        async.elapse(const Duration(seconds: 1));
+        async.flushMicrotasks();
+
+        expect(reg.trackerCount, 3);
+        expect(emits.last.map((z) => z.major).toSet(), {4, 5, 6});
+      });
+    });
+
+    test('an existing tracker is still updated in place, never re-admitted', () {
+      fakeAsync((async) {
+        final reg = smallRegistry(async);
+        reg.start();
+
+        var now = t0.add(async.elapsed);
+        reg.onReading(reading(1, 1, -60, now));
+        reg.onReading(reading(2, 1, -70, now));
+        reg.onReading(reading(3, 1, -80, now));
+
+        // A full table must not stop known beacons from being fed.
+        async.elapse(const Duration(milliseconds: 500));
+        now = t0.add(async.elapsed);
+        reg.onReading(reading(3, 1, -75, now));
+
+        expect(reg.trackerCount, 3);
+      });
     });
   });
 }

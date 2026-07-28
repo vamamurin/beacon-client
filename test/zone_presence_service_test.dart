@@ -148,6 +148,66 @@ void main() {
     final r = run(MockScenarios.zoneSwitch, repo);
     expect(r.events.whereType<EnteredZone>(), hasLength(1));
   });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // A radio can die at any moment (user flips Bluetooth off mid-tour). That
+  // must degrade into a REPORTED state, never an unhandled async error.
+  // ─────────────────────────────────────────────────────────────────────────
+  group('a hostile radio', () {
+    test('start() survives a throwing startScan and reports it', () async {
+      Object? reported;
+      final scanner = _HostileScanner();
+      final service =
+          _serviceWith(scanner, onScanFailure: (e) => reported = e);
+
+      service.start(); // must not throw, must not escape to the zone
+      await Future<void>.delayed(Duration.zero);
+
+      expect(reported, isA<StateError>());
+      await service.dispose();
+    });
+
+    test('a failed start does not latch — the next start() really retries', () async {
+      final scanner = _HostileScanner();
+      final service = _serviceWith(scanner);
+
+      service.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(scanner.startAttempts, 1);
+
+      // The Gate's "Thử lại" / the adapterOn watcher call start() again. The
+      // idempotence guard must NOT swallow this: the first attempt failed, so
+      // the pipeline is not actually running.
+      service.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(scanner.startAttempts, 2);
+
+      // Once the radio recovers, the same call finally sticks.
+      scanner.failStart = false;
+      service.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(scanner.startAttempts, 3);
+
+      // ...and NOW it is running, so a redundant start is correctly a no-op.
+      service.start();
+      await Future<void>.delayed(Duration.zero);
+      expect(scanner.startAttempts, 3);
+
+      await service.dispose();
+    });
+
+    test('stop() and dispose() survive a throwing stopScan', () async {
+      final scanner = _HostileScanner(failStart: false, failStop: true);
+      final service = _serviceWith(scanner);
+
+      service.start();
+      await Future<void>.delayed(Duration.zero);
+
+      service.stop(); // must not throw
+      await Future<void>.delayed(Duration.zero);
+      await service.dispose(); // nor must this
+    });
+  });
 }
 
 /// A scanner that never emits — the tests feed the registry directly to stay
@@ -165,3 +225,48 @@ class _NullScanner implements IBeaconScanner {
   @override
   void dispose() {}
 }
+
+/// A radio that refuses to start — what flutter_blue_plus does when the adapter
+/// is switched off or the scan permission is revoked while the app runs.
+class _HostileScanner implements IBeaconScanner {
+  _HostileScanner({this.failStart = true, this.failStop = false});
+
+  bool failStart;
+  bool failStop;
+  int startAttempts = 0;
+
+  @override
+  Stream<BeaconReading> get readings => const Stream.empty();
+
+  @override
+  Future<void> startScan() async {
+    startAttempts++;
+    if (failStart) throw StateError('bluetooth adapter is off');
+  }
+
+  @override
+  Future<void> stopScan() async {
+    if (failStop) throw StateError('nothing to stop');
+  }
+
+  @override
+  void dispose() {}
+}
+
+ZonePresenceService _serviceWith(
+  IBeaconScanner scanner, {
+  void Function(Object)? onScanFailure,
+  DateTime Function()? now,
+}) =>
+    ZonePresenceService(
+      scanner: scanner,
+      repository: MockZoneRepository(simulatedLatency: Duration.zero),
+      museumUuidLower: _uuid,
+      registry: BeaconTrackerRegistry(now: now),
+      arbiter: ZoneArbiter(
+        deskMajor: 99,
+        params: ArbitrationParams.defaults(),
+        now: now,
+      ),
+      onScanFailure: onScanFailure,
+    );

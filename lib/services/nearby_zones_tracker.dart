@@ -148,6 +148,20 @@ class NearbyZonesTracker {
     return out;
   }
 
+  /// Drop everything and publish an empty ranking NOW.
+  ///
+  /// The hold window exists to ride out a missed sweep — it is the wrong tool
+  /// when the radio is known to be gone (adapter switched off). Waiting it out
+  /// would leave the visitor looking at zones the device provably cannot hear.
+  /// Called by the composition root on the Bluetooth-off edge.
+  void clear() {
+    _lastHeard.clear();
+    _latest.clear();
+    if (_emittedOrder.isEmpty) return; // already empty — don't churn the UI
+    _emittedOrder = const [];
+    if (!_ctrl.isClosed) _ctrl.add(const []);
+  }
+
   void dispose() {
     _sub.cancel();
     _lastHeard.clear();

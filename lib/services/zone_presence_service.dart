@@ -96,17 +96,24 @@ class ZonePresenceService {
     required String museumUuidLower,
     required BeaconTrackerRegistry registry,
     required ZoneArbiter arbiter,
+    void Function(Object error)? onScanFailure,
   })  : _scanner = scanner,
         _repo = repository,
         _museumUuid = museumUuidLower,
         _registry = registry,
-        _arbiter = arbiter;
+        _arbiter = arbiter,
+        _onScanFailure = onScanFailure;
 
   final IBeaconScanner _scanner;
   final IZoneRepository _repo;
   final String _museumUuid;
   final BeaconTrackerRegistry _registry;
   final ZoneArbiter _arbiter;
+
+  /// Called when the radio refuses to start (adapter switched off, permission
+  /// revoked while running). Lets the composition root re-derive BLE readiness
+  /// so the Gate can show a real status instead of the app failing silently.
+  final void Function(Object error)? _onScanFailure;
 
   final _events = StreamController<ZoneEvent>.broadcast();
   final _status = StreamController<ZoneStatus>.broadcast();
@@ -158,7 +165,29 @@ class ZonePresenceService {
         _scanner.readings.listen(_onReading, onError: _onError);
 
     _registry.start();
-    _scanner.startScan();
+    unawaited(_startScanGuarded());
+  }
+
+  /// `startScan()` is async and THROWS on a hostile radio (adapter switched off
+  /// between the readiness check and here, permission revoked mid-run). Left
+  /// unawaited and uncaught that becomes an unhandled async error: the visitor
+  /// sees a tour that silently stops finding beacons, and the Gate keeps
+  /// claiming everything is ready.
+  ///
+  /// Reachable in normal use — AppGraph.retryBluetooth() calls start() right
+  /// after ensureReady(), and the adapter can go down inside that window.
+  ///
+  /// On failure we drop back to "not running" so a later retry (button, resume,
+  /// or the adapterOn watcher) genuinely re-attempts instead of short-circuiting
+  /// on the idempotence guard.
+  Future<void> _startScanGuarded() async {
+    try {
+      await _scanner.startScan();
+    } catch (e) {
+      _running = false;
+      if (kDebugMode) debugPrint('[ZonePresenceService] startScan failed: $e');
+      _onScanFailure?.call(e);
+    }
   }
 
   /// Re-announce the CURRENTLY confirmed zone as a fresh [EnteredZone], if any.
@@ -237,15 +266,49 @@ class ZonePresenceService {
     if (kDebugMode) debugPrint('[ZonePresenceService] event: ${e.runtimeType}');
   }
 
+  /// Halt the pipeline AND declare that we now know nothing.
+  ///
+  /// Different intent from [stop]. `stop` is a battery PAUSE and deliberately
+  /// preserves the diff anchor so a quick resume doesn't re-fire EnteredZone for
+  /// a zone the visitor never left. This one is for when the radio is genuinely
+  /// unavailable (adapter switched off): continuing to display a zone the device
+  /// provably cannot hear is worse than showing standby.
+  ///
+  /// Drains synchronously instead of letting the silence timers expire, because
+  /// those timers are driven by the very heartbeat we are about to stop.
+  void stopAndClear() {
+    stop();
+    _arbiter.resetForNewSession(); // wipe confirmed zone / lockout / candidate
+    if (_lastMajor != null) {
+      _emitEvent(const LeftToStandby()); // audio + session hear about it
+      _lastMajor = null;
+    }
+    if (_lastStatus != ZoneStatus.standby) {
+      _lastStatus = ZoneStatus.standby;
+      if (!_status.isClosed) _status.add(ZoneStatus.standby);
+    }
+  }
+
   /// Pause the pipeline (e.g. app backgrounded). Keeps subscriptions so
   /// resume via [start] is cheap; stops scanning to save battery.
   void stop() {
     if (!_running) return;
     _running = false;
-    _scanner.stopScan();
+    unawaited(_stopScanGuarded());
     _registry.stop();
     // Presence diff state intentionally preserved so a quick resume doesn't
     // re-fire an EnteredZone for the same zone the visitor never left.
+  }
+
+  /// Stopping a radio that is already down throws on some ROMs. A failure to
+  /// stop is never actionable — we are tearing down either way — so it is
+  /// swallowed rather than propagated to an unhandled zone.
+  Future<void> _stopScanGuarded() async {
+    try {
+      await _scanner.stopScan();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[ZonePresenceService] stopScan failed: $e');
+    }
   }
 
   Future<void> dispose() async {
@@ -253,7 +316,7 @@ class ZonePresenceService {
     await _readingSub?.cancel();
     await _signalSub?.cancel();
     await _presenceSub?.cancel();
-    _scanner.stopScan();
+    await _stopScanGuarded();
     _registry.dispose();
     _arbiter.dispose();
     if (!_events.isClosed) await _events.close();
