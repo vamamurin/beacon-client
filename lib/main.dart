@@ -20,6 +20,8 @@
 // Metadata cho notification/lock-screen được dựng tại ĐÂY (nơi biết repository
 // + ngôn ngữ), giữ handler ở data/audio khỏi phụ thuộc repository.
 
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
 import 'package:beacon_client/data/audio/museum_audio_handler.dart';
 import 'package:beacon_client/data/settings/prefs_settings_store.dart';
@@ -205,6 +207,16 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
     // resumed = màn bật, người dùng bấm được banner. Mọi trạng thái khác coi
     // như nền → ZoneChangeCoordinator chuyển-zone tức thì.
     _foreground.value = state == AppLifecycleState.resumed;
+
+    // Analytics buffer nằm trong RAM cho tới khi flush. Từ `paused` trở đi,
+    // Activity có thể bị huỷ bất cứ lúc nào — và khi khách vuốt tắt ở đa nhiệm,
+    // MainActivity.onDestroy giết thẳng tiến trình mà KHÔNG kịp gọi xuống Dart
+    // (engine đang bị gỡ ở đúng thời điểm đó). Đây là điểm cuối cùng còn chắc
+    // chắn chạy được, nên phải persist ở đây thay vì tin vào teardown.
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      unawaited(_built?.analytics.flush() ?? Future<void>.value());
+    }
   }
 
   Future<AppGraph> _boot() async {

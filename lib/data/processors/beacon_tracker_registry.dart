@@ -77,6 +77,11 @@ class BeaconTrackerRegistry {
   @visibleForTesting
   int get trackerCount => _trackers.length;
 
+  /// Xem ghi chú ở [_sweep]. Mặc định TẮT: đây là dụng cụ đo, không phải log
+  /// vận hành — 1 dòng/giây sẽ dìm chết mọi log khác nếu để bật.
+  static const bool _kHeartbeat =
+      bool.fromEnvironment('BLE_HEARTBEAT', defaultValue: false);
+
   /// Idempotent. Begins the 1 Hz sweep (the pipeline's heartbeat).
   void start() {
     _sweepTimer ??= Timer.periodic(_sweepInterval, _sweep);
@@ -169,6 +174,21 @@ class BeaconTrackerRegistry {
   void _sweep(Timer _) {
     if (_controller.isClosed) return;
     final now = _now();
+
+    // NHỊP TIM CHẨN ĐOÁN — bật bằng --dart-define=BLE_HEARTBEAT=true.
+    //
+    // Trả lời đúng MỘT câu hỏi, câu duy nhất không thể suy ra từ log có sẵn:
+    // khi màn hình tắt và app im tiếng, tiến trình còn SỐNG hay đã bị đóng băng?
+    //   • Nhịp tiếp tục, live=0 ⇒ isolate sống, timer chạy, nhưng KHÔNG có gói
+    //     beacon nào tới. Vấn đề ở tầng giao kết quả quét (chính sách Android).
+    //   • Nhịp NGỪNG hẳn      ⇒ cả tiến trình bị treo. Đây là lớp tiết kiệm pin
+    //     riêng của ROM (MIUI/HyperOS), foreground service không cứu được —
+    //     phải whitelist trong cài đặt máy.
+    // Log [iBeacon] một mình KHÔNG phân biệt được hai ca này: cả hai đều tắt log.
+    // Đặt ở sweep 1 Hz vì đây là nhịp duy nhất chạy độc lập với sóng BLE.
+    if (_kHeartbeat) {
+      debugPrint('[Heartbeat] ${now.toIso8601String()} live=${_trackers.length}');
+    }
 
     for (final key in _trackers.keys.toList(growable: false)) {
       final t = _trackers[key];
