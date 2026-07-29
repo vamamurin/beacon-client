@@ -48,10 +48,20 @@
             </intent-filter>
         </activity>
 
-        <!-- ===== ĐÃ THÊM: Khai báo dịch vụ AudioService chạy ngầm ===== -->
+        <!-- ===== ĐÃ THÊM: Khai báo dịch vụ AudioService chạy ngầm =====
+
+             stopWithTask="true": VUỐT TẮT APP Ở ĐA NHIỆM PHẢI DỪNG HẲN.
+             Mặc định của Android là false, đúng cho một app nghe nhạc (vuốt tắt
+             Spotify thì nhạc vẫn chạy). SAI cho máy hướng dẫn bảo tàng: khách
+             vuốt tắt là họ đang nói "xong rồi", mà app vẫn thuyết minh trong
+             túi và cách duy nhất để dừng là vào Cài đặt > Buộc dừng.
+
+             Chỉ riêng cờ này CHƯA đủ — xem MuseumAudioHandler.onTaskRemoved:
+             audio_service chuyển sự kiện xuống Dart, và mặc định ở đó là no-op. -->
         <service android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
             android:exported="true"
+            android:stopWithTask="true"
             tools:ignore="Instantiatable">
             <intent-filter>
                 <action android:name="android.media.browse.MediaBrowserService" />
@@ -66,11 +76,20 @@
             </intent-filter>
         </receiver>
 
-        <!-- Keep-alive FGS: giữ tiến trình sống suốt tour -->
+        <!-- Keep-alive FGS: giữ tiến trình sống suốt tour
+
+             stopWithTask="true" là BẮT BUỘC, không phải tuỳ chọn.
+             ForegroundService.onTaskRemoved của plugin đọc đúng cờ này:
+                 if (isSetStopWithTaskFlag(this)) stopSelf()
+                 else RestartReceiver.setRestartAlarm(this, 1000)
+             Không đặt cờ ⇒ service TỰ HẸN GIỜ HỒI SINH sau 1 giây. Đó chính là
+             lý do vuốt tắt app không ăn thua và chỉ "Buộc dừng" mới diệt được:
+             không phải Android bướng, mà là ta đang bảo plugin hãy sống lại. -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:foregroundServiceType="specialUse"
-            android:exported="false">
+            android:exported="false"
+            android:stopWithTask="true">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="museum_ble_proximity_keep_alive" />

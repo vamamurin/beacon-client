@@ -81,6 +81,27 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
         autoRunOnMyPackageReplaced: false,
         allowWakeLock: true, // <-- giữ CPU thức khi màn tắt (mấu chốt)
         allowWifiLock: false,
+
+        // VUỐT TẮT Ở ĐA NHIỆM PHẢI DỪNG HẲN.
+        //
+        // Đặt Ở ĐÂY chứ không chỉ dựa vào android:stopWithTask trong manifest,
+        // vì ForegroundServiceUtils.isSetStopWithTaskFlag đọc theo THỨ TỰ ƯU
+        // TIÊN: SharedPreferences trước, cờ manifest chỉ là fallback khi prefs
+        // không chứa khoá. Để null (mặc định) là XOÁ khoá khỏi prefs, tức phó
+        // mặc cho đường fallback. Đặt tường minh true thì chỉ còn MỘT nguồn sự
+        // thật, không phụ thuộc việc đọc được ServiceInfo.flags hay không.
+        //
+        // Vì sao quan trọng: nhánh còn lại của onTaskRemoved là
+        //     RestartReceiver.setRestartAlarm(this, 1000)
+        // — service TỰ HẸN GIỜ SỐNG LẠI sau 1 giây. Không đặt cờ nghĩa là ta
+        // đang chủ động yêu cầu nó hồi sinh, và force-stop thành cách duy nhất
+        // để dừng vì nó xoá luôn alarm.
+        stopWithTask: true,
+
+        // Cùng lý do: chặn đường hồi sinh thứ hai trong onDestroy. Máy hướng
+        // dẫn bảo tàng không có kịch bản nào cần service tự sống lại — tour kết
+        // thúc là kết thúc.
+        allowAutoRestart: false,
       ),
     );
   }

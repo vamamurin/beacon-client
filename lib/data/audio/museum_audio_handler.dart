@@ -39,6 +39,7 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:beacon_client/domain/interfaces/i_audio_engine.dart';
 import 'package:beacon_client/domain/models/audio_queue_state.dart';
@@ -54,6 +55,12 @@ typedef MediaMetadataResolver = MediaItem Function(AudioQueueState state);
 class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
   TourAudioController? _controller;
   MediaMetadataResolver? _metadata;
+
+  /// Kept only so [onTaskRemoved] can silence playback directly. Every OTHER
+  /// path goes through [_controller] on purpose — TourAudioController owns
+  /// audio policy and is the single place allowed to call play(). Swiping the
+  /// app away is not a policy decision, it is a teardown.
+  IAudioEngine? _engine;
 
   StreamSubscription<AudioQueueState>? _stateSub;
   StreamSubscription<SessionState>? _sessionSub;
@@ -75,6 +82,7 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
 
     _controller = controller;
     _metadata = metadata;
+    _engine = engine;
     _lastPhase = initialPhase;
 
     _stateSub = engine.onStateChanged.listen(_onEngineState);
@@ -90,6 +98,7 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
     _stateSub = null;
     _sessionSub = null;
     _controller = null;
+    _engine = null;
   }
 
   // ---- engine -> notification ------------------------------------------------
@@ -150,4 +159,38 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
   /// Nút "stop"/gạt notification ⇒ PAUSE, không kết thúc phiên (xem header).
   @override
   Future<void> stop() async => _controller?.userPause();
+
+  /// Khách VUỐT TẮT app ở màn đa nhiệm ⇒ dừng HẲN.
+  ///
+  /// Khác hẳn [stop] ở trên: nút stop trên notification là "im một lát" (khách
+  /// vẫn đang tham quan, máy vẫn trong tay), còn vuốt tắt ở đa nhiệm là "tôi
+  /// xong rồi". Phân biệt hai ý định này là toàn bộ lý do hàm này tồn tại
+  /// riêng thay vì tái dùng [stop].
+  ///
+  /// ⚠ Mặc định của BaseAudioHandler.onTaskRemoved là NO-OP — service cứ thế
+  /// chạy tiếp. Cùng với việc keep-alive service tự hẹn giờ hồi sinh khi thiếu
+  /// android:stopWithTask (xem AndroidManifest), đó là lý do app vẫn phát tiếng
+  /// sau khi vuốt tắt và chỉ "Buộc dừng" mới diệt được.
+  ///
+  /// PHẢI sửa cả HAI nơi: cờ manifest cho phép Android hạ service, hàm này bảo
+  /// đảm tiếng tắt NGAY thay vì kêu tiếp cho tới khi tiến trình bị thu hồi.
+  /// ⚠ LOG NÀY KHÔNG BỌC kDebugMode — CÓ CHỦ Ý.
+  ///
+  /// Đây là điểm quan sát DUY NHẤT trả lời được câu hỏi "Android có thực sự
+  /// giao sự kiện task-removed xuống Dart không?". Trên một số ROM (đáng chú ý
+  /// là dòng Xiaomi/MIUI) vuốt tắt ở đa nhiệm KHÔNG hạ foreground service theo
+  /// cách AOSP mô tả, và khi đó không có cách nào phân biệt "hàm này chưa từng
+  /// chạy" với "chạy rồi nhưng vô hiệu" ngoài việc đọc log. Giấu nó sau
+  /// kDebugMode là làm mù đúng bản release cần chẩn đoán.
+  ///
+  /// Kiểm chứng:  adb logcat -s flutter | grep TaskRemoved
+  ///   • Có dòng này  ⇒ cầu nối chạy, vấn đề nằm ở việc service không bị hạ.
+  ///   • Không có     ⇒ ROM không giao sự kiện; phải xử lý ở tầng Android.
+  @override
+  Future<void> onTaskRemoved() async {
+    debugPrint('[MuseumAudioHandler] onTaskRemoved — dừng phát + hạ FGS');
+    await _engine?.stop();
+    await super.stop(); // gỡ notification + hạ foreground service
+    await super.onTaskRemoved();
+  }
 }

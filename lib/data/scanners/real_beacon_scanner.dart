@@ -61,29 +61,58 @@ class RealBeaconScanner implements IBeaconScanner {
   /// định dạng của Apple. Để inject được cho test / firmware phi-Apple hiếm gặp.
   final int appleCompanyId;
 
-  /// FIX A (đã điều chỉnh): CÓ bật ScanFilter phần cứng hay KHÔNG.
+  /// CÓ bật ScanFilter phần cứng hay KHÔNG. **MẶC ĐỊNH `true`.**
   ///
-  /// MẶC ĐỊNH `false` = quét KHÔNG lọc (đúng hành vi cũ đã từng bắt được
-  /// beacon). Lý do hạ về false: một số phiên bản flutter_blue_plus dựng
-  /// MsdFilter không như kỳ vọng và có thể loại nhầm gói iBeacon dài — ưu tiên
-  /// ĐÚNG (bắt được beacon) hơn tối ưu. Việc "chết sau 5 phút" đã được vá bằng
-  /// FOREGROUND SERVICE (audio_service), KHÔNG phải bằng filter này, nên tắt
-  /// filter KHÔNG làm tái phát bug đó.
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// VÌ SAO ĐÃ ĐẢO NGƯỢC: MÀN TẮT = KHÔNG CÓ KẾT QUẢ NẾU QUÉT KHÔNG LỌC
+  /// ═══════════════════════════════════════════════════════════════════════
   ///
-  /// Khi ĐÃ xác nhận detection chạy, BẬT lại để cắt nhiễu Continuity của
-  /// iPhone/AirPods quanh đó + gia cố screen-off delivery:
-  ///   flutter run --dart-define=BLE_HW_FILTER=true
-  /// Lúc bật, dùng filter iBeacon CHÍNH XÁC (prefix 0x02 0x15) chứ không phải
-  /// filter company-id lỏng.
+  /// Từ Android 8.1, tầng Bluetooth của hệ thống KHÔNG giao kết quả cho một
+  /// phiên quét KHÔNG CÓ FILTER khi màn hình tắt; phiên quét được treo lại và
+  /// chỉ hồi phục khi màn bật. Đây là quy tắc của ScanManager trong AOSP, áp ở
+  /// tầng dưới app.
+  ///
+  /// Triệu chứng thực địa khớp từng chi tiết: Redmi Note 12 tắt màn thì bước
+  /// vào khu KHÔNG phát thuyết minh, nhưng vừa bật màn (chưa cần mở khoá) là
+  /// audio phát ra NGAY — vì gói beacon bắt đầu tới đúng khoảnh khắc đó. Redmi
+  /// A1 không dính vì mỗi ROM/phiên bản áp quy tắc một khác.
+  ///
+  /// ⚠ FOREGROUND SERVICE KHÔNG MIỄN ĐƯỢC QUY TẮC NÀY. Ghi chú cũ ở đây kết
+  /// luận rằng vì "chết sau 5 phút" đã được vá bằng FGS nên tắt filter là an
+  /// toàn. Hai chuyện khác nhau: FGS giữ TIẾN TRÌNH sống (chống Doze), còn quy
+  /// tắc này nằm ở tầng giao kết quả quét và không quan tâm app có FGS hay
+  /// không. Đó là lý do keep-alive chạy hoàn hảo mà vẫn không có beacon nào.
+  ///
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// VÌ SAO LỌC THEO COMPANY ID, KHÔNG PHẢI PREFIX 0x02 0x15
+  /// ═══════════════════════════════════════════════════════════════════════
+  ///
+  /// Bản trước bật filter là dùng ngay MsdFilter kèm `data: [0x02, 0x15]` +
+  /// mask, rồi thực địa báo gói iBeacon dài không tới được callback — nên cả
+  /// filter bị gỡ bỏ. Nhưng thứ hỏng là phần data/mask, không phải bản thân
+  /// việc lọc. Lọc theo COMPANY ID KHÔNG có data/mask cho qua MỌI gói
+  /// manufacturer-data của Apple: nó vẫn thoả điều kiện "có filter" của
+  /// Android, mà không có đường nào để so khớp data/mask sai lệch.
+  ///
+  /// Nhiễu Continuity (AirPods/Handoff) vẫn qua được filter lỏng này, nhưng
+  /// [_tryParseIBeacon] loại chúng ở tầng byte, và guard UUID bảo tàng ở
+  /// ZonePresenceService loại nốt phần còn lại. Đúng đắn đặt ở tầng parse, chỉ
+  /// mượn tầng phần cứng đúng thứ ta cần: quyền được chạy khi màn tắt.
+  ///
+  /// Cần đối chứng khi nghi filter chặn nhầm beacon:
+  ///   flutter run --dart-define=BLE_HW_FILTER=false
+  /// Chỉ dùng để CHẨN ĐOÁN với màn hình BẬT — bản release để false là tái phát
+  /// đúng lỗi màn-tắt-không-phát-tiếng ở trên.
   final bool useHardwareFilter;
 
   /// Apple Inc. Bluetooth SIG company identifier — vỏ chứa iBeacon payload.
   static const int _kAppleCompanyId = 0x004C;
 
-  /// Giá trị mặc định của [useHardwareFilter], đọc lúc build. Muốn bật khi build
-  /// bản demo/release: `--dart-define=BLE_HW_FILTER=true`.
+  /// Giá trị mặc định của [useHardwareFilter], đọc lúc build. Mặc định TRUE —
+  /// xem [useHardwareFilter] để biết vì sao tắt filter làm hỏng chế độ màn tắt.
+  /// Tắt để chẩn đoán: `--dart-define=BLE_HW_FILTER=false`.
   static const bool _kUseHwFilterDefault =
-      bool.fromEnvironment('BLE_HW_FILTER', defaultValue: false);
+      bool.fromEnvironment('BLE_HW_FILTER', defaultValue: true);
 
   final _controller = StreamController<BeaconReading>.broadcast();
   StreamSubscription<List<ScanResult>>? _scanSub;
@@ -122,21 +151,16 @@ class RealBeaconScanner implements IBeaconScanner {
     _lastProcessed.clear(); // phiên scan mới → dedupe mới
 
     await FlutterBluePlus.startScan(
-      // FIX A (điều chỉnh) — CHỈ lọc phần cứng khi [useHardwareFilter] bật.
-      //   • BẬT: filter iBeacon CHÍNH XÁC — manufacturer Apple + payload bắt
-      //     đầu bằng 0x02 0x15 (subtype iBeacon + length 0x15). Cho iBeacon
-      //     thật qua, chặn sạch gói Continuity ngắn (AirPods/Handoff/Find My)
-      //     và giúp screen-off delivery.
-      //   • TẮT (mặc định): withMsd rỗng = quét MỌI quảng cáo (đúng hành vi cũ
-      //     đã bắt được beacon). Guard UUID vẫn ở ZonePresenceService.
+      // BẬT (mặc định): lọc theo COMPANY ID Apple, KHÔNG kèm data/mask.
+      //   • Đủ để Android coi đây là phiên quét "có filter" ⇒ kết quả vẫn được
+      //     giao khi màn hình tắt (điều kiện tiên quyết của cả tính năng chạy
+      //     ngầm — xem doc dài ở [useHardwareFilter]).
+      //   • Lỏng có chủ ý: không có data/mask thì không có gì để so khớp sai,
+      //     nên mọi gói iBeacon thật đều qua. Việc loại gói rác là của
+      //     _tryParseIBeacon + guard UUID ở ZonePresenceService.
+      // TẮT: withMsd rỗng = quét không lọc. CHỈ để chẩn đoán với màn hình bật.
       withMsd: useHardwareFilter
-          ? [
-              MsdFilter(
-                appleCompanyId,
-                data: [0x02, 0x15],
-                mask: [0xFF, 0xFF],
-              ),
-            ]
+          ? [MsdFilter(appleCompanyId)]
           : const [],
       continuousUpdates: true,
       // lowLatency = scan liên tục, không duty-cycle, Android default là balanced (~5s delay)
