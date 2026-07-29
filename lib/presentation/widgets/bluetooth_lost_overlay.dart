@@ -8,16 +8,42 @@
 // visitor's reasonable conclusion is "Bluetooth isn't needed", and they leave it
 // off for the rest of their visit while the guide silently does nothing useful.
 // A passive banner would teach the same lesson more quietly. So this is a scrim
-// with one action: turn Bluetooth back on.
+// the tour cannot continue behind.
 //
-// Placed as the TOP child of MuseumApp's builder Stack, above ZoneChangeBanner,
-// because "the radio is gone" outranks "you may have changed zone" — and the
-// zone-change question is meaningless without a radio anyway.
+// ─────────────────────────────────────────────────────────────────────────────
+// NO ACTION BUTTON — DELIBERATE
 //
-// ONLY WHILE TOURING. At the gate, the Gate screen already owns BLE messaging
-// with staff-facing copy and a retry (that path was verified working); a second
-// modal on top of it would be noise. Being on the dock with Bluetooth off is a
-// staff situation, not a visitor emergency.
+// The first version had a "Turn on Bluetooth" button wired to retryBluetooth().
+// It could not work, and field testing said so: an app cannot switch the
+// adapter on. BluetoothAdapter.enable() has been a no-op for third-party apps
+// since Android 13, and retryBluetooth() only RE-READS state — against a
+// switched-off adapter it returns bluetoothOff again and nothing visibly
+// happens. A button that cannot keep its promise is worse than no button.
+//
+// So this states the fact and gets out of the way. The visitor turns Bluetooth
+// back on from the same quick-settings tile they just used, and the overlay
+// dismisses ITSELF: AppGraph._watchAdapter sees the adapter return, re-derives
+// readiness, publishes `ready`, and this renders nothing again. No tap needed.
+//
+// A real "enable" affordance would be a system-settings intent — a later, and
+// separate, decision.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠ MUST SIT UNDER A Material.
+//
+// This is a direct child of MuseumApp's builder Stack, which is ABOVE the
+// Navigator — there is no Scaffold or Material overhead. Text rendered there
+// falls back to MaterialApp's error style: red, double-underlined in yellow.
+// That is exactly what the first version shipped. ZoneChangeBanner (same
+// position in the same Stack) avoids it by wrapping in Material; so does this.
+//
+// Placed ABOVE ZoneChangeBanner in that Stack, because "the radio is gone"
+// outranks "you may have changed zone" — and the zone question is meaningless
+// without a radio anyway.
+//
+// ONLY WHILE TOURING. At the gate the Gate screen already owns BLE messaging
+// with staff-facing copy and a retry that CAN work (permission prompts); a
+// second modal over it would be noise.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -37,7 +63,7 @@ import 'package:beacon_client/presentation/ui_strings.dart';
 @visibleForTesting
 abstract final class BluetoothLostKeys {
   static const scrim = ValueKey('ble.lost.scrim');
-  static const cta = ValueKey('ble.lost.cta');
+  static const card = ValueKey('ble.lost.card');
 }
 
 class BluetoothLostOverlay extends StatelessWidget {
@@ -72,12 +98,11 @@ class _Notice extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final content = context.read<ContentProvider>();
-    final startup = context.read<StartupProvider>();
 
-    // The adapter being off is the case the visitor caused and can undo. Every
-    // other non-ready reason mid-tour (permission revoked from the tray,
-    // unsupported) is a staff problem, so it routes to system settings rather
-    // than promising a retry that cannot succeed.
+    // The adapter being off is the case the visitor caused and can undo from
+    // quick settings. Any other non-ready reason mid-tour (permission revoked,
+    // unsupported hardware) is a staff problem, and the copy says so instead of
+    // telling a visitor to do something they cannot.
     final bool adapterOff = status == StartupStatus.bluetoothOff;
 
     return Positioned.fill(
@@ -94,49 +119,45 @@ class _Notice extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpace.x6),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 420),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      content.ui(adapterOff
-                          ? UiKeys.tourBleLostTitle
-                          : UiKeys.gateBleDeniedTitle),
-                      style: AppText.sheetTitle.copyWith(color: t.inkOnImage),
+                // Material, not a bare Container: see the ⚠ note in the header.
+                // Card surface + outline mirror ZoneChangeBanner so the two
+                // overlays read as the same system.
+                child: Material(
+                  key: BluetoothLostKeys.card,
+                  color: t.surface,
+                  elevation: 6,
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(14),
+                      // t.outline (control border), NOT t.line — the hairline is
+                      // tuned for `surface` and reads as no border at all here.
+                      border: Border.all(color: t.outline),
                     ),
-                    const SizedBox(height: AppSpace.x3),
-                    Text(
-                      content.ui(adapterOff
-                          ? UiKeys.tourBleLostBody
-                          : UiKeys.gateBleDeniedBody),
-                      style: AppText.body.copyWith(color: t.mutedOnImage),
-                    ),
-                    const SizedBox(height: AppSpace.x6),
-                    SizedBox(
-                      width: double.infinity,
-                      height: AppSpace.tap, // a11y floor, same as _StaffButton
-                      child: FilledButton(
-                        key: BluetoothLostKeys.cta,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: t.ctaOnImageFill,
-                          foregroundColor: t.ctaOnImageInk,
-                          shape: const RoundedRectangleBorder(),
-                        ),
-                        // Both paths are safe to press repeatedly. retryBluetooth
-                        // re-derives readiness and restarts the pipeline if the
-                        // adapter came back; it does not fabricate a state.
-                        onPressed: () => adapterOff
-                            ? startup.retryBluetooth()
-                            : startup.openBluetoothSettings(),
-                        child: Text(
+                    padding: const EdgeInsets.all(AppSpace.x5),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.bluetooth_disabled,
+                            size: 28, color: t.inkMuted),
+                        const SizedBox(height: AppSpace.x3),
+                        Text(
                           content.ui(adapterOff
-                              ? UiKeys.tourBleLostCta
-                              : UiKeys.gateBleDeniedCta),
-                          style: AppText.button,
+                              ? UiKeys.tourBleLostTitle
+                              : UiKeys.tourBleBlockedTitle),
+                          style: AppText.sheetTitle.copyWith(color: t.ink),
                         ),
-                      ),
+                        const SizedBox(height: AppSpace.x2),
+                        Text(
+                          content.ui(adapterOff
+                              ? UiKeys.tourBleLostBody
+                              : UiKeys.tourBleBlockedBody),
+                          style: AppText.body.copyWith(color: t.inkMuted),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),

@@ -74,7 +74,11 @@ abstract final class UiKeys {
   // trấn an + một hành động rõ ràng, không phải chẩn đoán kỹ thuật.
   static const tourBleLostTitle = 'tour.bleLost.title';
   static const tourBleLostBody = 'tour.bleLost.body';
-  static const tourBleLostCta = 'tour.bleLost.cta';
+
+  /// Mất BLE giữa tour vì lý do KHÔNG phải khách tự tắt (quyền bị thu hồi, máy
+  /// không hỗ trợ). Khách không tự xử lý được ⇒ câu chữ chỉ sang nhân viên.
+  static const tourBleBlockedTitle = 'tour.bleBlocked.title';
+  static const tourBleBlockedBody = 'tour.bleBlocked.body';
 
   // ── zone (màn 2) ──
   static const zoneNearbyTitle = 'zone.nearbyTitle';
@@ -208,8 +212,12 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.tourBleLostTitle: 'Đã tắt Bluetooth',
   UiKeys.tourBleLostBody:
       'Máy cần Bluetooth để biết bạn đang đứng trước hiện vật nào. '
-          'Thuyết minh đã tạm dừng — bật lại Bluetooth để tiếp tục tham quan.',
-  UiKeys.tourBleLostCta: 'Bật Bluetooth',
+          'Thuyết minh đã tạm dừng. Vui lòng bật lại Bluetooth — '
+          'màn hình này sẽ tự tắt và chuyến tham quan tiếp tục.',
+  UiKeys.tourBleBlockedTitle: 'Không dùng được Bluetooth',
+  UiKeys.tourBleBlockedBody:
+      'Thuyết minh đã tạm dừng vì máy không truy cập được Bluetooth. '
+          'Vui lòng mang máy tới quầy để nhân viên hỗ trợ.',
 
   UiKeys.zoneNearbyTitle: 'Khu vực quanh bạn',
   UiKeys.zoneNearbyGuidance:
