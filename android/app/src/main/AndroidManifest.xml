@@ -16,6 +16,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Đi kèm foregroundServiceType="...|location" của keep-alive service.
+         Xem ghi chú dài ở khai báo service bên dưới để biết vì sao BLE scan
+         cần capability location khi màn hình tắt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
@@ -84,10 +88,39 @@
                  else RestartReceiver.setRestartAlarm(this, 1000)
              Không đặt cờ ⇒ service TỰ HẸN GIỜ HỒI SINH sau 1 giây. Đó chính là
              lý do vuốt tắt app không ăn thua và chỉ "Buộc dừng" mới diệt được:
-             không phải Android bướng, mà là ta đang bảo plugin hãy sống lại. -->
+             không phải Android bướng, mà là ta đang bảo plugin hãy sống lại.
+
+             ⚠ ĐẶT CỜ NÀY Ở ĐÂY, KHÔNG PHẢI Ở ForegroundTaskOptions BÊN DART.
+             isSetStopWithTaskFlag đọc SharedPreferences trước, manifest sau —
+             nên đặt bên Dart *cũng* hiệu quả, nhưng nó kích hoạt thêm một nhánh
+             CHỈ chạy khi khoá có trong prefs (ForegroundService.onStartCommand):
+                 if (prefs.contains(STOP_WITH_TASK) && prefs.getBoolean(...))
+                     TrackVisibilityUtils.install(app) { stopForegroundService() }
+             TrackVisibilityUtils gọi callback đó ở onActivityPaused đầu tiên mà
+             không còn activity nào resumed — tức là NGAY KHI TẮT MÀN HÌNH.
+             Kết quả: keep-alive tự sát đúng lúc cần nhất, kéo theo thả wake lock.
+             Đường manifest cho ta stopSelf() lúc vuốt tắt mà KHÔNG dính nhánh đó.
+             Xem lib/data/platform/foreground_task_keep_alive.dart.
+
+             foregroundServiceType="specialUse|location":
+               • specialUse — không có kiểm tra runtime, không dính trần 6h/24h
+                 của dataSync trên Android 15. Lý do chọn ban đầu, giữ nguyên.
+               • location  — MẤU CHỐT CỦA LỖI MÀN-TẮT. BLUETOOTH_SCAN ở đây KHÔNG
+                 khai neverForLocation, nên BLE scan bị gate qua appop
+                 ACCESS_FINE_LOCATION. Từ Android 11, appop location được giải
+                 theo PROCESS_CAPABILITY_FOREGROUND_LOCATION, và capability đó
+                 chỉ có khi app có activity ĐANG HIỂN THỊ hoặc một FGS khai type
+                 location. Hai FGS cũ (mediaPlayback + specialUse) không cấp nó
+                 ⇒ màn tắt = mất capability = kết quả scan bị nuốt im lặng, bật
+                 màn là có lại ngay. Không cần ACCESS_BACKGROUND_LOCATION vì
+                 service luôn được start lúc app đang tiền cảnh (cạnh vào tour).
+             KHÔNG truyền serviceTypes từ Dart: khi bỏ trống, plugin dùng
+             FOREGROUND_SERVICE_TYPE_MANIFEST = hợp của đúng những type khai ở
+             đây, tránh bảng ánh xạ theo SDK level của plugin (specialUse chỉ
+             map từ API 34 trở lên, truyền tay sẽ rơi mất trên Android 13). -->
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="specialUse"
+            android:foregroundServiceType="specialUse|location"
             android:exported="false"
             android:stopWithTask="true">
             <property

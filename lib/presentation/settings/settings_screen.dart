@@ -14,6 +14,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
@@ -68,6 +69,13 @@ class SettingsScreen extends StatelessWidget {
             content.ui(UiKeys.settingsThemeDesc),
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
+          const SizedBox(height: 32),
+
+          // ── THIẾT LẬP MÁY (một lần mỗi thiết bị, lúc bàn giao) ──
+          Text(content.ui(UiKeys.settingsDeviceHeader).toUpperCase(),
+              style: AppText.kicker.copyWith(color: t.inkFaint)),
+          const SizedBox(height: 12),
+          const _BatteryOptimizationRow(),
           const SizedBox(height: 32),
 
           // ── CHẨN ĐOÁN ──
@@ -206,6 +214,103 @@ class _ServerSectionState extends State<_ServerSection> {
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(dt.day)}/${two(dt.month)}/${dt.year} '
         '${two(dt.hour)}:${two(dt.minute)}';
+  }
+}
+
+/// Thiết lập máy: xin miễn tối ưu hoá pin.
+///
+/// VÌ SAO Ở ĐÂY CHỨ KHÔNG PHẢI Ở GATE: đây là hộp thoại HỆ THỐNG, một lần mỗi
+/// thiết bị, và không có việc gì phải chìa nó vào mặt khách tham quan. Nhân
+/// viên setup máy vào Cài đặt một lần lúc bàn giao là xong.
+///
+/// Vì sao CẦN: keep-alive foreground service giữ được tiến trình khỏi Doze của
+/// AOSP, nhưng lớp tiết kiệm pin RIÊNG của từng ROM (rõ nhất là MIUI/HyperOS)
+/// là một cơ chế khác và vẫn đóng băng app khi màn tắt. Quyền
+/// REQUEST_IGNORE_BATTERY_OPTIMIZATIONS đã khai trong manifest từ đầu nhưng
+/// trước đây KHÔNG chỗ nào xin nó — nó chỉ nằm đó.
+///
+/// Trên MIUI vẫn còn hai công tắc CHỈ đặt tay được, không có API: "Tự khởi
+/// động" (Autostart) và Tiết kiệm pin > "Không hạn chế". Cần vào checklist bàn
+/// giao thiết bị.
+class _BatteryOptimizationRow extends StatefulWidget {
+  const _BatteryOptimizationRow();
+
+  @override
+  State<_BatteryOptimizationRow> createState() =>
+      _BatteryOptimizationRowState();
+}
+
+class _BatteryOptimizationRowState extends State<_BatteryOptimizationRow> {
+  /// null = chưa đọc xong (lần build đầu).
+  bool? _ignored;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final ignored = await context.read<IKeepAlive>().isBatteryOptimizationIgnored();
+    if (mounted) setState(() => _ignored = ignored);
+  }
+
+  Future<void> _request() async {
+    setState(() => _busy = true);
+    final ignored =
+        await context.read<IKeepAlive>().requestIgnoreBatteryOptimization();
+    if (mounted) {
+      setState(() {
+        _ignored = ignored;
+        _busy = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final content = context.watch<ContentProvider>();
+    final ignored = _ignored;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              ignored == true ? Icons.check_circle_outline : Icons.error_outline,
+              size: 20,
+              color: ignored == true ? t.ctaFill : t.inkMuted,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                ignored == null
+                    ? content.ui(UiKeys.settingsBatteryChecking)
+                    : ignored
+                        ? content.ui(UiKeys.settingsBatteryOk)
+                        : content.ui(UiKeys.settingsBatteryNeeded),
+                style: AppText.sheetSub.copyWith(color: t.ink),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          content.ui(UiKeys.settingsBatteryDesc),
+          style: AppText.stopMeta.copyWith(color: t.inkFaint),
+        ),
+        if (ignored == false) ...[
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: _busy ? null : _request,
+            child: Text(content.ui(UiKeys.settingsBatteryAction)),
+          ),
+        ],
+      ],
+    );
   }
 }
 

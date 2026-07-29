@@ -33,6 +33,11 @@ abstract final class UiKeys {
   static const keepAliveTitle = 'keepAlive.title';
   static const keepAliveText = 'keepAlive.text';
 
+  /// Nhãn nút TẮT HẲN APP trên thông báo keep-alive. Đây là đường thoát duy
+  /// nhất không phụ thuộc hành vi vuốt-tắt của từng ROM — giữ nhãn ngắn, Android
+  /// cắt chữ trên notification hẹp.
+  static const keepAliveEndButton = 'keepAlive.endButton';
+
   // ── gate — khách nhìn ──
   static const gateWelcomeTitle = 'gate.welcome.title';
   static const gateWelcomeSubtitle = 'gate.welcome.subtitle';
@@ -134,6 +139,14 @@ abstract final class UiKeys {
   static const settingsThemeHighContrast = 'settings.theme.highContrast';
   static const settingsCaveatLight = 'settings.caveat.light';
   static const settingsCaveatHighContrast = 'settings.caveat.highContrast';
+  // ── thiết lập máy (nhân viên, một lần mỗi thiết bị lúc bàn giao) ──
+  static const settingsDeviceHeader = 'settings.deviceHeader';
+  static const settingsBatteryChecking = 'settings.battery.checking';
+  static const settingsBatteryOk = 'settings.battery.ok';
+  static const settingsBatteryNeeded = 'settings.battery.needed';
+  static const settingsBatteryDesc = 'settings.battery.desc';
+  static const settingsBatteryAction = 'settings.battery.action';
+
   static const settingsDiagnosticsHeader = 'settings.diagnosticsHeader';
   static const settingsDistanceToggle = 'settings.distanceToggle';
   static const settingsDistanceDesc = 'settings.distanceDesc';
@@ -164,6 +177,7 @@ const Map<String, String> kUiDefaults = <String, String>{
       'Giữ ứng dụng chạy để bắt beacon khi màn hình tắt.',
   UiKeys.keepAliveTitle: 'Đang tham quan',
   UiKeys.keepAliveText: 'Giữ kết nối beacon khi màn hình tắt',
+  UiKeys.keepAliveEndButton: 'Kết thúc tham quan',
 
   UiKeys.gateWelcomeTitle: 'Chào mừng',
   UiKeys.gateWelcomeSubtitle: 'quý khách',
@@ -276,6 +290,16 @@ const Map<String, String> kUiDefaults = <String, String>{
           'khách đứng cạnh.',
   UiKeys.settingsCaveatHighContrast:
       'Tăng độ tương phản cho khách lớn tuổi hoặc thị lực kém.',
+  UiKeys.settingsDeviceHeader: 'Thiết lập máy',
+  UiKeys.settingsBatteryChecking: 'Đang kiểm tra tối ưu hoá pin…',
+  UiKeys.settingsBatteryOk: 'Đã tắt tối ưu hoá pin cho ứng dụng',
+  UiKeys.settingsBatteryNeeded: 'Cần tắt tối ưu hoá pin cho ứng dụng',
+  UiKeys.settingsBatteryDesc:
+      'Không tắt, hệ điều hành có thể đóng băng ứng dụng khi màn hình tắt và '
+      'khách sẽ không nghe thuyết minh khi bước vào khu. Trên máy Xiaomi cần '
+      'bật thêm "Tự khởi động" và đặt Tiết kiệm pin thành "Không hạn chế".',
+  UiKeys.settingsBatteryAction: 'Tắt tối ưu hoá pin',
+
   UiKeys.settingsDiagnosticsHeader: 'Chẩn đoán',
   UiKeys.settingsDistanceToggle: 'Hiện khoảng cách ước lượng',
   UiKeys.settingsDistanceDesc:

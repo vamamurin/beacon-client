@@ -250,8 +250,87 @@ class AppGraph {
     _ble.value = status;
   }
 
+  /// TẮT HẲN APP — ngang force-stop, không để lại gì chạy ngầm.
+  ///
+  /// Hai lối vào: khách vuốt tắt ở màn đa nhiệm (MuseumAudioHandler
+  /// .onTaskRemoved) và nút "Kết thúc tham quan" trên notification keep-alive.
+  ///
+  /// VÌ SAO PHẢI GIẾT TIẾN TRÌNH, KHÔNG CHỈ DỌN DẸP:
+  /// MainActivity kế thừa AudioServiceActivity, mà AudioServiceActivity
+  /// .provideFlutterEngine trả về FlutterEngineCache["audio_service_engine"] —
+  /// một engine CACHE thuộc sở hữu của plugin, KHÔNG phải của Activity. Vuốt
+  /// tắt huỷ Activity nhưng isolate Dart (BLE scan, hai timer 1 Hz, just_audio)
+  /// vẫn sống nguyên trong engine đó. Engine chỉ được huỷ ở đúng một chỗ:
+  /// AudioServicePlugin.onDestroy -> disposeFlutterEngine(), tức phải để
+  /// AudioService thực sự onDestroy — thứ không có gì bảo đảm khi còn client
+  /// đang bind, và càng không bảo đảm trên ROM Xiaomi. Đó là lý do trước đây
+  /// chỉ "Buộc dừng" mới tắt được tiếng.
+  ///
+  /// Nên: dọn sạch theo thứ tự đúng TRƯỚC (để không mất dữ liệu và không bỏ lại
+  /// notification mồ côi), rồi mới cắt điện.
+  Future<void> shutdownCompletely() async {
+    if (_disposed) return;
+    // Đặt NGAY, không đợi tới cuối: (a) hai lối vào (vuốt tắt + nút thông báo)
+    // có thể bắn gần như đồng thời, đây là chốt chống vào hai lần; (b) suốt
+    // quá trình dọn bên dưới, _watchAdapter vẫn có thể fire và gọi
+    // presence.start() trên thứ ta vừa dispose — cờ này chặn nó.
+    _disposed = true;
+
+    // 1) Im lặng trước tiên — khách vừa nói "xong rồi", đừng để kịp phát thêm
+    //    câu nào trong lúc ta dọn.
+    try {
+      audioController.leaveToStandby();
+      await audioEngine.stop();
+    } catch (_) {/* teardown: không có gì để cứu vãn, cứ đi tiếp */}
+
+    // 2) Đóng phiên đúng đường chính sách (ghi analytics kết thúc tour). Chỉ có
+    //    tác dụng khi đang touring; ở gate/atDesk là no-op.
+    try {
+      session.staffEndSession();
+      // session.state là broadcast stream (giao ở microtask), còn
+      // AnalyticsRecorder ghi sự kiện kết thúc tour TỪ listener đó. Nhường một
+      // vòng event loop để nó chạy XONG trước khi ta flush ở bước 4 — không có
+      // dòng này thì thứ tự đúng chỉ là tình cờ, nhờ các await bên dưới.
+      await Future<void>.delayed(Duration.zero);
+    } catch (_) {}
+
+    // 3) Radio xuống, keep-alive xuống. keepAlive.stop() cũng huỷ luôn
+    //    restart-alarm của plugin — alarm AlarmManager sống sót qua cái chết
+    //    của tiến trình, nên bỏ bước này là app tự hồi sinh sau khi ta exit.
+    try {
+      await presence.dispose();
+    } catch (_) {}
+    try {
+      await keepAlive.stop();
+    } catch (_) {}
+
+    // 4) Analytics buffer nằm trong RAM cho tới lúc flush; giết tiến trình
+    //    trước khi flush là mất số liệu của cả tour vừa rồi.
+    try {
+      await analyticsRecorder.dispose();
+      await analytics.flush();
+    } catch (_) {}
+
+    if (kDebugMode) debugPrint('[AppGraph] shutdownCompletely — thoát tiến trình');
+    await exitProcess();
+  }
+
+  /// Cắt điện tiến trình. Tách ra thành seam để test/mock không tự sát và để
+  /// chỗ gọi đọc ra ý định. Mặc định [_defaultExitProcess].
+  @visibleForTesting
+  Future<void> Function() exitProcess = _defaultExitProcess;
+
+  static Future<void> _defaultExitProcess() async {
+    // Cho platform channel kịp trả lời (onTaskRemoved đang đợi Future này) và
+    // cho notification kịp bị gỡ, rồi mới chết. exit() giết Dart VM = giết
+    // tiến trình = mọi service, engine cache và notification đi theo.
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    exit(0);
+  }
+
   Future<void> dispose() async {
     _disposed = true; // stop in-flight adapter callbacks from touching _ble
+    keepAlive.onEndRequested(null); // đừng để handler trỏ vào graph đã chết
     await keepAlive.stop();
     await _adapterSub?.cancel();
     await _tourStartSub.cancel();
@@ -454,6 +533,7 @@ abstract final class Injection {
           channelDescription: kaText(UiKeys.keepAliveChannelDesc),
           notificationTitle: kaText(UiKeys.keepAliveTitle),
           notificationText: kaText(UiKeys.keepAliveText),
+          endButtonText: kaText(UiKeys.keepAliveEndButton),
         );
       } else if (was == SessionPhase.touring && s.phase != SessionPhase.touring) {
         keepAlive.stop(); // <-- THÊM: hết tour → hạ keep-alive (tiết kiệm pin ở dock)
@@ -591,9 +671,15 @@ abstract final class Injection {
       analyticsDockSub: analyticsDockSub,
     );
 
-    // Close the two loops that need the finished graph.
+    // Close the loops that need the finished graph.
     graphRef = graph;      // scan failures can now reach _onScanFailure
     graph._watchAdapter(); // adapter on/off now drives readiness for the whole run
+
+    // Nút "Kết thúc tham quan" trên notification keep-alive ⇒ tắt hẳn app.
+    // Cắm SAU khi graph dựng xong vì handler cần chính graph này; AppRestarter
+    // dựng graph mới sẽ ghi đè handler (setter, không phải danh sách listener)
+    // và AppGraph.dispose() gỡ nó về null.
+    keepAlive.onEndRequested(() => unawaited(graph.shutdownCompletely()));
 
     return graph;
   }

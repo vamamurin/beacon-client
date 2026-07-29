@@ -1,6 +1,6 @@
 // Destination: lib/data/platform/foreground_task_keep_alive.dart (NEW)
 //
-// Impl [IKeepAlive] bằng flutter_foreground_task (^9.2.2). Đây là foreground
+// Impl [IKeepAlive] bằng flutter_foreground_task (^10.0.0). Đây là foreground
 // service THỨ HAI của app (bên cạnh audio_service). Trách nhiệm DUY NHẤT: giữ
 // tiến trình ở mức foreground suốt tour để tiến trình được miễn Doze — nhờ đó
 // BLE + timer + audio sống được khi màn tắt, kể cả lúc standby chưa phát gì.
@@ -10,11 +10,15 @@
 // notification (keep-alive + media của audio_service). Máy cho mượn màn tắt bỏ
 // túi nên khách không thấy.
 //
-// foregroundServiceType = specialUse (khai trong AndroidManifest): chọn
-// specialUse thay vì connectedDevice/dataSync vì nó KHÔNG có kiểm tra runtime
-// (connectedDevice đòi thiết bị đang kết nối — quét BLE thuần có thể trượt) và
-// KHÔNG bị giới hạn 6 giờ/24 giờ (dataSync trên Android 15). Với app sideload
-// cho bảo tàng, specialUse là lựa chọn an toàn nhất. Xem FEATURE_A_SETUP.md.
+// foregroundServiceType = specialUse|location (khai trong AndroidManifest):
+//   • specialUse thay vì connectedDevice/dataSync vì nó KHÔNG có kiểm tra
+//     runtime (connectedDevice đòi thiết bị đang kết nối — quét BLE thuần có
+//     thể trượt) và KHÔNG bị giới hạn 6 giờ/24 giờ (dataSync trên Android 15).
+//   • location là thứ THỰC SỰ mở được đường quét khi màn tắt: BLE scan ở app
+//     này bị gate qua appop ACCESS_FINE_LOCATION, và từ Android 11 appop đó chỉ
+//     mở khi process có PROCESS_CAPABILITY_FOREGROUND_LOCATION — chỉ FGS type
+//     location mới cấp. Ghi chú đầy đủ nằm ở AndroidManifest.
+// Với app sideload cho bảo tàng, cặp này là lựa chọn an toàn nhất.
 
 import 'dart:async';
 
@@ -24,13 +28,16 @@ import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
 
 /// Callback TOP-LEVEL bắt buộc của flutter_foreground_task: chạy trong isolate
-/// task, chỉ gắn một TaskHandler rỗng. @pragma giữ nó khỏi bị tree-shake.
+/// task, chỉ gắn một TaskHandler gần như rỗng. @pragma giữ nó khỏi tree-shake.
 @pragma('vm:entry-point')
 void tourKeepAliveCallback() {
   FlutterForegroundTask.setTaskHandler(_KeepAliveTaskHandler());
 }
 
-/// TaskHandler rỗng — ta không cần isolate task làm gì, chỉ cần service sống.
+/// TaskHandler — ta không cần isolate task làm gì, chỉ cần service sống. Ngoại
+/// lệ DUY NHẤT là nút "Kết thúc tham quan": sự kiện bấm nút được giao vào
+/// ISOLATE TASK, không phải isolate chính, nên phải bắc cầu về bằng
+/// sendDataToMain (đầu kia là [ForegroundTaskKeepAlive._onTaskData]).
 class _KeepAliveTaskHandler extends TaskHandler {
   @override
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {}
@@ -40,11 +47,28 @@ class _KeepAliveTaskHandler extends TaskHandler {
 
   @override
   Future<void> onDestroy(DateTime timestamp, bool isTimeout) async {}
+
+  @override
+  void onNotificationButtonPressed(String id) {
+    if (id == ForegroundTaskKeepAlive.kEndTourButtonId) {
+      FlutterForegroundTask.sendDataToMain(
+          ForegroundTaskKeepAlive.kEndTourSignal);
+    }
+  }
 }
 
 class ForegroundTaskKeepAlive implements IKeepAlive {
   /// ID service tùy ý, chỉ cần ổn định trong app.
   static const int _serviceId = 2847;
+
+  /// ID nút "Kết thúc tham quan" trên notification, và tín hiệu tương ứng bắc
+  /// từ isolate task về isolate chính. Public vì [_KeepAliveTaskHandler] chạy
+  /// ở isolate KHÁC và phải dùng đúng hằng này.
+  static const String kEndTourButtonId = 'end_tour';
+  static const String kEndTourSignal = 'keepAlive.endTour';
+
+  /// Handler do composition root cắm vào (xem [onEndRequested]).
+  void Function()? _onEnd;
 
   /// init() chỉ cần chạy MỘT lần cho cả vòng đời tiến trình. Gọi lazy ở start()
   /// (lúc bắt đầu tour, app đang tiền cảnh nên mọi thao tác FGS đều hợp lệ) nên
@@ -82,29 +106,48 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
         allowWakeLock: true, // <-- giữ CPU thức khi màn tắt (mấu chốt)
         allowWifiLock: false,
 
-        // VUỐT TẮT Ở ĐA NHIỆM PHẢI DỪNG HẲN.
+        // ⚠ CỐ Ý KHÔNG ĐẶT `stopWithTask` Ở ĐÂY. Đây là một cái bẫy đã từng
+        // sập, đừng "sửa lại" nếu không đọc hết đoạn này.
         //
-        // Đặt Ở ĐÂY chứ không chỉ dựa vào android:stopWithTask trong manifest,
-        // vì ForegroundServiceUtils.isSetStopWithTaskFlag đọc theo THỨ TỰ ƯU
-        // TIÊN: SharedPreferences trước, cờ manifest chỉ là fallback khi prefs
-        // không chứa khoá. Để null (mặc định) là XOÁ khoá khỏi prefs, tức phó
-        // mặc cho đường fallback. Đặt tường minh true thì chỉ còn MỘT nguồn sự
-        // thật, không phụ thuộc việc đọc được ServiceInfo.flags hay không.
+        // Ta VẪN muốn vuốt-tắt-ở-đa-nhiệm giết được service, và ta VẪN đạt
+        // được điều đó — bằng android:stopWithTask="true" trong AndroidManifest.
+        // ForegroundServiceUtils.isSetStopWithTaskFlag đọc SharedPreferences
+        // trước rồi mới tới cờ manifest, nên cả hai đường đều dẫn tới
+        // `onTaskRemoved -> stopSelf()`. Khác biệt nằm ở TÁC DỤNG PHỤ của
+        // đường prefs, trong ForegroundService.onStartCommand:
         //
-        // Vì sao quan trọng: nhánh còn lại của onTaskRemoved là
-        //     RestartReceiver.setRestartAlarm(this, 1000)
-        // — service TỰ HẸN GIỜ SỐNG LẠI sau 1 giây. Không đặt cờ nghĩa là ta
-        // đang chủ động yêu cầu nó hồi sinh, và force-stop thành cách duy nhất
-        // để dừng vì nó xoá luôn alarm.
-        stopWithTask: true,
+        //     if (prefs.contains(STOP_WITH_TASK) && prefs.getBoolean(...))
+        //         TrackVisibilityUtils.install(app) { stopForegroundService() }
+        //
+        // TrackVisibilityUtils bắn callback đó ở onActivityPaused ĐẦU TIÊN mà
+        // không còn activity nào resumed. TẮT MÀN HÌNH chính là sự kiện đó.
+        // Tệ hơn: `resumed` rỗng ngay lúc đăng ký (MainActivity đã resumed từ
+        // trước khi service start, nên không có onActivityResumed nào để đếm),
+        // nên lần pause đầu tiên là fire — kể cả bấm Home hay mở đa nhiệm.
+        // stopForegroundService() = cancelRestartAlarm + releaseLockMode +
+        // stopForeground + stopSelf ⇒ keep-alive tự sát và THẢ WAKE LOCK đúng
+        // lúc cần nhất, còn allowAutoRestart:false bảo đảm nó không sống lại.
+        // keepAlive.start() chỉ chạy ở cạnh gate->touring nên mất là mất cả tour.
+        //
+        // Đặt null (mặc định) ⇒ plugin remove() khoá khỏi prefs ⇒ chỉ còn đường
+        // manifest ⇒ có stopSelf lúc vuốt tắt, KHÔNG có TrackVisibilityUtils.
 
-        // Cùng lý do: chặn đường hồi sinh thứ hai trong onDestroy. Máy hướng
-        // dẫn bảo tàng không có kịch bản nào cần service tự sống lại — tour kết
-        // thúc là kết thúc.
+        // Chặn đường hồi sinh thứ hai, trong onDestroy. Máy hướng dẫn bảo tàng
+        // không có kịch bản nào cần service tự sống lại — tour kết thúc là kết
+        // thúc. (Khoá này độc lập với STOP_WITH_TASK, không dính bẫy ở trên.)
         allowAutoRestart: false,
       ),
     );
   }
+
+  /// Cầu nối từ isolate task về đây. Chỉ nhận đúng tín hiệu ta tự phát ra;
+  /// mọi payload lạ bị bỏ qua thay vì đoán mò.
+  void _onTaskData(Object data) {
+    if (data == kEndTourSignal) _onEnd?.call();
+  }
+
+  @override
+  void onEndRequested(void Function()? handler) => _onEnd = handler;
 
   @override
   Future<void> start({
@@ -112,19 +155,32 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
     String? channelDescription,
     String? notificationTitle,
     String? notificationText,
+    String? endButtonText,
   }) async {
     _ensureConfigured(
       channelName: channelName,
       channelDescription: channelDescription,
     );
+    // Tear-off của method instance là == với chính nó trong Dart, nên
+    // addTaskDataCallback dedupe được và removeTaskDataCallback ở [stop] gỡ
+    // đúng cái đã thêm — kể cả sau khi AppRestarter dựng lại graph.
+    FlutterForegroundTask.addTaskDataCallback(_onTaskData);
     try {
       if (await FlutterForegroundTask.isRunningService) return;
       await FlutterForegroundTask.startService(
         serviceId: _serviceId,
+        // KHÔNG truyền serviceTypes: để trống ⇒ plugin dùng
+        // FOREGROUND_SERVICE_TYPE_MANIFEST = hợp của specialUse|location khai
+        // trong AndroidManifest. Truyền tay sẽ đi qua bảng ánh xạ theo SDK của
+        // plugin, nơi specialUse chỉ tồn tại từ API 34 — trên Android 13 nó
+        // lặng lẽ rơi mất. Xem ghi chú ở AndroidManifest.
         notificationTitle: notificationTitle ?? 'Đang tham quan',
         notificationText:
             notificationText ?? 'Giữ kết nối beacon khi màn hình tắt',
         notificationIcon: null, // dùng icon app mặc định
+        notificationButtons: endButtonText == null
+            ? null
+            : [NotificationButton(id: kEndTourButtonId, text: endButtonText)],
         callback: tourKeepAliveCallback,
       );
       if (kDebugMode) debugPrint('[KeepAlive] started');
@@ -138,6 +194,7 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
 
   @override
   Future<void> stop() async {
+    FlutterForegroundTask.removeTaskDataCallback(_onTaskData);
     try {
       if (await FlutterForegroundTask.isRunningService) {
         await FlutterForegroundTask.stopService();
@@ -146,6 +203,28 @@ class ForegroundTaskKeepAlive implements IKeepAlive {
     } catch (e) {
       if (kDebugMode) debugPrint('[KeepAlive] stopService thất bại: $e');
     }
+  }
+
+  @override
+  Future<bool> isBatteryOptimizationIgnored() async {
+    try {
+      return await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[KeepAlive] đọc battery-opt thất bại: $e');
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> requestIgnoreBatteryOptimization() async {
+    try {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[KeepAlive] xin battery-opt thất bại: $e');
+    }
+    // Đọc lại thay vì tin giá trị trả về: hộp thoại có thể bị ROM nuốt, và cái
+    // ta thực sự quan tâm là TRẠNG THÁI SAU CÙNG.
+    return isBatteryOptimizationIgnored();
   }
 }
 
@@ -159,8 +238,20 @@ class NoopKeepAlive implements IKeepAlive {
     String? channelDescription,
     String? notificationTitle,
     String? notificationText,
+    String? endButtonText,
   }) async {}
 
   @override
   Future<void> stop() async {}
+
+  @override
+  void onEndRequested(void Function()? handler) {}
+
+  /// Desktop/mock coi như đã "miễn tối ưu pin": không có khái niệm đó, và trả
+  /// true giữ cho màn Cài đặt không hiện cảnh báo giả.
+  @override
+  Future<bool> isBatteryOptimizationIgnored() async => true;
+
+  @override
+  Future<bool> requestIgnoreBatteryOptimization() async => true;
 }

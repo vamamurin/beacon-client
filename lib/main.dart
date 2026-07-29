@@ -23,6 +23,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:beacon_client/data/audio/museum_audio_handler.dart';
 import 'package:beacon_client/data/settings/prefs_settings_store.dart';
+import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
 import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
 import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:flutter/material.dart';
@@ -240,6 +241,10 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
       controller: graph.audioController,
       metadata: _makeMediaResolver(graph),
       sessionState: graph.session.state,
+      // Vuốt tắt ở màn đa nhiệm ⇒ tắt HẲN app, không chỉ tắt tiếng. Handler
+      // sống ở tầng tiến trình nên phải được trỏ lại vào graph MỚI sau mỗi
+      // AppRestarter, y như các subscription bên trên.
+      shutdown: graph.shutdownCompletely,
       initialPhase: graph.session.current.phase,
     );
   }
@@ -273,6 +278,10 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
             // lại object mỗi frame và đánh dirty mọi widget đang đọc nó.
             // `create` chạy đúng một lần cho vòng đời của element này.
             Provider<AppRestarter>(create: (_) => AppRestarter(_restart)),
+
+            // Màn Cài đặt (nhân viên) đọc cái này để hiện trạng thái miễn tối
+            // ưu hoá pin — bước thiết lập một lần mỗi máy lúc bàn giao.
+            Provider<IKeepAlive>.value(value: graph.keepAlive),
 
             ChangeNotifierProvider<LanguageController>.value(
               value: graph.languageController,

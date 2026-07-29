@@ -56,11 +56,10 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
   TourAudioController? _controller;
   MediaMetadataResolver? _metadata;
 
-  /// Kept only so [onTaskRemoved] can silence playback directly. Every OTHER
-  /// path goes through [_controller] on purpose — TourAudioController owns
-  /// audio policy and is the single place allowed to call play(). Swiping the
-  /// app away is not a policy decision, it is a teardown.
-  IAudioEngine? _engine;
+  /// Teardown toàn app do composition root cắm vào (AppGraph.shutdownCompletely).
+  /// Handler KHÔNG tự dọn: nó chỉ biết audio, còn vuốt tắt là chuyện của cả
+  /// graph — radio, keep-alive, analytics, rồi tới tiến trình. Xem [onTaskRemoved].
+  Future<void> Function()? _shutdown;
 
   StreamSubscription<AudioQueueState>? _stateSub;
   StreamSubscription<SessionState>? _sessionSub;
@@ -75,6 +74,7 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
     required TourAudioController controller,
     required MediaMetadataResolver metadata,
     required Stream<SessionState> sessionState,
+    required Future<void> Function() shutdown,
     SessionPhase initialPhase = SessionPhase.atDesk,
   }) {
     _stateSub?.cancel();
@@ -82,7 +82,7 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
 
     _controller = controller;
     _metadata = metadata;
-    _engine = engine;
+    _shutdown = shutdown;
     _lastPhase = initialPhase;
 
     _stateSub = engine.onStateChanged.listen(_onEngineState);
@@ -98,7 +98,7 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
     _stateSub = null;
     _sessionSub = null;
     _controller = null;
-    _engine = null;
+    _shutdown = null;
   }
 
   // ---- engine -> notification ------------------------------------------------
@@ -172,8 +172,15 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
   /// android:stopWithTask (xem AndroidManifest), đó là lý do app vẫn phát tiếng
   /// sau khi vuốt tắt và chỉ "Buộc dừng" mới diệt được.
   ///
-  /// PHẢI sửa cả HAI nơi: cờ manifest cho phép Android hạ service, hàm này bảo
-  /// đảm tiếng tắt NGAY thay vì kêu tiếp cho tới khi tiến trình bị thu hồi.
+  /// ⚠ TẮT TIẾNG THÔI LÀ KHÔNG ĐỦ. Bản trước ở đây chỉ gọi engine.stop() +
+  /// super.stop(), và app vẫn sống: MainActivity kế thừa AudioServiceActivity,
+  /// mà AudioServiceActivity.provideFlutterEngine trả về
+  /// FlutterEngineCache["audio_service_engine"] — engine thuộc sở hữu của
+  /// plugin chứ không phải Activity. Activity chết, isolate Dart vẫn chạy: BLE
+  /// vẫn quét, TourAudioController vẫn có thể play() lại ở gói beacon kế tiếp.
+  /// Vì thế hàm này ủy quyền cho teardown TOÀN GRAPH, kết thúc bằng việc giết
+  /// tiến trình. Xem AppGraph.shutdownCompletely.
+  ///
   /// ⚠ LOG NÀY KHÔNG BỌC kDebugMode — CÓ CHỦ Ý.
   ///
   /// Đây là điểm quan sát DUY NHẤT trả lời được câu hỏi "Android có thực sự
@@ -184,13 +191,18 @@ class MuseumAudioHandler extends BaseAudioHandler with SeekHandler {
   /// kDebugMode là làm mù đúng bản release cần chẩn đoán.
   ///
   /// Kiểm chứng:  adb logcat -s flutter | grep TaskRemoved
-  ///   • Có dòng này  ⇒ cầu nối chạy, vấn đề nằm ở việc service không bị hạ.
-  ///   • Không có     ⇒ ROM không giao sự kiện; phải xử lý ở tầng Android.
+  ///   • Có dòng này  ⇒ cầu nối chạy, teardown bên dưới sẽ lo phần còn lại.
+  ///   • Không có     ⇒ ROM không giao sự kiện. Không sao: nút "Kết thúc tham
+  ///     quan" trên thông báo keep-alive đi thẳng vào cùng teardown đó và
+  ///     KHÔNG phụ thuộc ROM.
   @override
   Future<void> onTaskRemoved() async {
-    debugPrint('[MuseumAudioHandler] onTaskRemoved — dừng phát + hạ FGS');
-    await _engine?.stop();
-    await super.stop(); // gỡ notification + hạ foreground service
+    debugPrint('[MuseumAudioHandler] onTaskRemoved — tắt hẳn app');
+    await super.stop(); // gỡ notification + hạ foreground service của audio
     await super.onTaskRemoved();
+    final shutdown = _shutdown;
+    if (shutdown != null) {
+      await shutdown();
+    }
   }
 }
