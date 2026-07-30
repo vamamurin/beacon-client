@@ -33,11 +33,28 @@
         android:usesCleartextTraffic="true"
         android:networkSecurityConfig="@xml/network_security_config">
         
+        <!-- ĐÃ GỠ android:taskAffinity="" (thí nghiệm, xem bên dưới).
+
+             Thuộc tính đó nằm trong repo từ commit đầu tiên (b3f7a92 "initial
+             commit with project setup") — chưa bao giờ là bản vá cho vấn đề gì,
+             gần như chắc chắn là rác của template.
+
+             VÌ SAO NGHI NÓ: affinity rỗng đẩy MainActivity ra một task KHÔNG
+             mang danh tính package. Cả `android:stopWithTask` lẫn
+             Service.onTaskRemoved đều được ActivityManager định nghĩa theo
+             "task nào vừa bị xoá", và đường dọn dẹp đó đối chiếu task với
+             component/package của nó. Trên máy thật, `onTaskRemoved` CHƯA TỪNG
+             chạy dù cờ đã đặt đúng ở cả hai service — affinity rỗng là ứng viên
+             cấu trúc duy nhất còn lại giải thích được điều đó.
+
+             ⚠ CHƯA ĐƯỢC KIỂM CHỨNG. Đây là thay đổi ĐƠN LẺ, cố ý không đi kèm
+             gì khác, để một lần test cho ra một kết luận sạch. Nếu vuốt tắt vẫn
+             không ăn thì gỡ dòng này KHÔNG phải nguyên nhân — nhưng vẫn nên để
+             gỡ, vì không có lý do nào để giữ. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
