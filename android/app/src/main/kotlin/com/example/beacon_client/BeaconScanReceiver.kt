@@ -36,6 +36,14 @@ class BeaconScanReceiver : BroadcastReceiver() {
         }
 
         val results = extractResults(intent)
+
+        // Log CẢ đường thành công, không bọc BuildConfig.DEBUG. Bản đầu chỉ log
+        // lúc lỗi, và hệ quả là lần test đầu tiên trên máy thật không kết luận
+        // được gì: logcat im lặng có thể là "receiver không hề nổ" mà cũng có
+        // thể là "nổ bình thường, không có gói nào" — hai chẩn đoán trái ngược,
+        // cùng một dòng trống. Cơ chế này chỉ tồn tại để được đo, nên nó phải
+        // tự nói được là mình có sống hay không.
+        Log.i(TAG, "broadcast: ${results.size} kết quả thô")
         if (results.isEmpty()) return
 
         // elapsedRealtimeNanos của ScanResult đếm từ lúc BOOT, còn cả pipeline
@@ -63,7 +71,11 @@ class BeaconScanReceiver : BroadcastReceiver() {
                 )
             )
         }
-        if (payload.isEmpty()) return
+        if (payload.isEmpty()) {
+            Log.i(TAG, "  → 0 gói mang Apple MSD, bỏ lô")
+            return
+        }
+        Log.i(TAG, "  → ${payload.size} gói Apple MSD đẩy sang Dart")
 
         BeaconScanBridge.emit(mapOf("results" to payload))
     }
