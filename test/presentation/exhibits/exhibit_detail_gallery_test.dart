@@ -108,24 +108,28 @@ void main() {
     expect(find.byType(PageView), findsOneWidget);
     expect(_galleryValue(tester), 'Ảnh 1 trên 3');
 
-    Future<void> swipeLeft() async {
-      await tester.drag(find.byType(PageView), const Offset(-400, 0));
+    // Quãng vuốt tính theo BỀ NGANG THẬT của trang, không phải hằng số px:
+    // thẻ ảnh rộng ~252 trong viewport test 800×600, nên `Offset(-400, 0)`
+    // là 1.6 trang và PageView chốt thẳng sang trang 3. 0.6 trang là con số
+    // duy nhất đúng ở mọi cỡ màn: quá nửa ⇒ chốt sang trang kế, không hơn.
+    Future<void> swipe(double pages) async {
+      final w = tester.getSize(find.byType(PageView)).width;
+      await tester.drag(find.byType(PageView), Offset(pages * w, 0));
       await tester.pumpAndSettle();
     }
 
-    await swipeLeft();
+    await swipe(-0.6);
     expect(_galleryValue(tester), 'Ảnh 2 trên 3');
 
-    await swipeLeft();
+    await swipe(-0.6);
     expect(_galleryValue(tester), 'Ảnh 3 trên 3');
 
     // Ảnh cuối: vuốt tiếp KHÔNG vòng về đầu.
-    await swipeLeft();
+    await swipe(-0.6);
     expect(_galleryValue(tester), 'Ảnh 3 trên 3');
 
     // ...và vuốt ngược quay lại được.
-    await tester.drag(find.byType(PageView), const Offset(400, 0));
-    await tester.pumpAndSettle();
+    await swipe(0.6);
     expect(_galleryValue(tester), 'Ảnh 2 trên 3');
 
     handle.dispose();
@@ -146,8 +150,8 @@ void main() {
     // Lật sang ảnh 2 TRONG màn xem lớn. Cú kéo này cũng khoá luôn hợp đồng
     // `panEnabled: _zoomed`: nếu InteractiveViewer giành mất cú kéo ngang khi
     // chưa phóng to, PageView không lật và bộ đếm đứng yên ở "1/3".
-    await tester.drag(
-        find.byType(InteractiveViewer).first, const Offset(-400, 0));
+    final viewer = find.byType(InteractiveViewer).first;
+    await tester.drag(viewer, Offset(-tester.getSize(viewer).width * 0.6, 0));
     await tester.pumpAndSettle();
     expect(find.text('2/3'), findsOneWidget);
 
