@@ -29,10 +29,15 @@
 //     nửa A.
 //
 // ⚠ CÁI FILE NÀY KHÔNG CHỨNG MINH: rằng sóng THẬT SỰ về thành cụm khi màn
-// tắt. Đó là hành vi của Android/ROM, chỉ đo được trên máy thật bằng
-// logcat (xem README của đợt sửa). File này chứng minh phần còn lại: NẾU có
-// khoảng trống thì đủ để tạo ra chính xác các triệu chứng đã quan sát — và
-// quan trọng không kém, chỉ ra đúng cái núm làm nó biến mất.
+// tắt. Đó là hành vi của Android/ROM, chỉ đo được trên máy thật. File này
+// chứng minh phần còn lại: NẾU có khoảng trống thì đủ để tạo ra chính xác các
+// triệu chứng đã quan sát.
+//
+// PHẦN MÁY THẬT ĐÃ ĐƯỢC TRẢ LỜI Ở NƠI KHÁC: nguyên nhân là governor quét BLE
+// riêng của HyperOS bỏ đói một phiên quét sống qua ranh giới màn-tắt, và cách
+// chữa là dựng lại phiên theo chu kỳ. Đã tách biến bằng thực địa
+// (`BLE_SCAN_RESTART_SEC=0` ⇒ lỗi tái phát). Xem
+// RealBeaconScanner.restartInterval.
 
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';

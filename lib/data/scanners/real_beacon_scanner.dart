@@ -29,14 +29,14 @@
 //     useHardwareFilter = true, shape ibeacon
 //   + trên máy đó: MIUI Autostart BẬT, Battery saver = Không giới hạn
 //
-// ⚠ CHƯA TÁCH ĐƯỢC BIẾN NÀO LÀ THỨ GÁNH. Thiết lập MIUI và cặp
-// lowLatency+restart được đổi ở hai thời điểm khác nhau nhưng chưa bao giờ
-// được A/B tách bạch. Với máy bảo tàng thì không sao — bật cả hai. Với bản
-// phát hành cho khách thì có sao, vì KHÔNG đặt được thiết lập MIUI hộ người
-// dùng. Phép thử còn thiếu: giữ nguyên thiết lập MIUI, build với
-// `BLE_SCAN_RESTART_SEC=0`. Nếu hỏng lại ⇒ restart là thứ gánh, và bản phát
-// hành khách có cửa. Nếu vẫn chạy ⇒ thiết lập MIUI là thứ gánh, và bản phát
-// hành khách phải thiết kế lại quanh giới hạn đó.
+// ĐÃ TÁCH BIẾN — [restartInterval] LÀ THỨ GÁNH, KHÔNG PHẢI THIẾT LẬP MIUI.
+// Giữ nguyên Autostart + Không giới hạn, build với `BLE_SCAN_RESTART_SEC=0`:
+// LỖI TÁI PHÁT. Bật lại 15 giây: hết lỗi. Cùng máy, cùng thiết lập ROM, một
+// biến duy nhất. Hệ quả quan trọng cho bản phát hành cho khách: bản vá nằm
+// TRONG CODE, không phụ thuộc vào thiết lập mà ta không đặt hộ người dùng được.
+//
+// Redmi A1 (Android 12, vốn không dính lỗi) chạy bình thường với cấu hình này —
+// không hồi quy.
 //
 // ĐỪNG suy ra nguyên nhân từ `dumpsys` nữa. Đợt này đã ba lần rút ra kết luận
 // nhân quả từ số liệu dumpsys — chế độ quét, hình dạng filter, vòng restart —
@@ -57,29 +57,14 @@ import 'package:beacon_client/data/scanners/ibeacon_parser.dart';
 import 'package:beacon_client/domain/interfaces/i_beacon_scanner.dart';
 import 'package:beacon_client/domain/models/beacon_reading.dart';
 
-/// Hình dạng ScanFilter phần cứng. Tồn tại vì hai hình dạng này KHÁC NHAU về
-/// hành vi khi Android đẩy filter xuống chip lúc màn hình tắt — xem ghi chú dài
-/// ở [RealBeaconScanner.filterShape].
-enum MsdFilterShape {
-  /// Apple company id + prefix iBeacon `0x02 0x15` (có mask). Pattern THẬT, có
-  /// cái để chip so khớp. Mặc định.
-  ibeacon,
-
-  /// Chỉ Apple company id. Android biến nó thành pattern dài 0 byte — khớp mọi
-  /// gói khi lọc ở host, nhưng có thể khớp KHÔNG GÌ khi lọc offloaded.
-  companyOnly,
-}
-
 class RealBeaconScanner implements IBeaconScanner {
   RealBeaconScanner({
     AndroidScanMode? scanMode,
     this.appleCompanyId = kAppleCompanyId,
     bool? useHardwareFilter,
-    MsdFilterShape? filterShape,
     Duration? restartInterval,
   })  : scanMode = scanMode ?? _kScanModeDefault,
         useHardwareFilter = useHardwareFilter ?? _kUseHwFilterDefault,
-        filterShape = filterShape ?? _kMsdShapeDefault,
         restartInterval = _sanitizeRestart(
             restartInterval ??
                 (_kRestartSecDefault > 0
@@ -151,94 +136,26 @@ class RealBeaconScanner implements IBeaconScanner {
 
   /// CÓ bật ScanFilter phần cứng hay KHÔNG. **MẶC ĐỊNH `true`.**
   ///
-  /// ═══════════════════════════════════════════════════════════════════════
-  /// VÌ SAO ĐÃ ĐẢO NGƯỢC: MÀN TẮT = KHÔNG CÓ KẾT QUẢ NẾU QUÉT KHÔNG LỌC
-  /// ═══════════════════════════════════════════════════════════════════════
+  /// Filter là `MsdFilter(Apple 0x004C, data: [0x02, 0x15], mask: [0xFF, 0xFF])`
+  /// — prefix của gói iBeacon. Nó cắt nhiễu Continuity (AirPods/Handoff) ngay ở
+  /// chip, giảm số gói phải parse ở Dart. Phần rác còn lại do [parseIBeacon] và
+  /// guard UUID bảo tàng ở `ZonePresenceService._onReading` loại.
   ///
-  /// Từ Android 8.1, tầng Bluetooth của hệ thống KHÔNG giao kết quả cho một
-  /// phiên quét KHÔNG CÓ FILTER khi màn hình tắt; phiên quét được treo lại và
-  /// chỉ hồi phục khi màn bật. Đây là quy tắc của ScanManager trong AOSP, áp ở
-  /// tầng dưới app.
+  /// ⚠ FILTER KHÔNG LIÊN QUAN TỚI LỖI MÀN-TẮT — đừng đụng vào nó khi lỗi đó
+  /// tái phát. Một ghi chú dài từng nằm ở đây khẳng định "màn tắt = không có
+  /// kết quả nếu quét không lọc" (quy tắc `requiresScreenOn` của AOSP), nhưng
+  /// `dumpsys` trên chính máy hỏng đã bác bỏ: phiên quét bị treo với CẢ BA dạng
+  /// filter, và phiên KHÔNG filter lại cho 5217 kết quả — nhiều nhất toàn log.
+  /// Thứ chữa được lỗi đó là [restartInterval].
   ///
-  /// Triệu chứng thực địa khớp từng chi tiết: Redmi Note 12 tắt màn thì bước
-  /// vào khu KHÔNG phát thuyết minh, nhưng vừa bật màn (chưa cần mở khoá) là
-  /// audio phát ra NGAY — vì gói beacon bắt đầu tới đúng khoảnh khắc đó. Redmi
-  /// A1 không dính vì mỗi ROM/phiên bản áp quy tắc một khác.
-  ///
-  /// ⚠ FOREGROUND SERVICE KHÔNG MIỄN ĐƯỢC QUY TẮC NÀY. Ghi chú cũ ở đây kết
-  /// luận rằng vì "chết sau 5 phút" đã được vá bằng FGS nên tắt filter là an
-  /// toàn. Hai chuyện khác nhau: FGS giữ TIẾN TRÌNH sống (chống Doze), còn quy
-  /// tắc này nằm ở tầng giao kết quả quét và không quan tâm app có FGS hay
-  /// không. Đó là lý do keep-alive chạy hoàn hảo mà vẫn không có beacon nào.
-  ///
-  /// Đối chứng khi nghi filter chặn nhầm beacon:
+  /// Tắt để chẩn đoán khi nghi filter chặn nhầm beacon (vd firmware lạ không
+  /// theo đúng prefix iBeacon):
   ///   flutter run --dart-define=BLE_HW_FILTER=false
-  /// Chỉ dùng để CHẨN ĐOÁN với màn hình BẬT — bản release để false là tái phát
-  /// đúng lỗi màn-tắt-không-phát-tiếng ở trên.
   final bool useHardwareFilter;
 
-  /// HÌNH DẠNG của filter manufacturer-data. Xem [MsdFilterShape].
-  ///
-  /// ═══════════════════════════════════════════════════════════════════════
-  /// VÌ SAO CÁI NÀY TỒN TẠI, VÀ VÌ SAO MẶC ĐỊNH ĐÃ ĐỔI VỀ [ibeacon]
-  /// ═══════════════════════════════════════════════════════════════════════
-  ///
-  /// Đo trên Redmi Note 12 (HyperOS, Android 15) đã LOẠI TRỪ mọi nghi phạm còn
-  /// lại, bằng `dumpsys` chụp lúc màn hình đang tắt:
-  ///   • keep-alive FGS sống, `types=0x40000008` = SPECIAL_USE|LOCATION ✓
-  ///   • `curCapability=L--NFUA` — chữ L là PROCESS_CAPABILITY_FOREGROUND_
-  ///     LOCATION, tức appop location ĐANG MỞ ✓
-  ///   • `isFrozen=false`, `curProcState=4` (FOREGROUND_SERVICE) ✓
-  ///   • quyền + whitelist pin của ROM đã bật ✓
-  /// Vậy mà vẫn KHÔNG một gói nào tới. Cắm beacon mới toanh lúc màn tắt cũng
-  /// không bắt được; bật màn khoá lên là bắt được NGAY.
-  ///
-  /// Log còn chốt thêm một điều: gói đầu tiên tới khi cửa sổ app VẪN không
-  /// hiển thị (không có `visibilityChanged newVisibility=true` nào). Nên cổng
-  /// chặn là TRẠNG THÁI DISPLAY, không phải trạng thái foreground của app —
-  /// khớp với ScanManager của AOSP, vốn nghe ACTION_SCREEN_ON/OFF.
-  ///
-  /// Chỉ còn một mắt xích chưa soi: khi màn tắt, Android đẩy ScanFilter XUỐNG
-  /// CHIP để lọc offloaded, thay vì lọc bằng phần mềm ở host. Và đây là chỗ
-  /// `MsdFilter(companyId)` trần trụi trở nên nguy hiểm:
-  ///
-  ///     // ScanFilter.Builder — AOSP
-  ///     mManufacturerData = manufacturerData == null ? new byte[0] : ...;
-  ///
-  /// Không có cách nào khai "chỉ company id, miễn so dữ liệu" — Android LUÔN
-  /// biến nó thành pattern DÀI 0 BYTE rồi nạp xuống controller. Lọc ở host thì
-  /// pattern rỗng khớp mọi thứ (vòng lặp so sánh chạy 0 lần); nạp xuống phần
-  /// cứng thì pattern 0 byte là hành vi tuỳ chip, và "khớp KHÔNG GÌ CẢ" là kết
-  /// cục hoàn toàn có thể. Đúng bằng cái ta quan sát: màn bật chạy, màn tắt
-  /// câm, cùng một filter.
-  ///
-  /// Đó là lý do [MsdFilterShape.ibeacon] đưa lại `data: [0x02, 0x15]` + mask —
-  /// một pattern THẬT để chip có cái mà so. Cũng chính là thứ thư viện
-  /// AndroidBeaconLibrary (AltBeacon) nạp, thay vì pattern rỗng.
-  ///
-  /// ⚠ MỘT LẦN NỮA: CHƯA KIỂM CHỨNG. Một bản trước từng dùng data/mask và
-  /// thực địa báo gói iBeacon dài không tới được callback — nhưng loạt báo cáo
-  /// thực địa của đợt này đã sai vài lần (chuyện "app tự sáng màn hình" hoá ra
-  /// là tính năng nhấc-máy-sáng-màn của thiết bị), nên báo cáo đó không đủ sức
-  /// đóng cửa giả thuyết. Vì vậy hình dạng filter được để ĐỔI ĐƯỢC LÚC BUILD
-  /// thay vì chốt cứng — A/B trong một buổi test, không phải một vòng sửa code.
-  final MsdFilterShape filterShape;
-
-  /// Giá trị mặc định của [useHardwareFilter], đọc lúc build. Mặc định TRUE —
-  /// xem [useHardwareFilter] để biết vì sao tắt filter làm hỏng chế độ màn tắt.
-  /// Tắt để chẩn đoán: `--dart-define=BLE_HW_FILTER=false`.
+  /// Giá trị mặc định của [useHardwareFilter], đọc lúc build.
   static const bool _kUseHwFilterDefault =
       bool.fromEnvironment('BLE_HW_FILTER', defaultValue: true);
-
-  /// Mặc định của [filterShape]. Đổi lúc build:
-  ///   --dart-define=BLE_MSD_PATTERN=company   (hành vi cũ, pattern rỗng)
-  static const String _kMsdPatternName =
-      String.fromEnvironment('BLE_MSD_PATTERN', defaultValue: 'ibeacon');
-
-  static const MsdFilterShape _kMsdShapeDefault =
-      _kMsdPatternName == 'company'
-          ? MsdFilterShape.companyOnly
-          : MsdFilterShape.ibeacon;
 
   /// Chu kỳ tự dựng lại phiên quét. **MẶC ĐỊNH 15 GIÂY** — đây là thứ duy nhất
   /// trong cả đợt điều tra đã được thực địa xác nhận là CHẠY.
@@ -253,9 +170,18 @@ class RealBeaconScanner implements IBeaconScanner {
   /// Đây là kiến trúc của AndroidBeaconLibrary (CycledLeScanner) và là lý do
   /// thư viện đó chạy được ở nền trên các ROM khó.
   ///
-  /// Thực địa Redmi Note 12 (HyperOS): với chu kỳ 15 giây, tắt màn rồi bước vào
-  /// khu thì app TỰ PHÁT thuyết minh, không cần chạm màn hình. Trước đó cùng
-  /// máy, cùng filter, không có chu kỳ này thì câm.
+  /// Thực địa Redmi Note 12 (HyperOS) đã A/B TÁCH BẠCH đúng một biến này, giữ
+  /// nguyên mọi thứ khác kể cả thiết lập MIUI:
+  ///   • `BLE_SCAN_RESTART_SEC=15` → tắt màn, bước vào khu, TỰ PHÁT thuyết minh.
+  ///   • `BLE_SCAN_RESTART_SEC=0`  → lỗi TÁI PHÁT, câm cho tới khi chạm màn hình.
+  /// Đây là kết luận nhân quả DUY NHẤT của cả đợt được chứng minh bằng thực
+  /// nghiệm chứ không phải suy ra từ `dumpsys`.
+  ///
+  /// ĐỪNG "tối ưu" nó đi vì thấy dựng lại phiên quét mỗi 15 giây là lãng phí.
+  /// Sóng radio vẫn quét liên tục y hệt; chi phí thật là hai lời gọi binder mỗi
+  /// 15 giây cộng một khoảng hở vài chục mili-giây. Đổi lại là app chạy được khi
+  /// màn tắt. Đây cũng đúng là kiến trúc CycledLeScanner của
+  /// AndroidBeaconLibrary, không phải mẹo tự nghĩ.
   ///
   /// ⚠ MỘT LẦN `dumpsys` TỪNG LÀM TƯỞNG LÀ NÓ KHÔNG ĂN. Bản ghi lúc 15:15 cho
   /// sáu chu kỳ 15 giây liên tiếp với 0 kết quả mỗi chu kỳ, và điều đó đã bị
@@ -334,24 +260,14 @@ class RealBeaconScanner implements IBeaconScanner {
     _lastProcessed.clear(); // phiên scan mới → dedupe mới
 
     await FlutterBluePlus.startScan(
-      // Có filter là ĐIỀU KIỆN TIÊN QUYẾT để Android giao kết quả khi màn tắt.
-      // HÌNH DẠNG của nó quyết định việc lọc offloaded có khớp được gì không —
-      // xem ghi chú dài ở [filterShape].
-      //   • ibeacon (mặc định): Apple + prefix 0x02 0x15, mask 2 byte đầu. Gói
-      //     iBeacon thật đều qua; gói Continuity ngắn (AirPods/Handoff) bị chặn
-      //     ngay ở chip. Phần rác còn lại do _tryParseIBeacon + guard UUID ở
-      //     ZonePresenceService loại.
-      //   • companyOnly: pattern rỗng — hành vi cũ, giữ để đối chứng.
-      // TẮT hẳn: withMsd rỗng = quét không lọc. CHỈ chẩn đoán với màn hình bật.
+      // Prefix gói iBeacon: Apple + 0x02 0x15, mask 2 byte đầu. Cắt nhiễu
+      // Continuity ngay ở chip — xem [useHardwareFilter]. Rỗng = quét không lọc.
       withMsd: !useHardwareFilter
           ? const []
-          : switch (filterShape) {
-              MsdFilterShape.ibeacon => [
-                  MsdFilter(appleCompanyId,
-                      data: const [0x02, 0x15], mask: const [0xFF, 0xFF]),
-                ],
-              MsdFilterShape.companyOnly => [MsdFilter(appleCompanyId)],
-            },
+          : [
+              MsdFilter(appleCompanyId,
+                  data: const [0x02, 0x15], mask: const [0xFF, 0xFF]),
+            ],
       continuousUpdates: true,
       // lowLatency = scan liên tục, không duty-cycle, Android default là balanced (~5s delay)
       androidScanMode: scanMode,
@@ -391,12 +307,13 @@ class RealBeaconScanner implements IBeaconScanner {
   /// dừng phiên cũ, hủy subscription, xóa dedupe và lên dây lại đồng hồ, nên
   /// một chu kỳ đúng bằng một lần khởi động sạch.
   ///
-  /// Log KHÔNG bọc kDebugMode: cả điểm của tính năng này là chẩn đoán trên bản
-  /// release ở máy thật, và nó chỉ in mỗi [restartInterval] giây (≥ 10s).
+  /// Đường THÀNH CÔNG im lặng, chỉ log lúc HỎNG. Bản trước in một dòng mỗi chu
+  /// kỳ và KHÔNG bọc kDebugMode — hợp lý khi chu kỳ còn là thí nghiệm bật tay,
+  /// nhưng từ lúc nó thành mặc định thì đó là 4 dòng/phút chạy vĩnh viễn trên
+  /// máy khách, đủ để dìm chết mọi log khác đúng lúc cần chẩn đoán thật.
   void _cycleRestart() {
     if (_controller.isClosed) return;
     final gen = _generation;
-    debugPrint('[iBeacon] chu kỳ: dựng lại phiên quét');
     startScan().catchError((Object e) {
       debugPrint('[iBeacon] chu kỳ restart thất bại: $e');
       // startScan ném TRƯỚC khi lên dây → tự lên dây lại, nhưng chỉ khi chưa ai
@@ -445,8 +362,7 @@ class RealBeaconScanner implements IBeaconScanner {
   // MARK: - 5. iBEACON DECODING LOGIC (Giải mã Byte nhị phân chuẩn Apple)
   // ============================================================================
   /// Bóc vỏ manufacturer-data của Apple rồi giao phần giải mã cho
-  /// [parseIBeacon] — bộ luật Strict Mode dùng CHUNG với
-  /// [PendingIntentBeaconScanner], xem ghi chú ở ibeacon_parser.dart.
+  /// [parseIBeacon] — bộ luật Strict Mode, xem ghi chú ở ibeacon_parser.dart.
   BeaconReading? _tryParseIBeacon(ScanResult result) {
     final id = result.device.remoteId.str;
     final mfgData = result.advertisementData.manufacturerData;

@@ -66,36 +66,24 @@ Future<void> main() async {
   // app + BLE VẪN chạy bình thường — audio_service KHÔNG được phép chặn hay
   // giết phần lõi.
   //
-  // CÔNG TẮC CÔ LẬP: --dart-define=DISABLE_AUDIO_SERVICE=true sẽ BỎ QUA hẳn
-  // AudioService.init. Dùng để kiểm chứng nghi vấn "audio_service bóp cửa sổ
-  // quét BLE": nếu bật cờ này mà beacon hiện lại trong log → thủ phạm là
-  // audio_service, ta sửa cách nó cùng tồn tại với BLE. Nếu vẫn không có beacon
-  // → không phải audio_service.
-  const bool disableAudioService =
-      bool.fromEnvironment('DISABLE_AUDIO_SERVICE', defaultValue: false);
-
   MuseumAudioHandler? audioHandler;
-  if (disableAudioService) {
-    debugPrint('[AudioService] BỊ TẮT qua --dart-define=DISABLE_AUDIO_SERVICE');
-  } else {
-    try {
-      audioHandler = await AudioService.init(
-        builder: () => MuseumAudioHandler(),
-        config: const AudioServiceConfig(
-          androidNotificationChannelId: 'com.museum.beacon_client.audio',
-          androidNotificationChannelName: 'Thuyết minh tham quan',
-          androidStopForegroundOnPause: false, // <-- FGS sống khi pause
-          androidNotificationIcon: 'mipmap/ic_launcher',
-          androidNotificationClickStartsActivity: true,
-        ),
-      ).timeout(const Duration(seconds: 8));
-      debugPrint('[AudioService] init OK');
-    } catch (e, st) {
-      // Init hỏng/treo → chạy KHÔNG có audio nền + lock-screen (mất tính năng
-      // Feature A), nhưng app + BLE + audio foreground VẪN hoạt động.
-      audioHandler = null;
-      debugPrint('[AudioService] init FAILED (app vẫn chạy, không có FGS): $e\n$st');
-    }
+  try {
+    audioHandler = await AudioService.init(
+      builder: () => MuseumAudioHandler(),
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.museum.beacon_client.audio',
+        androidNotificationChannelName: 'Thuyết minh tham quan',
+        androidStopForegroundOnPause: false, // <-- FGS sống khi pause
+        androidNotificationIcon: 'mipmap/ic_launcher',
+        androidNotificationClickStartsActivity: true,
+      ),
+    ).timeout(const Duration(seconds: 8));
+    debugPrint('[AudioService] init OK');
+  } catch (e, st) {
+    // Init hỏng/treo → chạy KHÔNG có audio nền + lock-screen (mất tính năng
+    // Feature A), nhưng app + BLE + audio foreground VẪN hoạt động.
+    audioHandler = null;
+    debugPrint('[AudioService] init FAILED (app vẫn chạy, không có FGS): $e\n$st');
   }
 
   runApp(

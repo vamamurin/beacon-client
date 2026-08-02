@@ -89,19 +89,6 @@
             </intent-filter>
         </service>
 
-        <!-- Đầu nhận của PendingIntent scan (xem BeaconScanReceiver.kt).
-
-             exported="false" là ĐÚNG dù broadcast do hệ thống gửi: PendingIntent
-             được app tự tạo với component chỉ đích danh, và hệ thống gửi nó
-             NHÂN DANH app — không đi qua cổng exported. Để "true" chỉ mở cho app
-             khác bơm ScanResult giả vào pipeline định vị của bảo tàng.
-
-             KHÔNG có intent-filter: PendingIntent nhắm thẳng component, filter
-             chỉ thừa và làm receiver lộ ra với broadcast ngầm. -->
-        <receiver
-            android:name=".BeaconScanReceiver"
-            android:exported="false" />
-
         <receiver android:name="com.ryanheise.audioservice.MediaButtonReceiver"
             android:exported="true"
             tools:ignore="Instantiatable">

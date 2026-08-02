@@ -37,7 +37,6 @@ import 'package:beacon_client/data/repositories/http_sync_transport.dart';
 import 'package:beacon_client/data/repositories/local_bundle_zone_repository.dart';
 import 'package:beacon_client/data/repositories/mock_zone_repository.dart';
 import 'package:beacon_client/data/scanners/mock_beacon_scanner.dart';
-import 'package:beacon_client/data/scanners/pending_intent_beacon_scanner.dart';
 import 'package:beacon_client/data/scanners/real_beacon_scanner.dart';
 import 'package:beacon_client/data/gateways/mock_bluetooth_gate.dart';
 import 'package:beacon_client/data/gateways/real_bluetooth_gate.dart';
@@ -404,16 +403,9 @@ abstract final class Injection {
     );
 
     // ── radio pipeline ──
-    // BLE_PENDING_INTENT=true đổi sang phiên quét do HỆ THỐNG giữ thay vì tiến
-    // trình app giữ — hướng cuối còn lại cho lỗi màn-tắt trên HyperOS, sau khi
-    // dumpsys đã loại sạch mọi tham số của startScan. Xem đầu file
-    // pending_intent_beacon_scanner.dart. Mặc định TẮT: chưa kiểm chứng, và
-    // RealBeaconScanner đang chạy tốt trên Redmi A1.
     final IBeaconScanner scanner = switch (mode) {
       RunMode.mock => MockBeaconScanner(),
-      RunMode.real => PendingIntentBeaconScanner.kEnabled
-          ? PendingIntentBeaconScanner()
-          : RealBeaconScanner(),
+      RunMode.real => RealBeaconScanner(),
     };
     final IBluetoothGate bluetoothGate = switch (mode) {
       RunMode.mock => MockBluetoothGate(),

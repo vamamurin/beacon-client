@@ -1,14 +1,14 @@
 // FILE: /lib/data/scanners/ibeacon_parser.dart
 //
 // Giải mã payload iBeacon từ manufacturer-specific data của Apple, tách khỏi
-// [RealBeaconScanner] để [PendingIntentBeaconScanner] dùng chung ĐÚNG bộ luật.
+// [RealBeaconScanner].
 //
-// VÌ SAO PHẢI DÙNG CHUNG, KHÔNG COPY: toàn bộ Strict Mode (guard độ dài ≥23,
-// subtype 0x02, length 0x15, cửa sổ Measured Power [-100,-20]) là hợp đồng mà
-// pipeline phía sau tin tưởng — BeaconReading.measuredPower LUÔN là số âm hợp
-// lệ, nên BeaconTracker không phải tự phòng thủ. Hai bản sao của bộ luật này sẽ
-// trôi khỏi nhau, và cái trôi sẽ là cái chỉ chạy trên máy thật lúc màn tắt —
-// đúng chỗ khó phát hiện nhất.
+// VÌ SAO ĐỨNG RIÊNG: toàn bộ Strict Mode ở đây (guard độ dài ≥23, subtype 0x02,
+// length 0x15, cửa sổ Measured Power [-100,-20]) là HỢP ĐỒNG mà cả pipeline
+// phía sau tin tưởng — BeaconReading.measuredPower LUÔN là số âm hợp lệ, nên
+// BeaconTracker không phải tự phòng thủ. Là hàm thuần, không phụ thuộc
+// flutter_blue_plus, nên test được trực tiếp bằng mảng byte thay vì phải dựng
+// một ScanResult giả.
 
 import 'package:flutter/foundation.dart';
 

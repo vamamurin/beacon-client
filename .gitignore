@@ -87,3 +87,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle build output ở các thư mục con (dòng `/build/` phía trên chỉ bắt gốc)
+**/build/

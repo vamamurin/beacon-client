@@ -3,7 +3,6 @@ package com.example.beacon_client
 import android.content.Intent
 import android.util.Log
 import com.ryanheise.audioservice.AudioServiceActivity
-import io.flutter.embedding.engine.FlutterEngine
 
 /**
  * VÌ SAO CÓ CODE Ở ĐÂY THAY VÌ MỘT DÒNG `class MainActivity : AudioServiceActivity()`.
@@ -42,21 +41,6 @@ import io.flutter.embedding.engine.FlutterEngine
  */
 class MainActivity : AudioServiceActivity() {
 
-    private var pendingIntentScan: PendingIntentScanController? = null
-
-    /**
-     * Đăng ký kênh cho PendingIntent scan. Đặt ở đây thay vì viết một
-     * FlutterPlugin riêng vì hai lớp này thuần túy thuộc về app, không có ý
-     * định dùng lại ở project khác — thêm một tầng plugin chỉ để đúng hình thức
-     * là thêm một chỗ để sai.
-     */
-    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-        super.configureFlutterEngine(flutterEngine)
-        pendingIntentScan = PendingIntentScanController(
-            this, flutterEngine.dartExecutor.binaryMessenger
-        )
-    }
-
     override fun onDestroy() {
         // Đọc TRƯỚC super.onDestroy(): sau đó trạng thái Activity không còn
         // đáng tin để hỏi.
@@ -66,13 +50,6 @@ class MainActivity : AudioServiceActivity() {
         if (!userIsLeaving) return
 
         Log.i(TAG, "Activity finished (vuốt tắt/Back) — tắt hẳn app")
-
-        // PHẢI huỷ TRƯỚC killProcess. Phiên quét kiểu PendingIntent do HỆ THỐNG
-        // giữ, nên khác mọi thứ khác trong hàm này: giết tiến trình KHÔNG giết
-        // nó. Bỏ sót ở đây là để lại một đường cho hệ thống dựng app dậy sau khi
-        // khách đã vuốt tắt — đúng con bug mà cả nhánh này sinh ra để chữa,
-        // chỉ khác là khó tìm hơn nhiều.
-        pendingIntentScan?.stop()
 
         // Hạ hai foreground service trước khi giết, để không bỏ lại notification
         // mồ côi trong khoảng thời gian AMS dọn tiến trình.
