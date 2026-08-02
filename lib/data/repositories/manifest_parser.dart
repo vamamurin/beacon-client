@@ -249,6 +249,7 @@ abstract final class ManifestParser {
       }
 
       final meaningRaw = e['meaning'];
+      final imagePath = _reqPath(e, 'image', ctx);
       return ExhibitInfo(
         minor: _reqInt(e, 'minor', ctx),
         id: e['id'] as String?,
@@ -258,14 +259,52 @@ abstract final class ManifestParser {
             ? _localized(meaningRaw, ctx, fallbackLang)
             : null,
         specs: List.unmodifiable(specs),
-        imagePath: _reqPath(e, 'image', ctx),
+        imagePath: imagePath,
         thumbnailPath: _reqPath(e, 'thumbnail', ctx),
+        extraImagePaths: _optExtraImages(e, ctx, imagePath, warnings),
         audio: audio,
       );
     } on BundleValidationException catch (err) {
       warnings.add('$ctx: skipped — ${err.message}');
       return null;
     }
+  }
+
+  /// `exhibit.images` — dải ảnh phụ, TÙY CHỌN.
+  ///
+  /// KHÔNG bao giờ làm hỏng hiện vật. Đây là quy tắc khác với `image` (bắt
+  /// buộc, sai ⇒ bỏ cả hiện vật): mất một ảnh phụ thì khách vẫn xem được hiện
+  /// vật và vẫn nghe được thuyết minh — huỷ cả bản ghi vì một đường dẫn thừa
+  /// gõ sai là phản ứng lớn hơn thiệt hại. Mỗi phần tử hỏng ⇒ một warning và
+  /// bị bỏ; trường không có / sai kiểu ⇒ rỗng (mọi bundle cũ đi đường này).
+  ///
+  /// [mainPath] bị LỌC RA: CMS có thể liệt kê cả ảnh chính trong `images` cho
+  /// đủ bộ, và nếu không lọc thì màn 4 sẽ có hai trang y hệt nhau ở đầu dải.
+  /// Trùng lặp giữa các ảnh phụ cũng bị loại theo cùng lý do.
+  static List<String> _optExtraImages(
+    Map<String, dynamic> e,
+    String ctx,
+    String mainPath,
+    List<String> warnings,
+  ) {
+    final raw = e['images'];
+    if (raw == null) return const [];
+    if (raw is! List) {
+      warnings.add('$ctx: "images" is not an array — ignored');
+      return const [];
+    }
+
+    final out = <String>[];
+    final seen = <String>{mainPath};
+    for (final item in raw) {
+      if (item is! String || !_pathRule.hasMatch(item)) {
+        warnings.add('$ctx: dropped invalid entry in "images": $item');
+        continue;
+      }
+      if (!seen.add(item)) continue; // trùng ảnh chính hoặc trùng nhau
+      out.add(item);
+    }
+    return List.unmodifiable(out);
   }
 
   // ---- audio clip -------------------------------------------------------------

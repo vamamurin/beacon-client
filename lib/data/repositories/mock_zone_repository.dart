@@ -77,6 +77,8 @@ class MockZoneRepository implements IZoneRepository {
 /// Có thêm 2 key optional `welcomeImage`/`welcomeAccentImage` để đường parse
 /// optional-path được tập luyện; file ảnh không tồn tại trên máy dev ⇒
 /// HeroImage tự rơi về gradient fallback (đúng hợp đồng của nó).
+/// AK-47 và lựu đạn có thêm key optional `images` (ảnh phụ) để đường parse dải
+/// ảnh được tập luyện; Kar98 cố tình KHÔNG có, giữ nguyên hình dạng bundle cũ.
 /// Zone 1 "Vũ khí Kháng chiến": minors 1, 2, 5 — grenade is minor 5, matching
 /// the original UX scenario. Zone 2 "Kỷ vật Sinh hoạt": minors 1, 2.
 /// Desk beacon: major 99.
@@ -155,6 +157,10 @@ const String kMockManifestJson = r'''
           ],
           "image": "images/exhibits/sung-ak-47/main.jpg",
           "thumbnail": "images/exhibits/sung-ak-47/thumb.jpg",
+          "images": [
+            "images/exhibits/sung-ak-47/detail-bang.jpg",
+            "images/exhibits/sung-ak-47/detail-khoa-nong.jpg"
+          ],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/sung-ak-47.mp3",
@@ -198,6 +204,7 @@ const String kMockManifestJson = r'''
           },
           "image": "images/exhibits/luu-dan-mo-vit/main.jpg",
           "thumbnail": "images/exhibits/luu-dan-mo-vit/thumb.jpg",
+          "images": ["images/exhibits/luu-dan-mo-vit/detail-ngoi-no.jpg"],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/luu-dan-mo-vit.mp3",

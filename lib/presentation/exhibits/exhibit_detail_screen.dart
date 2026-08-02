@@ -198,31 +198,15 @@ class _PlayerPane extends StatelessWidget {
             ),
           ),
 
-          // THẺ ẢNH — chủ thể của màn hình.
+          // THẺ ẢNH — chủ thể của màn hình. Một hiện vật có thể có nhiều ảnh:
+          // vuốt ngang ngay trên thẻ để xem ảnh kế tiếp (xem [_ArtGallery]).
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.gutter),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                    maxHeight: media.size.height * _artMaxFraction),
-                child: AspectRatio(
-                  aspectRatio: 1,
-                  child: ClipRRect(
-                    borderRadius: t.sharpAll,
-                    // Tấm bo. `surfaceRaised` chứ không phải `surface`: thẻ
-                    // phải đọc ra là một vật ĐẶT TRÊN trang, không phải một lỗ
-                    // thủng trên trang.
-                    child: ColoredBox(
-                      color: t.surfaceRaised,
-                      child: HeroImage(
-                        filePath: content.imagePath(exhibit.imagePath),
-                        fit: BoxFit.contain,
-                        cacheWidth: decodeWidth,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+            child: _ArtGallery(
+              paths: exhibit.imagePaths,
+              content: content,
+              decodeWidth: decodeWidth,
+              maxHeight: media.size.height * _artMaxFraction,
             ),
           ),
 
@@ -267,6 +251,404 @@ class _PlayerPane extends StatelessWidget {
   String? _artistLine() {
     if (exhibit.specs.isEmpty) return null;
     return exhibit.specs.map((s) => content.text(s.value)).join(' · ');
+  }
+}
+
+/// Thẻ ảnh + dải ảnh vuốt ngang.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// MỘT HIỆN VẬT KHÔNG CHỈ CÓ MỘT MẶT
+/// ═══════════════════════════════════════════════════════════════════════════
+/// Một khẩu súng có báng và có khoá nòng; một chiếc bình có hoa văn ở thân và
+/// một vết nứt ở đáy. Bundle mang được nhiều ảnh cho một hiện vật
+/// ([ExhibitInfo.imagePaths]) và màn này cho khách vuốt ngang qua đúng bấy
+/// nhiêu ảnh — không vòng lại, hết ảnh là hết vuốt.
+///
+/// ── VÌ SAO KHÔNG ĐỔI GÌ KHÁC TRONG BỐ CỤC ───────────────────────────────
+/// Thẻ vẫn là thẻ: cùng `AspectRatio(1)`, cùng trần [maxHeight], cùng tấm bo
+/// `surfaceRaised`, cùng `BoxFit.contain`. Chỉ phần RUỘT của thẻ đổi từ một
+/// [HeroImage] thành một [PageView] các [HeroImage]. Với hiện vật một ảnh —
+/// tức toàn bộ nội dung đã phát hành trước tính năng này — màn hình trông
+/// KHÔNG khác một pixel nào: chấm chỉ số cũng không vẽ.
+///
+/// ── CHẤM CHỈ SỐ Ở DƯỚI THẺ, KHÔNG ĐÈ LÊN ẢNH ────────────────────────────
+/// Đè chỉ báo lên ảnh là kéo cả màn ngược về HỌ ON-IMAGE mà `_PlayerPane` vừa
+/// bỏ được (xem doc của nó): lại cần veil, lại cần `inkOnImage`, và lại có một
+/// vật sáng nằm trên hiện vật. Chấm đứng dưới thẻ, trên `surface`, dùng
+/// `accent` / `outline` — cùng hai token thanh tiến trình đang dùng.
+///
+/// ── NHIỀU ẢNH QUÁ THÌ ĐỔI SANG SỐ ───────────────────────────────────────
+/// Quá [_maxDots] chấm, hàng chấm thành một vạch nhiễu không đếm được bằng
+/// mắt và bắt đầu tranh chỗ với bề ngang thẻ. Từ đó trở đi hiện "3/12" — cùng
+/// thông tin, một dòng chữ.
+///
+/// ── CHẠM ĐỂ XEM LỚN ─────────────────────────────────────────────────────
+/// Thẻ cao nhiều nhất 42% màn: đủ để nhận ra hiện vật, không đủ để đọc chữ
+/// khắc hay nhìn hoa văn. Chạm mở [_FullScreenGallery]; vị trí ảnh đi cả hai
+/// chiều nên đóng lại là thẻ nhỏ đang ở đúng ảnh khách vừa xem.
+class _ArtGallery extends StatefulWidget {
+  /// Đường dẫn bundle-relative, ảnh chính đứng đầu. Luôn không rỗng.
+  final List<String> paths;
+  final ContentProvider content;
+  final int decodeWidth;
+  final double maxHeight;
+
+  const _ArtGallery({
+    required this.paths,
+    required this.content,
+    required this.decodeWidth,
+    required this.maxHeight,
+  });
+
+  @override
+  State<_ArtGallery> createState() => _ArtGalleryState();
+}
+
+class _ArtGalleryState extends State<_ArtGallery> {
+  /// Trên ngưỡng này thì đổi chấm sang bộ đếm "i/n".
+  static const int _maxDots = 8;
+  static const double _dot = 6;
+
+  final _controller = PageController();
+  int _index = 0;
+
+  @override
+  void didUpdateWidget(covariant _ArtGallery old) {
+    super.didUpdateWidget(old);
+    // Đồng bộ nội dung giữa lúc khách đang xem có thể làm dải ngắn lại. Không
+    // kẹp lại, `_index` sẽ trỏ ra ngoài và bộ đếm nói "5/3".
+    if (_index >= widget.paths.length) {
+      _index = widget.paths.length - 1;
+      // jumpTo cần controller đã gắn viewport — sau frame này thì chắc chắn.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _controller.hasClients) _controller.jumpToPage(_index);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final content = widget.content;
+    final n = widget.paths.length;
+
+    final card = Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: widget.maxHeight),
+        child: AspectRatio(
+          aspectRatio: 1,
+          // Chạm để xem ảnh lớn. `Semantics(button:)` + `onTap` đi thành cặp
+          // như mọi nút khác ở màn này — GestureDetector KHÔNG tự khai action
+          // cho screen reader. Vuốt ngang vẫn thuộc về PageView bên trong: tap
+          // và horizontal drag không tranh nhau trong gesture arena.
+          child: Semantics(
+            button: true,
+            label: content.ui(UiKeys.exhibitImageOpen),
+            onTap: _openViewer,
+            child: GestureDetector(
+              onTap: _openViewer,
+              child: ClipRRect(
+                borderRadius: t.sharpAll,
+                // Tấm bo. `surfaceRaised` chứ không phải `surface`: thẻ phải
+                // đọc ra là một vật ĐẶT TRÊN trang, không phải một lỗ thủng
+                // trên trang.
+                child: ColoredBox(
+                  color: t.surfaceRaised,
+                  child: n == 1
+                      // Một ảnh ⇒ KHÔNG dựng PageView. Không phải để tiết kiệm:
+                      // một viewport cuộn được mà không cuộn đi đâu vẫn khai
+                      // scrollLeft/scrollRight với screen reader — hứa một thao
+                      // tác không tồn tại, đúng lỗi doc `_TrackBar` đã cấm.
+                      ? _page(0)
+                      : PageView.builder(
+                          controller: _controller,
+                          itemCount: n,
+                          onPageChanged: (i) => setState(() => _index = i),
+                          itemBuilder: (_, i) => _page(i),
+                        ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (n == 1) return card;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Semantics BỌC NGOÀI, không `excludeSemantics`: các thao tác cuộn
+        // (scrollLeft/scrollRight) là của chính PageView bên trong — TalkBack
+        // lật ảnh bằng chúng. Ở đây chỉ thêm TÊN và VỊ TRÍ; `value` đổi mỗi lần
+        // lật nên screen reader đọc lên "Ảnh 2 trên 4" mà không cần chạm gì.
+        Semantics(
+          container: true,
+          label: content.ui(UiKeys.exhibitGalleryLabel),
+          value: content.uif(UiKeys.exhibitGalleryPosition, {
+            'i': '${_index + 1}',
+            'n': '$n',
+          }),
+          child: card,
+        ),
+        const SizedBox(height: AppSpace.x3),
+        // Chỉ báo là TRANG TRÍ cho mắt: vị trí đã nằm trong `value` ở trên,
+        // đọc lần hai chỉ làm dài thêm câu của TalkBack.
+        ExcludeSemantics(
+          child: n <= _maxDots
+              ? Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < n; i++)
+                      Padding(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: AppSpace.x1 / 2),
+                        child: Container(
+                          width: _dot,
+                          height: _dot,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == _index ? t.accent : t.outline,
+                          ),
+                        ),
+                      ),
+                  ],
+                )
+              : Text(
+                  content.uif(UiKeys.exhibitGalleryCounter, {
+                    'i': '${_index + 1}',
+                    'n': '$n',
+                  }),
+                  style: AppText.timeCode.copyWith(color: t.inkMuted),
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _page(int i) => HeroImage(
+        filePath: widget.content.imagePath(widget.paths[i]),
+        fit: BoxFit.contain,
+        cacheWidth: widget.decodeWidth,
+      );
+
+  /// Mở ảnh toàn màn hình từ ĐÚNG ảnh đang xem, và nhận lại vị trí khi khách
+  /// lật ảnh ở trong đó — đóng lại thì thẻ nhỏ đang ở cùng một ảnh. Đồng bộ
+  /// bằng CALLBACK chứ không bằng giá trị trả về của `pop`: nút back của hệ
+  /// thống pop mà không mang theo giá trị nào, và khi đó thẻ nhỏ sẽ lệch.
+  void _openViewer() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        barrierDismissible: false,
+        transitionDuration: const Duration(milliseconds: 180),
+        pageBuilder: (_, __, ___) => _FullScreenGallery(
+          paths: widget.paths,
+          initialIndex: _index,
+          content: widget.content,
+          onIndexChanged: _syncIndex,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+      ),
+    );
+  }
+
+  void _syncIndex(int i) {
+    if (!mounted || i == _index) return;
+    setState(() => _index = i);
+    if (_controller.hasClients) _controller.jumpToPage(i);
+  }
+}
+
+/// Ảnh toàn màn hình: vuốt để đổi ảnh, chụm/nhấn đúp để phóng to.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// VÌ SAO CÓ MÀN NÀY
+/// ═══════════════════════════════════════════════════════════════════════════
+/// Thẻ ảnh ở màn 4 cao nhiều nhất 42% chiều màn và luôn `contain` — nghĩa là
+/// một hiện vật có hoa văn nhỏ hoặc chữ khắc thì khách KHÔNG đọc được. Đây
+/// chính là thứ mà tủ kính ở bảo tàng cũng không cho làm: đến gần hơn.
+///
+/// ── NỀN `surface`, KHÔNG PHẢI ĐEN ────────────────────────────────────────
+/// Lightbox thường mặc định nền đen. Ở đây nền đen là một MÀU THÔ nằm ngoài
+/// hệ token, và nó phá preset giấy / tương phản cao đúng kiểu doc
+/// `HeroImage.fallback` đã cảnh báo. `surface` + `ink` giữ màn này cùng họ với
+/// phần còn lại của app; ảnh vẫn nổi vì nó là vật duy nhất trên trang.
+///
+/// ── PHÓNG TO KHOÁ VUỐT ───────────────────────────────────────────────────
+/// Khi đã phóng to, kéo ngang là DI CHUYỂN TRONG ẢNH, không phải lật ảnh. Nếu
+/// để `PageView` giữ nguyên physics, mỗi lần khách kéo sang mép ảnh sẽ nhảy
+/// mất sang ảnh khác. `physics` đổi sang `NeverScrollableScrollPhysics` ngay
+/// khi scale > 1 — và về lại khi thu về 1x.
+///
+/// ── MỘT `TransformationController` DÙNG CHUNG ────────────────────────────
+/// Chỉ trang ĐANG xem mới phóng to được, và mỗi lần lật trang là reset về 1x.
+/// Các trang kề bên tuy còn sống trong viewport cache cũng nhận cùng ma trận,
+/// nhưng lúc lật được thì ma trận luôn là identity ⇒ không nhìn thấy gì.
+class _FullScreenGallery extends StatefulWidget {
+  final List<String> paths;
+  final int initialIndex;
+  final ContentProvider content;
+  final ValueChanged<int> onIndexChanged;
+
+  const _FullScreenGallery({
+    required this.paths,
+    required this.initialIndex,
+    required this.content,
+    required this.onIndexChanged,
+  });
+
+  @override
+  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
+}
+
+class _FullScreenGalleryState extends State<_FullScreenGallery> {
+  /// Mức phóng khi nhấn đúp. 2.5 đọc được chữ khắc mà chưa vỡ ảnh bundle.
+  static const double _doubleTapScale = 2.5;
+  static const double _maxScale = 4;
+
+  late final PageController _pages =
+      PageController(initialPage: widget.initialIndex);
+  late int _index = widget.initialIndex;
+
+  final _view = TransformationController();
+  bool _zoomed = false;
+  Offset? _doubleTapAt;
+
+  @override
+  void initState() {
+    super.initState();
+    _view.addListener(_onTransform);
+  }
+
+  void _onTransform() {
+    final zoomed = _view.value.getMaxScaleOnAxis() > 1.01;
+    if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
+  }
+
+  void _toggleZoom() {
+    if (_zoomed) {
+      _view.value = Matrix4.identity();
+      return;
+    }
+    final p = _doubleTapAt;
+    if (p == null) return;
+    // Neo vào điểm khách nhấn: dịch trước, phóng sau.
+    final d = -p * (_doubleTapScale - 1);
+    _view.value = Matrix4.identity()
+      ..translate(d.dx, d.dy)
+      ..scale(_doubleTapScale);
+  }
+
+  @override
+  void dispose() {
+    _view.removeListener(_onTransform);
+    _view.dispose();
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final media = MediaQuery.of(context);
+    final content = widget.content;
+    final n = widget.paths.length;
+    // Ở đây ảnh chiếm TRỌN bề ngang màn — không trừ gutter như thẻ nhỏ, và
+    // nhân thêm hệ số phóng để lúc zoom vẫn còn điểm ảnh mà xem.
+    final decodeWidth =
+        (media.size.width * media.devicePixelRatio * 1.5).round();
+
+    return Scaffold(
+      backgroundColor: t.surface,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: PageView.builder(
+                controller: _pages,
+                itemCount: n,
+                physics: _zoomed
+                    ? const NeverScrollableScrollPhysics()
+                    : const PageScrollPhysics(),
+                onPageChanged: (i) {
+                  _view.value = Matrix4.identity(); // trang mới luôn ở 1x
+                  setState(() => _index = i);
+                  widget.onIndexChanged(i);
+                },
+                itemBuilder: (_, i) => GestureDetector(
+                  onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
+                  onDoubleTap: _toggleZoom,
+                  child: InteractiveViewer(
+                    transformationController: _view,
+                    minScale: 1,
+                    maxScale: _maxScale,
+                    // CHƯA PHÓNG TO THÌ TẮT PAN — nếu không, InteractiveViewer
+                    // giành mất cú kéo ngang một ngón trong gesture arena và
+                    // PageView không bao giờ lật trang (ở 1x cú kéo đó còn
+                    // chẳng dịch được ảnh đi đâu vì đã kịch biên). Đã phóng to
+                    // thì ngược lại: pan là của ảnh, và physics của PageView
+                    // đã chuyển sang NeverScrollable ở trên.
+                    panEnabled: _zoomed,
+                    child: HeroImage(
+                      filePath: content.imagePath(widget.paths[i]),
+                      fit: BoxFit.contain,
+                      cacheWidth: decodeWidth,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Hàng đỉnh: đóng bên trái (cùng chỗ nút back của màn 4, ngón tay
+            // không phải học lại), vị trí ảnh bên phải (cùng chỗ số hiện vật).
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.gutter, vertical: AppSpace.x2),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _RoundIcon(
+                      icon: Icons.close,
+                      onTap: () => Navigator.of(context).pop(),
+                      label: content.ui(UiKeys.exhibitImageClose),
+                    ),
+                    if (n > 1)
+                      Semantics(
+                        liveRegion: true,
+                        label: content.uif(UiKeys.exhibitGalleryPosition, {
+                          'i': '${_index + 1}',
+                          'n': '$n',
+                        }),
+                        excludeSemantics: true,
+                        child: Text(
+                          content.uif(UiKeys.exhibitGalleryCounter, {
+                            'i': '${_index + 1}',
+                            'n': '$n',
+                          }),
+                          style:
+                              AppText.timeCode.copyWith(color: t.inkMuted),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

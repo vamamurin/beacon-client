@@ -109,9 +109,15 @@ abstract final class UiKeys {
   static const exhibitSectionIntro = 'exhibit.section.intro';
   static const exhibitSectionMeaning = 'exhibit.section.meaning';
   static const exhibitSectionSpecs = 'exhibit.section.specs';
+  // dải ảnh (vuốt ngang trên thẻ ảnh) + xem ảnh lớn
+  static const exhibitGalleryCounter = 'exhibit.gallery.counter'; // {i} {n}
+  static const exhibitImageOpen = 'exhibit.image.open';
+  static const exhibitImageClose = 'exhibit.image.close';
   // accessibility (screen reader)
   static const exhibitProgressLabel = 'exhibit.progress.label';
   static const exhibitDurationSpoken = 'exhibit.duration.spoken'; // {m} {s}
+  static const exhibitGalleryLabel = 'exhibit.gallery.label';
+  static const exhibitGalleryPosition = 'exhibit.gallery.position'; // {i} {n}
 
   // ── exhibit list (màn 3) ──
   static const exhibitListEmptyTitle = 'exhibitList.emptyTitle';
@@ -258,8 +264,13 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.exhibitSectionIntro: 'Giới thiệu',
   UiKeys.exhibitSectionMeaning: 'Ý nghĩa',
   UiKeys.exhibitSectionSpecs: 'Thông số',
+  UiKeys.exhibitGalleryCounter: '{i}/{n}',
+  UiKeys.exhibitImageOpen: 'Xem ảnh lớn',
+  UiKeys.exhibitImageClose: 'Đóng ảnh',
   UiKeys.exhibitProgressLabel: 'Tiến trình thuyết minh',
   UiKeys.exhibitDurationSpoken: '{m} phút {s} giây',
+  UiKeys.exhibitGalleryLabel: 'Dải ảnh hiện vật',
+  UiKeys.exhibitGalleryPosition: 'Ảnh {i} trên {n}',
 
   UiKeys.exhibitListEmptyTitle: 'Khu này chưa có hiện vật',
   UiKeys.exhibitListEmptyBody:

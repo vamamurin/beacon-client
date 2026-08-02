@@ -8,6 +8,7 @@ log.txt
 **/android/key.properties
 **/*.keystore
 **/*.jks
+manifest.json
 
 # Android — local SDK path & plugin registrant
 **/android/local.properties

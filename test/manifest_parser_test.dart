@@ -33,6 +33,35 @@ void main() {
       // meaning is optional: AK-47 has it, Kar98 does not.
       expect(zone1.exhibitByMinor(1)!.meaning, isNotNull);
       expect(zone1.exhibitByMinor(2)!.meaning, isNull);
+
+      // "images" is optional too: AK-47 carries two extra shots, Kar98 none.
+      // imagePaths always leads with the representative image.
+      final ak47 = zone1.exhibitByMinor(1)!;
+      expect(ak47.extraImagePaths, hasLength(2));
+      expect(ak47.imagePaths.first, ak47.imagePath);
+      expect(ak47.imagePaths, hasLength(3));
+      expect(zone1.exhibitByMinor(2)!.extraImagePaths, isEmpty);
+      expect(zone1.exhibitByMinor(2)!.imagePaths,
+          [zone1.exhibitByMinor(2)!.imagePath]);
+    });
+
+    test('the representative image is never duplicated inside the gallery', () {
+      final m = baseManifest();
+      final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
+      final ak47 = exhibits.first as Map<String, dynamic>;
+      // CMS liệt kê cả ảnh chính, và lặp một ảnh phụ.
+      ak47['images'] = [
+        ak47['image'],
+        'images/exhibits/sung-ak-47/detail-bang.jpg',
+        'images/exhibits/sung-ak-47/detail-bang.jpg',
+      ];
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, isEmpty);
+      expect(parsed.zones.first.exhibitByMinor(1)!.imagePaths, [
+        'images/exhibits/sung-ak-47/main.jpg',
+        'images/exhibits/sung-ak-47/detail-bang.jpg',
+      ]);
     });
 
     test('audio resolve: two-axis fallback (audio vi, transcript still vi)',
@@ -117,6 +146,35 @@ void main() {
       // Zone-level field ⇒ bundle-fatal.
       expect(() => ManifestParser.parse(m),
           throwsA(isA<BundleValidationException>()));
+    });
+
+    test('bad entries in "images" are dropped, the exhibit survives', () {
+      final m = baseManifest();
+      final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
+      final ak47 = exhibits.first as Map<String, dynamic>;
+      ak47['images'] = [
+        'images/exhibits/sung-ak-47/detail-bang.jpg', // hợp lệ
+        'images/../../../etc/passwd.jpg', // traversal
+        'https://cdn.example.com/x.jpg', // URL
+        42, // sai kiểu
+      ];
+
+      final parsed = ManifestParser.parse(m);
+      final parsedAk47 = parsed.zones.first.exhibitByMinor(1)!;
+      expect(parsedAk47.extraImagePaths,
+          ['images/exhibits/sung-ak-47/detail-bang.jpg']);
+      expect(parsed.warnings, hasLength(3));
+      expect(parsed.warnings.every((w) => w.contains('sung-ak-47')), isTrue);
+    });
+
+    test('"images" that is not an array is ignored with a warning', () {
+      final m = baseManifest();
+      final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
+      (exhibits.first as Map<String, dynamic>)['images'] = 'main.jpg';
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.zones.first.exhibitByMinor(1)!.extraImagePaths, isEmpty);
+      expect(parsed.warnings.single, contains('"images" is not an array'));
     });
 
     test('unsupported schemaVersion is rejected up front', () {

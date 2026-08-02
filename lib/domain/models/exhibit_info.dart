@@ -58,6 +58,22 @@ class ExhibitInfo {
   final String imagePath;
   final String thumbnailPath;
 
+  /// Ảnh PHỤ của hiện vật (góc chụp khác, chi tiết hoa văn, mặt sau…), theo
+  /// đúng thứ tự CMS xếp. Rỗng ⇒ hiện vật chỉ có một ảnh, đúng như mọi bundle
+  /// đã phát hành trước tính năng này.
+  ///
+  /// VÌ SAO KHÔNG GỘP THẲNG ẢNH CHÍNH VÀO ĐÂY: [imagePath] là một hợp đồng
+  /// riêng — nó là ảnh ĐẠI DIỆN, thứ duy nhất được phép xuất hiện ở nơi chỉ có
+  /// chỗ cho một ảnh. Một list gộp sẽ biến "ảnh đại diện" thành "phần tử [0]",
+  /// và một bundle xếp sai thứ tự sẽ âm thầm đổi bộ mặt của hiện vật ở màn 3.
+  /// Giữ hai trường ⇒ ảnh đại diện KHÔNG THỂ trôi.
+  ///
+  /// Dải để xem là [imagePaths] — luôn có ảnh chính đứng đầu.
+  final List<String> extraImagePaths;
+
+  /// Toàn bộ dải ảnh xem được, ảnh chính đứng đầu. Luôn có ít nhất 1 phần tử.
+  List<String> get imagePaths => [imagePath, ...extraImagePaths];
+
   /// Per-exhibit narration clip — one playlist item in the zone tour.
   final AudioClipInfo audio;
 
@@ -70,6 +86,7 @@ class ExhibitInfo {
     this.specs = const [],
     required this.imagePath,
     required this.thumbnailPath,
+    this.extraImagePaths = const [],
     required this.audio,
   });
 
@@ -85,6 +102,7 @@ class ExhibitInfo {
         listEquals(other.specs, specs) &&
         other.imagePath == imagePath &&
         other.thumbnailPath == thumbnailPath &&
+        listEquals(other.extraImagePaths, extraImagePaths) &&
         other.audio == audio;
   }
 
@@ -98,6 +116,7 @@ class ExhibitInfo {
         Object.hashAll(specs),
         imagePath,
         thumbnailPath,
+        Object.hashAll(extraImagePaths),
         audio,
       );
 }
