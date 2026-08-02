@@ -26,7 +26,6 @@ import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
-import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/services/tour_audio_controller.dart';
 
 import '../../fakes/fake_audio_engine.dart';
@@ -164,6 +163,32 @@ void main() {
 
     handle.dispose();
     await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('ảnh nở từ thẻ ra màn lớn: hai đầu mang CÙNG một Hero tag',
+      (tester) async {
+    await tester.pumpWidget(_app(major: 1, minor: 1));
+    await tester.pumpAndSettle();
+
+    // Chỉ trang đang xem mới có Hero — hai cặp tag cùng khớp một lúc thì
+    // Flutter cho cả hai cùng bay, kể cả tấm đang ở ngoài màn hình.
+    expect(find.byType(Hero), findsOneWidget);
+    final tag = tester.widget<Hero>(find.byType(Hero)).tag;
+    expect(tag, 'exhibit-image:images/exhibits/sung-ak-47/main.jpg');
+
+    await tester.tap(_semantics('Xem ảnh lớn'));
+    await tester.pumpAndSettle();
+
+    // Hợp đồng thật của Hero nằm ở CHỖ NÀY: tag lệch một ký tự thì không có
+    // lỗi nào cả — ảnh chỉ lặng lẽ hiện ra mà không bay, và không test nào
+    // khác trong file này nhận ra.
+    expect(
+      find.byWidgetPredicate((w) => w is Hero && w.tag == tag),
+      findsWidgets,
+    );
+
+    await tester.tap(_semantics('Đóng ảnh'));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Kar98 (1 ảnh): không có PageView, không có chỉ báo dải ảnh',

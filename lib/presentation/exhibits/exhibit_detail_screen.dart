@@ -33,6 +33,7 @@ import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/theme/app_motion.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
@@ -254,6 +255,15 @@ class _PlayerPane extends StatelessWidget {
   }
 }
 
+/// Tag nối một tấm ảnh ở THẺ NHỎ với chính nó ở MÀN XEM LỚN.
+///
+/// Khoá là ĐƯỜNG DẪN BUNDLE, không phải chỉ số trang: chỉ số đổi khi khách
+/// vuốt, và hai route không bao giờ đảm bảo cùng một `_index` tại đúng khoảnh
+/// khắc Hero đi tìm bạn nhảy. Đường dẫn thì bất biến và đã là duy nhất trong
+/// bundle (parser lọc trùng ngay khi parse), nên cặp tag luôn khớp đúng tấm
+/// ảnh khách đang nhìn — kể cả khi khách lật vài ảnh ở màn lớn rồi mới đóng.
+Object _imageHeroTag(String bundlePath) => 'exhibit-image:$bundlePath';
+
 /// Thẻ ảnh + dải ảnh vuốt ngang.
 ///
 /// ═══════════════════════════════════════════════════════════════════════════
@@ -433,30 +443,55 @@ class _ArtGalleryState extends State<_ArtGallery> {
     );
   }
 
-  Widget _page(int i) => HeroImage(
-        filePath: widget.content.imagePath(widget.paths[i]),
-        fit: BoxFit.contain,
-        cacheWidth: widget.decodeWidth,
+  Widget _page(int i) => _heroWrapped(
+        index: i,
+        child: HeroImage(
+          filePath: widget.content.imagePath(widget.paths[i]),
+          fit: BoxFit.contain,
+          cacheWidth: widget.decodeWidth,
+        ),
       );
+
+  /// Bọc [Hero] CHỈ cho trang đang xem.
+  ///
+  /// `PageView` lúc nghỉ chỉ dựng một trang, nhưng trong lúc cuộn nó dựng cả
+  /// trang kề. Nếu bọc Hero cho mọi trang thì có lúc HAI cặp tag khớp nhau
+  /// cùng lúc giữa hai route, và Flutter sẽ cho cả hai cùng bay — một tấm ảnh
+  /// ngoài màn hình bay ngang qua mà khách không hiểu nó là gì. Ràng buộc
+  /// `i == _index` biến "thường là một" thành "luôn luôn một".
+  Widget _heroWrapped({required int index, required Widget child}) {
+    if (index != _index) return child;
+    return Hero(tag: _imageHeroTag(widget.paths[index]), child: child);
+  }
 
   /// Mở ảnh toàn màn hình từ ĐÚNG ảnh đang xem, và nhận lại vị trí khi khách
   /// lật ảnh ở trong đó — đóng lại thì thẻ nhỏ đang ở cùng một ảnh. Đồng bộ
   /// bằng CALLBACK chứ không bằng giá trị trả về của `pop`: nút back của hệ
   /// thống pop mà không mang theo giá trị nào, và khi đó thẻ nhỏ sẽ lệch.
   void _openViewer() {
+    // Thời lượng của route CŨNG là thời lượng chuyến bay Hero — Flutter lấy
+    // thẳng từ đây. Nên `AppMotion.of` ở chỗ này tắt luôn cả hai khi khách bật
+    // "Giảm chuyển động": ảnh hiện ra tức thì, không nở, không mờ dần.
+    final duration = AppMotion.of(context, AppMotion.slow);
     Navigator.of(context).push(
       PageRouteBuilder<void>(
         opaque: true,
         barrierDismissible: false,
-        transitionDuration: const Duration(milliseconds: 180),
+        transitionDuration: duration,
+        reverseTransitionDuration: duration,
         pageBuilder: (_, __, ___) => _FullScreenGallery(
           paths: widget.paths,
           initialIndex: _index,
           content: widget.content,
           onIndexChanged: _syncIndex,
         ),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
+        // NỀN mờ dần, ẢNH thì bay — hai việc khác nhau và Hero lo việc thứ
+        // hai. Nếu fade cả trang, tấm ảnh sẽ vừa bay vừa nhạt và chuyến bay
+        // mất đúng thứ nó sinh ra để nói: vật này ĐẾN TỪ cái thẻ kia.
+        transitionsBuilder: (_, anim, __, child) => FadeTransition(
+          opacity: CurvedAnimation(parent: anim, curve: AppMotion.enter),
+          child: child,
+        ),
       ),
     );
   }
@@ -534,6 +569,13 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
     if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
   }
 
+  Widget _viewerImage(ContentProvider content, int i, int decodeWidth) =>
+      HeroImage(
+        filePath: content.imagePath(widget.paths[i]),
+        fit: BoxFit.contain,
+        cacheWidth: decodeWidth,
+      );
+
   void _toggleZoom() {
     if (_zoomed) {
       _view.value = Matrix4.identity();
@@ -541,11 +583,12 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
     }
     final p = _doubleTapAt;
     if (p == null) return;
-    // Neo vào điểm khách nhấn: dịch trước, phóng sau.
+    // Neo vào điểm khách nhấn: dịch trước, phóng sau. `…ByDouble` chứ không
+    // phải `translate`/`scale` — hai cái kia đã deprecated trong vector_math.
     final d = -p * (_doubleTapScale - 1);
     _view.value = Matrix4.identity()
-      ..translate(d.dx, d.dy)
-      ..scale(_doubleTapScale);
+      ..translateByDouble(d.dx, d.dy, 0, 1)
+      ..scaleByDouble(_doubleTapScale, _doubleTapScale, 1, 1);
   }
 
   @override
@@ -598,11 +641,15 @@ class _FullScreenGalleryState extends State<_FullScreenGallery> {
                     // thì ngược lại: pan là của ảnh, và physics của PageView
                     // đã chuyển sang NeverScrollable ở trên.
                     panEnabled: _zoomed,
-                    child: HeroImage(
-                      filePath: content.imagePath(widget.paths[i]),
-                      fit: BoxFit.contain,
-                      cacheWidth: decodeWidth,
-                    ),
+                    // Hero CHỈ ở trang đang xem — xem doc `_heroWrapped` bên
+                    // `_ArtGalleryState`: hai cặp tag cùng khớp một lúc thì
+                    // Flutter cho cả hai cùng bay.
+                    child: i == _index
+                        ? Hero(
+                            tag: _imageHeroTag(widget.paths[i]),
+                            child: _viewerImage(content, i, decodeWidth),
+                          )
+                        : _viewerImage(content, i, decodeWidth),
                   ),
                 ),
               ),
