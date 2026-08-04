@@ -168,6 +168,87 @@ abstract final class UiKeys {
   static const settingsSyncMock = 'settings.sync.mock';
   static const settingsLastSync = 'settings.lastSync'; // {time}
 
+  // ── menu (màn trước tour + sheet giữa tour) ──
+  // Nhãn của từng MỤC nằm ở `menu.item.<id>` với `<id>` là MenuAction.id, nên
+  // thêm một đích đến mới ở tầng domain là biết ngay phải bổ sung khóa nào.
+  static const menuTitle = 'menu.title';
+  static const menuSubtitle = 'menu.subtitle';
+  static const menuBack = 'menu.back';
+  static const menuSheetTitle = 'menu.sheetTitle';
+  static const menuOpen = 'menu.open'; // a11y nhãn nút ☰
+  static const menuClose = 'menu.close';
+  static const menuItemStart = 'menu.item.start';
+  static const menuItemStartDesc = 'menu.item.start.desc';
+  static const menuItemGuide = 'menu.item.guide';
+  static const menuItemGuideDesc = 'menu.item.guide.desc';
+  static const menuItemCatalog = 'menu.item.catalog';
+  static const menuItemCatalogDesc = 'menu.item.catalog.desc';
+  static const menuItemMap = 'menu.item.map';
+  static const menuItemMapDesc = 'menu.item.map.desc';
+  static const menuItemTours = 'menu.item.tours';
+  static const menuItemToursDesc = 'menu.item.tours.desc';
+
+  // ── hướng dẫn sử dụng ──
+  static const guideTitle = 'guide.title';
+  static const guideSubtitle = 'guide.subtitle';
+  static const guideClose = 'guide.close';
+  static const guideStepSemantics = 'guide.stepSemantics'; // {i} {n}
+  // Bộ bước MẶC ĐỊNH khi bundle chưa khai báo `guide.steps`. Màn hướng dẫn
+  // không bao giờ được để trống — đây là thứ nhân viên chỉ vào khi khách hỏi.
+  static const guideDefaultHeadphonesTitle = 'guide.default.headphones.title';
+  static const guideDefaultHeadphonesBody = 'guide.default.headphones.body';
+  static const guideDefaultWalkTitle = 'guide.default.walk.title';
+  static const guideDefaultWalkBody = 'guide.default.walk.body';
+  static const guideDefaultHelpTitle = 'guide.default.help.title';
+  static const guideDefaultHelpBody = 'guide.default.help.body';
+
+  // ── thanh điều khiển trong tour ──
+  static const tourMenuCta = 'tour.menuCta';
+  static const tourEndCta = 'tour.endCta';
+
+  // ── gợi ý "đã đi hết các khu" (KHÔNG chặn, KHÔNG tự chuyển màn) ──
+  static const tourCompleteTitle = 'tour.complete.title'; // {n}
+  static const tourCompleteBody = 'tour.complete.body';
+  static const tourCompleteCta = 'tour.complete.cta';
+  static const tourCompleteDismiss = 'tour.complete.dismiss';
+
+  // ── tổng kết chuyến đi (VẪN trong phiên — có đường lui) ──
+  static const summaryTitle = 'summary.title';
+  static const summarySubtitle = 'summary.subtitle';
+  static const summaryStatZones = 'summary.stat.zones';
+  static const summaryStatExhibits = 'summary.stat.exhibits';
+  static const summaryStatDuration = 'summary.stat.duration';
+  static const summaryStatFraction = 'summary.stat.fraction'; // {a} {b}
+  static const summaryStatMinutes = 'summary.stat.minutes'; // {m}
+  static const summaryStatSemantics = 'summary.stat.semantics'; // {label} {value}
+  static const summaryZonesHeader = 'summary.zonesHeader';
+  static const summaryZoneVisited = 'summary.zoneVisited';
+  static const summaryZoneMissed = 'summary.zoneMissed';
+  static const summaryEmptyTitle = 'summary.emptyTitle';
+  static const summaryEmptyBody = 'summary.emptyBody';
+  static const summaryClosingFallback = 'summary.closingFallback';
+  static const summaryContinueCta = 'summary.continueCta';
+  static const summaryEndCta = 'summary.endCta';
+  static const summaryQrTitle = 'summary.qrTitle';
+  static const summaryQrBody = 'summary.qrBody';
+
+  // ── đánh giá (nằm TRÊN màn tổng kết vì cần sessionId còn sống) ──
+  static const feedbackQuestion = 'feedback.question';
+  static const feedbackThanks = 'feedback.thanks';
+  static const feedbackTagsHint = 'feedback.tagsHint';
+  static const feedbackSubmit = 'feedback.submit';
+  static const feedbackSkip = 'feedback.skip';
+  static const feedbackStarSemantics = 'feedback.starSemantics'; // {i} {n}
+  static const feedbackNpsSemantics = 'feedback.npsSemantics'; // {i}
+  static const feedbackEmojiBad = 'feedback.emoji.bad';
+  static const feedbackEmojiOk = 'feedback.emoji.ok';
+  static const feedbackEmojiGood = 'feedback.emoji.good';
+
+  // ── cảm ơn / gửi lại máy (SAU khi phiên đã dọn) ──
+  static const farewellTitle = 'farewell.title';
+  static const farewellBody = 'farewell.body';
+  static const farewellCta = 'farewell.cta';
+
   // STAGE 2 (kế): settings; nhãn accessibility còn lại của progress bar.
 }
 
@@ -190,7 +271,12 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.gateWelcomeGuidance:
       'Ứng dụng tự nhận biết khu trưng bày quanh bạn. '
           'Đeo tai nghe để bắt đầu nghe thuyết minh.',
-  UiKeys.gateStart: 'Bắt đầu tham quan',
+  // Nút này giờ mở MENU chứ không vào thẳng tour, nên nhãn ngắn lại: mục
+  // "Bắt đầu tham quan" nằm trên Menu (UiKeys.menuItemStart), và để cả hai
+  // cùng mang một chữ thì khách bấm xong tưởng mình bấm hụt.
+  // ⚠ Bundle nào đã ghi đè `gate.start` thành "Bắt đầu tham quan" nên sửa lại
+  // trong CMS — app không ghi đè giá trị của bảo tàng.
+  UiKeys.gateStart: 'Bắt đầu',
   UiKeys.gateMuseumFallback: 'Bảo tàng',
   UiKeys.gateSettingsHint: 'Mở cài đặt (dành cho nhân viên)',
 
@@ -329,6 +415,90 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.settingsSyncFailed: 'Đồng bộ thất bại',
   UiKeys.settingsSyncMock: 'Chế độ thử — không có máy chủ',
   UiKeys.settingsLastSync: 'Lần đồng bộ gần nhất: {time}',
+
+  UiKeys.menuTitle: 'Bạn muốn bắt đầu thế nào?',
+  UiKeys.menuSubtitle:
+      'Chọn một mục bên dưới. Bạn có thể quay lại đây bất cứ lúc nào.',
+  UiKeys.menuBack: 'Quay lại',
+  UiKeys.menuSheetTitle: 'Menu',
+  UiKeys.menuOpen: 'Mở menu',
+  UiKeys.menuClose: 'Đóng menu',
+  UiKeys.menuItemStart: 'Bắt đầu tham quan',
+  UiKeys.menuItemStartDesc:
+      'Ứng dụng tự nhận biết khu trưng bày quanh bạn và phát thuyết minh.',
+  UiKeys.menuItemGuide: 'Hướng dẫn sử dụng',
+  UiKeys.menuItemGuideDesc: 'Cách đeo tai nghe, chỉnh âm lượng và đi tham quan.',
+  UiKeys.menuItemCatalog: 'Danh mục hiện vật',
+  UiKeys.menuItemCatalogDesc: 'Xem toàn bộ khu trưng bày và hiện vật.',
+  UiKeys.menuItemMap: 'Sơ đồ bảo tàng',
+  UiKeys.menuItemMapDesc: 'Xem vị trí các khu trưng bày.',
+  UiKeys.menuItemTours: 'Chọn tuyến tham quan',
+  UiKeys.menuItemToursDesc: 'Các tuyến gợi ý theo thời gian bạn có.',
+
+  UiKeys.guideTitle: 'Hướng dẫn sử dụng',
+  UiKeys.guideSubtitle: 'Ba điều cần biết trước khi bắt đầu.',
+  UiKeys.guideClose: 'Đã hiểu',
+  UiKeys.guideStepSemantics: 'Bước {i} trên {n}',
+  UiKeys.guideDefaultHeadphonesTitle: 'Đeo tai nghe',
+  UiKeys.guideDefaultHeadphonesBody:
+      'Thuyết minh chỉ phát khi có tai nghe, để không làm phiền khách bên cạnh. '
+          'Chỉnh âm lượng bằng phím cạnh máy.',
+  UiKeys.guideDefaultWalkTitle: 'Cứ đi tự nhiên',
+  UiKeys.guideDefaultWalkBody:
+      'Máy tự nhận ra bạn đang ở khu nào và bắt đầu kể. Bạn không cần bấm gì. '
+          'Muốn nghe lại một hiện vật, chạm vào ảnh của hiện vật đó.',
+  UiKeys.guideDefaultHelpTitle: 'Khi cần trợ giúp',
+  UiKeys.guideDefaultHelpBody:
+      'Không nghe thấy gì? Kiểm tra tai nghe đã cắm chặt chưa và thử bước hẳn '
+          'vào giữa khu trưng bày. Nếu vẫn không được, mang máy tới quầy.',
+
+  UiKeys.tourMenuCta: 'Menu',
+  UiKeys.tourEndCta: 'Kết thúc',
+
+  UiKeys.tourCompleteTitle: 'Bạn đã đi hết {n} khu trưng bày',
+  UiKeys.tourCompleteBody:
+      'Bạn có thể xem lại chuyến đi, hoặc tiếp tục dạo thêm tuỳ thích.',
+  UiKeys.tourCompleteCta: 'Xem tổng kết',
+  UiKeys.tourCompleteDismiss: 'Để sau',
+
+  UiKeys.summaryTitle: 'Chuyến tham quan của bạn',
+  UiKeys.summarySubtitle: 'Đây là những gì bạn đã đi qua hôm nay.',
+  UiKeys.summaryStatZones: 'Khu đã ghé',
+  UiKeys.summaryStatExhibits: 'Hiện vật đã nghe',
+  UiKeys.summaryStatDuration: 'Thời gian tham quan',
+  UiKeys.summaryStatFraction: '{a}/{b}',
+  UiKeys.summaryStatMinutes: '{m} phút',
+  UiKeys.summaryStatSemantics: '{label}: {value}',
+  UiKeys.summaryZonesHeader: 'Các khu trưng bày',
+  UiKeys.summaryZoneVisited: 'Đã ghé',
+  UiKeys.summaryZoneMissed: 'Chưa ghé',
+  UiKeys.summaryEmptyTitle: 'Chuyến đi vừa mới bắt đầu',
+  UiKeys.summaryEmptyBody:
+      'Bạn chưa ghé khu trưng bày nào. Quay lại tham quan để bắt đầu, '
+          'hoặc kết thúc nếu bạn cần rời đi.',
+  UiKeys.summaryClosingFallback: 'Cảm ơn quý khách đã dành thời gian cho chúng tôi.',
+  UiKeys.summaryContinueCta: 'Quay lại tham quan',
+  UiKeys.summaryEndCta: 'Kết thúc chuyến đi',
+  UiKeys.summaryQrTitle: 'Mang chuyến đi về nhà',
+  UiKeys.summaryQrBody:
+      'Quét mã này để xem lại những hiện vật bạn đã nghe hôm nay.',
+
+  UiKeys.feedbackQuestion: 'Chuyến tham quan hôm nay thế nào?',
+  UiKeys.feedbackThanks: 'Cảm ơn bạn đã góp ý.',
+  UiKeys.feedbackTagsHint: 'Điều gì khiến bạn thấy vậy? (có thể chọn nhiều)',
+  UiKeys.feedbackSubmit: 'Gửi góp ý',
+  UiKeys.feedbackSkip: 'Bỏ qua',
+  UiKeys.feedbackStarSemantics: '{i} trên {n} sao',
+  UiKeys.feedbackNpsSemantics: 'Chấm {i} điểm',
+  UiKeys.feedbackEmojiBad: 'Chưa hài lòng',
+  UiKeys.feedbackEmojiOk: 'Bình thường',
+  UiKeys.feedbackEmojiGood: 'Rất hài lòng',
+
+  UiKeys.farewellTitle: 'Cảm ơn quý khách',
+  UiKeys.farewellBody:
+      'Chuyến tham quan đã kết thúc. Xin vui lòng gửi lại thiết bị tại quầy '
+          'lễ tân. Chúc quý khách một ngày tốt lành.',
+  UiKeys.farewellCta: 'Xong',
 };
 
 /// Resolve một chuỗi CHROME theo khóa [UiKeys]:

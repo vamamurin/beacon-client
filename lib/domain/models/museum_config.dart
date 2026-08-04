@@ -1,6 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import 'feedback_config.dart';
+import 'guide_content.dart';
 import 'localized_text.dart';
+import 'menu_config.dart';
+import 'summary_config.dart';
 
 /// Zone-arbitration tuning knobs, loaded FROM THE BUNDLE so they can be
 /// re-tuned after every site survey without an app rebuild.
@@ -228,6 +232,25 @@ class MuseumConfig {
   /// hardcode trong injection; giờ tinh chỉnh tại hiện trường qua CMS.
   final Duration? zoneChangeConfirmWindow;
 
+  // ── Bốn khối dưới đây điều khiển các màn hình PHỤ TRỢ (menu, hướng dẫn, tổng
+  // kết, đánh giá). Khác với các trường ở trên, chúng KHÔNG BAO GIỜ null: bundle
+  // thiếu khối nào thì rơi về hằng `defaults` của khối đó. Lý do là các màn này
+  // luôn phải vẽ được — một bảo tàng chưa kịp cập nhật CMS vẫn phải có Menu và
+  // có màn Hướng dẫn — nên "vắng mặt" không phải một trạng thái mà tầng UI cần
+  // biết, và không đáng bắt mọi call site kiểm tra null.
+
+  /// Các lối vào trên màn Menu (thứ tự mảng = thứ tự hiển thị).
+  final MenuConfig menu;
+
+  /// Các bước của màn Hướng dẫn sử dụng. Rỗng ⇒ UI vẽ bộ bước mặc định.
+  final GuideContent guide;
+
+  /// Màn tổng kết + màn cảm ơn.
+  final SummaryConfig summary;
+
+  /// Khối đánh giá trên màn tổng kết (chỉ hiện khi [SummaryConfig.showFeedback]).
+  final FeedbackConfig feedback;
+
   const MuseumConfig({
     required this.bundleVersion,
     required this.museumName,
@@ -243,6 +266,10 @@ class MuseumConfig {
     this.zoneChangeConfirmWindow,
     this.languageNames = const {},
     this.uiStrings = const {},
+    this.menu = MenuConfig.defaults,
+    this.guide = GuideContent.empty,
+    this.summary = SummaryConfig.defaults,
+    this.feedback = FeedbackConfig.defaults,
   });
 
   @override
@@ -261,6 +288,10 @@ class MuseumConfig {
         other.policies == policies &&
         other.autoSyncHours == autoSyncHours &&
         other.zoneChangeConfirmWindow == zoneChangeConfirmWindow &&
+        other.menu == menu &&
+        other.guide == guide &&
+        other.summary == summary &&
+        other.feedback == feedback &&
         mapEquals(other.languageNames, languageNames);
   }
 
@@ -278,6 +309,10 @@ class MuseumConfig {
         policies,
         autoSyncHours,
         zoneChangeConfirmWindow,
+        menu,
+        guide,
+        summary,
+        feedback,
         Object.hashAllUnordered(
           languageNames.entries.map((e) => Object.hash(e.key, e.value)),
         ),

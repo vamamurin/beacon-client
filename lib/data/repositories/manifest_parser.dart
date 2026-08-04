@@ -2,8 +2,12 @@
 
 import 'package:beacon_client/domain/models/audio_clip_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
+import 'package:beacon_client/domain/models/feedback_config.dart';
+import 'package:beacon_client/domain/models/guide_content.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
+import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
+import 'package:beacon_client/domain/models/summary_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 
 /// Thrown when the bundle is unusable as a whole. Per content-bundle-spec §6:
@@ -108,6 +112,15 @@ abstract final class ManifestParser {
       kalmanMeasurementNoise: _optNum(arb, 'kalmanMeasurementNoise', 4.0), 
     );
 
+    // ---- màn hình phụ trợ (menu / hướng dẫn / tổng kết / đánh giá) ---------
+    // Bốn khối TÙY CHỌN, và không khối nào được phép làm hỏng bundle: mất màn
+    // Menu thì cả bảo tàng đứng, còn một câu hỏi đánh giá gõ sai thì chỉ mất
+    // câu hỏi đó. Mọi lỗi ở đây đi vào [warnings] rồi rơi về mặc định.
+    final menu = _optMenu(root, warnings);
+    final guide = _optGuide(root, fallbackLanguage, warnings);
+    final summary = _optSummary(root, fallbackLanguage, warnings);
+    final feedback = _optFeedback(root, fallbackLanguage, warnings);
+
     final pol = _reqMap(root, 'policies', 'root');
     final policies = AudioPolicies(
       allowLoudspeaker: _reqBool(pol, 'allowLoudspeaker', 'policies'),
@@ -155,6 +168,10 @@ abstract final class ManifestParser {
         deskMajor: deskMajor,
         arbitration: arbitration,
         policies: policies,
+        menu: menu,
+        guide: guide,
+        summary: summary,
+        feedback: feedback,
       ),
       zones: List.unmodifiable(zones),
       warnings: warnings,
@@ -368,6 +385,270 @@ abstract final class ManifestParser {
     return AudioClipInfo(tracks: Map.unmodifiable(tracks));
   }
 
+  // ---- màn hình phụ trợ ---------------------------------------------------
+  //
+  // Bốn hàm dưới đây có một quy ước chung KHÁC với phần còn lại của parser:
+  // chúng KHÔNG BAO GIỜ ném. Nội dung trưng bày sai thì thà giữ bundle cũ còn
+  // hơn nói dối khách (spec §6), nhưng một mục menu gõ sai id không phải lý do
+  // để cả bảo tàng mất luôn nội dung mới. Mọi lỗi ⇒ warning + rơi về mặc định.
+
+  /// Khối `menu`. Thứ tự mảng là thứ tự hiển thị.
+  ///
+  /// BẤT BIẾN ĐƯỢC ÉP: kết quả luôn có một mục [MenuAction.startTour] đang bật.
+  /// Cùng học thuyết với [ArbitrationParams.clamped] — server được tin về NỘI
+  /// DUNG, không được tin về SỰ ỔN ĐỊNH của app. Một CMS tắt nhầm mục "start"
+  /// sẽ khoá toàn bộ đội máy ở màn Menu không có đường vào tour; ở đây nó chỉ
+  /// tự nắn lại kèm warning.
+  static MenuConfig _optMenu(Map<String, dynamic> root, List<String> warnings) {
+    final raw = root['menu'];
+    if (raw == null) return MenuConfig.defaults;
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('menu: không phải object — dùng menu mặc định');
+      return MenuConfig.defaults;
+    }
+    final list = raw['entries'];
+    if (list is! List) {
+      warnings.add('menu: "entries" không phải mảng — dùng menu mặc định');
+      return MenuConfig.defaults;
+    }
+
+    final out = <MenuEntry>[];
+    final seen = <MenuAction>{};
+    for (final item in list) {
+      if (item is! Map<String, dynamic>) {
+        warnings.add('menu: bỏ một mục không phải object');
+        continue;
+      }
+      final id = item['id'];
+      if (id is! String) {
+        warnings.add('menu: bỏ một mục thiếu "id"');
+        continue;
+      }
+      final action = MenuAction.byId(id);
+      if (action == null) {
+        warnings.add('menu: id không hỗ trợ "$id" — bỏ qua');
+        continue;
+      }
+      if (!seen.add(action)) {
+        warnings.add('menu: id trùng "$id" — chỉ giữ lần khai báo đầu');
+        continue;
+      }
+      final enabled = item['enabled'];
+      out.add(MenuEntry(action, enabled: enabled is bool ? enabled : true));
+    }
+
+    if (out.isEmpty) {
+      warnings.add('menu: không mục nào hợp lệ — dùng menu mặc định');
+      return MenuConfig.defaults;
+    }
+    // Ép bất biến: phải còn đường vào tour.
+    if (!out.any((e) => e.action == MenuAction.startTour && e.enabled)) {
+      out.removeWhere((e) => e.action == MenuAction.startTour);
+      out.insert(0, const MenuEntry(MenuAction.startTour));
+      warnings.add(
+          'menu: thiếu mục "start" đang bật — đã tự thêm lại ở đầu danh sách');
+    }
+    return MenuConfig(entries: List.unmodifiable(out));
+  }
+
+  /// Khối `guide`. Bước hỏng bị bỏ riêng lẻ (cùng cách xử lý với `exhibit`),
+  /// vì mất một bước vẫn còn hướng dẫn để đọc.
+  static GuideContent _optGuide(
+    Map<String, dynamic> root,
+    String fallbackLang,
+    List<String> warnings,
+  ) {
+    final raw = root['guide'];
+    if (raw == null) return GuideContent.empty;
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('guide: không phải object — dùng hướng dẫn mặc định');
+      return GuideContent.empty;
+    }
+    final list = raw['steps'];
+    if (list is! List) {
+      warnings.add('guide: "steps" không phải mảng — dùng hướng dẫn mặc định');
+      return GuideContent.empty;
+    }
+
+    final out = <GuideStep>[];
+    for (var i = 0; i < list.length; i++) {
+      final item = list[i];
+      final ctx = 'guide.steps[$i]';
+      if (item is! Map<String, dynamic>) {
+        warnings.add('$ctx: không phải object — bỏ');
+        continue;
+      }
+      // Ảnh minh họa hỏng KHÔNG làm mất bước — cùng lý do với `exhibit.images`:
+      // chữ mới là nội dung của bước, ảnh chỉ là trang trí. Tách ra ngoài khối
+      // try bên dưới để nó không kéo theo cả bản ghi.
+      String? imagePath;
+      try {
+        imagePath = _optPath(item, 'image', ctx);
+      } on BundleValidationException catch (err) {
+        warnings.add('$ctx: bỏ ảnh minh họa — ${err.message}');
+      }
+
+      try {
+        final icon = item['icon'];
+        out.add(GuideStep(
+          title: _reqLocalized(item, 'title', ctx, fallbackLang),
+          body: _reqLocalized(item, 'body', ctx, fallbackLang),
+          iconId: icon is String && icon.isNotEmpty ? icon : null,
+          imagePath: imagePath,
+        ));
+      } on BundleValidationException catch (err) {
+        warnings.add('$ctx: bỏ — ${err.message}');
+      }
+    }
+    return out.isEmpty
+        ? GuideContent.empty
+        : GuideContent(steps: List.unmodifiable(out));
+  }
+
+  /// Khối `summary` (+ `farewell`, gộp vào cùng một model vì cả hai chỉ mô tả
+  /// một việc: chuyến đi kết thúc thế nào).
+  static SummaryConfig _optSummary(
+    Map<String, dynamic> root,
+    String fallbackLang,
+    List<String> warnings,
+  ) {
+    // `farewell` đọc trước và độc lập: bundle có thể khai báo nó mà không khai
+    // báo `summary`.
+    var farewellAuto = Duration.zero;
+    final far = root['farewell'];
+    if (far is Map<String, dynamic>) {
+      // Trần 300 s: giữ màn cảm ơn quá lâu thì không khác gì giữ vô hạn, mà
+      // giữ vô hạn đã có cách diễn đạt riêng (0).
+      farewellAuto =
+          _optDurationSeconds(far, 'autoReturnSeconds', 0, 300) ?? Duration.zero;
+    } else if (far != null) {
+      warnings.add('farewell: không phải object — bỏ qua');
+    }
+
+    final raw = root['summary'];
+    if (raw == null) {
+      return SummaryConfig(farewellAutoReturn: farewellAuto);
+    }
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('summary: không phải object — dùng mặc định');
+      return SummaryConfig(farewellAutoReturn: farewellAuto);
+    }
+
+    LocalizedText? closing;
+    final closingRaw = raw['closing'];
+    if (closingRaw is Map<String, dynamic>) {
+      try {
+        closing = _localized(closingRaw, 'summary.closing', fallbackLang);
+      } on BundleValidationException catch (err) {
+        warnings.add('summary.closing: bỏ — ${err.message}');
+      }
+    } else if (closingRaw != null) {
+      warnings.add('summary: "closing" không phải object đa ngữ — bỏ');
+    }
+
+    final fb = raw['showFeedback'];
+    var showQr = raw['showQr'] is bool ? raw['showQr'] as bool : false;
+    final qrBase = _optHttpUrl(raw, 'qrBaseUrl', 'summary', warnings);
+    if (showQr && qrBase == null) {
+      // Bật QR mà không có trang đích thì khách quét ra trang trắng — tệ hơn là
+      // không có QR nào.
+      warnings.add('summary: showQr=true nhưng thiếu qrBaseUrl hợp lệ — tắt QR');
+      showQr = false;
+    }
+
+    return SummaryConfig(
+      closing: closing,
+      showFeedback: fb is bool ? fb : true,
+      showQr: showQr,
+      qrBaseUrl: qrBase,
+      farewellAutoReturn: farewellAuto,
+    );
+  }
+
+  /// Trần số nhãn lý do trên khối đánh giá. CMS đổ 30 nhãn vào một panel nhỏ
+  /// thì khách không đọc nhãn nào cả.
+  static const int _maxFeedbackTags = 8;
+
+  /// Khối `feedback`.
+  static FeedbackConfig _optFeedback(
+    Map<String, dynamic> root,
+    String fallbackLang,
+    List<String> warnings,
+  ) {
+    final raw = root['feedback'];
+    if (raw == null) return FeedbackConfig.defaults;
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('feedback: không phải object — dùng mặc định');
+      return FeedbackConfig.defaults;
+    }
+
+    var scale = FeedbackScale.stars5;
+    final scaleRaw = raw['scale'];
+    if (scaleRaw is String) {
+      final parsed = FeedbackScale.byId(scaleRaw);
+      if (parsed == null) {
+        warnings.add('feedback: thang đo không hỗ trợ "$scaleRaw" — dùng stars5');
+      } else {
+        scale = parsed;
+      }
+    }
+
+    LocalizedText? question;
+    final qRaw = raw['question'];
+    if (qRaw is Map<String, dynamic>) {
+      try {
+        question = _localized(qRaw, 'feedback.question', fallbackLang);
+      } on BundleValidationException catch (err) {
+        warnings.add('feedback.question: bỏ — ${err.message}');
+      }
+    } else if (qRaw != null) {
+      warnings.add('feedback: "question" không phải object đa ngữ — bỏ');
+    }
+
+    final tags = <FeedbackTag>[];
+    final tagsRaw = raw['tags'];
+    if (tagsRaw is List) {
+      final seen = <String>{};
+      for (var i = 0; i < tagsRaw.length; i++) {
+        if (tags.length >= _maxFeedbackTags) {
+          warnings.add('feedback: quá $_maxFeedbackTags nhãn — cắt phần thừa');
+          break;
+        }
+        final item = tagsRaw[i];
+        final ctx = 'feedback.tags[$i]';
+        if (item is! Map<String, dynamic>) {
+          warnings.add('$ctx: không phải object — bỏ');
+          continue;
+        }
+        final id = item['id'];
+        if (id is! String || id.isEmpty) {
+          warnings.add('$ctx: thiếu "id" — bỏ');
+          continue;
+        }
+        if (!seen.add(id)) {
+          warnings.add('$ctx: id trùng "$id" — bỏ');
+          continue;
+        }
+        try {
+          tags.add(FeedbackTag(
+            id: id,
+            label: _reqLocalized(item, 'label', ctx, fallbackLang),
+          ));
+        } on BundleValidationException catch (err) {
+          warnings.add('$ctx: bỏ — ${err.message}');
+        }
+      }
+    } else if (tagsRaw != null) {
+      warnings.add('feedback: "tags" không phải mảng — bỏ');
+    }
+
+    return FeedbackConfig(
+      scale: scale,
+      question: question,
+      tags: List.unmodifiable(tags),
+    );
+  }
+
   // ---- typed-extraction helpers ------------------------------------------------
   // Each throws BundleValidationException with a precise context string —
   // "which field of which object" is the difference between a 5-minute fix
@@ -471,6 +752,36 @@ abstract final class ManifestParser {
   static String? _optPath(Map<String, dynamic> m, String key, String ctx) {
     if (!m.containsKey(key) || m[key] == null) return null;
     return _reqPath(m, key, ctx);
+  }
+
+  /// URL http/https TÙY CHỌN (hiện chỉ `summary.qrBaseUrl`).
+  ///
+  /// KHÔNG dùng [_pathRule] được: đây là địa chỉ trang web thật, không phải
+  /// payload nằm trong bundle — hai loại giá trị khác nhau nên phải có hai luật
+  /// khác nhau. Chỉ nhận http/https có host: một QR mang `javascript:` hay
+  /// `intent://` là thứ ta không muốn phát ra từ màn hình của bảo tàng, kể cả
+  /// khi nó chỉ do CMS gõ nhầm.
+  static String? _optHttpUrl(
+    Map<String, dynamic> m,
+    String key,
+    String ctx,
+    List<String> warnings,
+  ) {
+    final v = m[key];
+    if (v == null) return null;
+    if (v is! String || v.isEmpty) {
+      warnings.add('$ctx: "$key" không phải chuỗi — bỏ');
+      return null;
+    }
+    final uri = Uri.tryParse(v);
+    if (uri == null ||
+        !uri.isAbsolute ||
+        (uri.scheme != 'http' && uri.scheme != 'https') ||
+        uri.host.isEmpty) {
+      warnings.add('$ctx: "$key" không phải URL http/https hợp lệ: $v');
+      return null;
+    }
+    return v;
   }
 
   static LocalizedText _localized(
