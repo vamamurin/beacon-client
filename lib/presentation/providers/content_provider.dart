@@ -16,7 +16,11 @@ import 'package:flutter/foundation.dart';
 
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
+import 'package:beacon_client/domain/models/feedback_config.dart';
+import 'package:beacon_client/domain/models/guide_content.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
+import 'package:beacon_client/domain/models/menu_config.dart';
+import 'package:beacon_client/domain/models/summary_config.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
@@ -95,6 +99,22 @@ class ContentProvider extends ChangeNotifier {
   LocalizedText? get museumName => _repo.config?.museumName;
 
   bool get isWarmed => _repo.isWarmed;
+
+  // ── cấu hình các màn phụ trợ ───────────────────────────────────────────────
+  //
+  // Bốn getter này KHÔNG BAO GIỜ trả null, kể cả khi kho chưa nạp xong hay
+  // bundle chưa khai báo: mỗi khối có hằng mặc định riêng. Màn Menu và màn
+  // Hướng dẫn phải vẽ được ngay cả trên một máy vừa cài xong chưa đồng bộ lần
+  // nào — đó là lúc nhân viên cần chúng nhất.
+
+  MenuConfig get menu => _repo.config?.menu ?? MenuConfig.defaults;
+
+  GuideContent get guide => _repo.config?.guide ?? GuideContent.empty;
+
+  SummaryConfig get summary => _repo.config?.summary ?? SummaryConfig.defaults;
+
+  FeedbackConfig get feedback =>
+      _repo.config?.feedback ?? FeedbackConfig.defaults;
 
   // ── ảnh ───────────────────────────────────────────────────────────────────
 

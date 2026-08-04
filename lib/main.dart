@@ -39,6 +39,8 @@ import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
+import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
+import 'package:beacon_client/services/analytics_recorder.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
@@ -328,6 +330,13 @@ class _BootstrapHostState extends State<_BootstrapHost> with WidgetsBindingObser
                 controller: graph.audioController,
               ),
             ),
+            // Tiến trình chuyến đi — màn tổng kết đọc từ đây.
+            ChangeNotifierProvider(
+              create: (_) => TourProgressProvider(graph.tourProgress),
+            ),
+            // Khối đánh giá ghi thẳng vào recorder — nó là chỗ duy nhất giữ
+            // session id của tour đang chạy.
+            Provider<AnalyticsRecorder>.value(value: graph.analyticsRecorder),
           ],
           child: const MuseumApp(),
         );

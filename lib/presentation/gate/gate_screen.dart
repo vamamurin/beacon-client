@@ -161,13 +161,13 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
 
   Widget _buildAction(BuildContext context, StartupProvider startup,
       SessionProvider session, StartupStatus bleStatus, bool needsSync) {
-    // BLE not ready takes precedence — no tour possible without scanning.
-    if (bleStatus != StartupStatus.ready) {
-      return _BleNotReady(status: bleStatus, startup: startup);
-    }
-    if (needsSync) {
-      return _SyncNotice(startup: startup);
-    }
+    final notReady = deviceNotReadyCard(
+      startup: startup,
+      bleStatus: bleStatus,
+      needsSync: needsSync,
+    );
+    if (notReady != null) return notReady;
+
     return Consumer<LanguageController>(
       builder: (context, lang, _) {
         final multi = lang.available.length >= 2;
@@ -184,9 +184,63 @@ class _GateScreenState extends State<GateScreen> with WidgetsBindingObserver {
               enabled: session.isAtGate,
               onPressed: session.startTour, // root navigates when touring
             ),
+            // Màn chào giờ được PUSH từ Menu (xem AppRouter.restRoute), nên nó
+            // cần một đường lui thấy được — cử chỉ back của hệ điều hành có
+            // chạy, nhưng khách mượn máy ở bảo tàng không phải ai cũng biết máy
+            // Android vuốt kiểu gì.
+            //
+            // Đặt DƯỚI nút chính, không phải trên: thứ tự đọc phải là "bắt đầu
+            // đi" trước, "hoặc quay lại" sau. Và nó nằm ở đây — trong phần dây
+            // nối — chứ không trong [GateLayout], vì GateLayout là hình học
+            // thuần và không biết gì về ngăn xếp điều hướng.
+            if (Navigator.of(context).canPop())
+              const Padding(
+                padding: EdgeInsets.only(top: AppSpace.x2),
+                child: _BackToMenu(),
+              ),
           ],
         );
       },
+    );
+  }
+}
+
+/// Đường lui về màn nghỉ. Nhẹ về trọng lượng thị giác: nó là lối phụ, và nút
+/// Bắt đầu ngay trên phải giữ nguyên vai chính.
+class _BackToMenu extends StatelessWidget {
+  const _BackToMenu();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    final label = context.watch<ContentProvider>().ui(UiKeys.menuBack);
+    void back() => Navigator.of(context).maybePop();
+
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: back,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: t.sharpAll,
+        child: InkWell(
+          onTap: back,
+          borderRadius: t.sharpAll,
+          child: SizedBox(
+            height: AppSpace.tap,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.chevron_left, size: 18, color: t.inkMuted),
+                const SizedBox(width: AppSpace.x1),
+                Text(label.toUpperCase(),
+                    style: AppText.button.copyWith(color: t.inkMuted)),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -992,6 +1046,34 @@ class _StartButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Thẻ trạng thái máy dành cho NHÂN VIÊN, hoặc `null` khi máy đã sẵn sàng
+/// giao cho khách.
+///
+/// DÙNG CHUNG bởi hai màn hình, và đó là lý do nó tồn tại:
+///   • [GateScreen] — chỗ nó ở từ đầu, ngay vị trí nút Bắt đầu sẽ chiếm;
+///   • [MenuScreen] — MÀN NGHỈ mới (xem [AppRouter.restRoute]). Đây là màn
+///     nhân viên nhìn khi nhấc máy khỏi dock, nên nếu Bluetooth tắt hoặc máy
+///     chưa có nội dung thì phải thấy được ngay tại đó, không phải lặn thêm
+///     một tầng.
+///
+/// Ở LẠI FILE NÀY (thay vì tách ra widgets/) vì nó là mặt tiền công khai cho ba
+/// widget private phía dưới — chuyển đi sẽ phải công khai cả ba, mở rộng bề mặt
+/// API để đổi lấy đúng một import gọn hơn.
+///
+/// Thứ tự ưu tiên: Bluetooth trước, nội dung sau — không có sóng thì có nội
+/// dung cũng không tham quan được.
+Widget? deviceNotReadyCard({
+  required StartupProvider startup,
+  required StartupStatus bleStatus,
+  required bool needsSync,
+}) {
+  if (bleStatus != StartupStatus.ready) {
+    return _BleNotReady(status: bleStatus, startup: startup);
+  }
+  if (needsSync) return _SyncNotice(startup: startup);
+  return null;
 }
 
 /// Khung thẻ nhân viên (sync notice / BLE not ready). Gom lại từ hai bản sao

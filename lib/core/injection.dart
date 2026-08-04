@@ -64,6 +64,7 @@ import 'package:beacon_client/data/analytics/analytics_uploader.dart';
 import 'package:beacon_client/data/analytics/buffering_analytics_sink.dart';
 import 'package:beacon_client/data/analytics/noop_analytics_sink.dart';
 import 'package:beacon_client/services/analytics_recorder.dart';
+import 'package:beacon_client/services/tour_progress_service.dart';
 
 enum RunMode { mock, real }
 
@@ -100,6 +101,11 @@ class AppGraph {
   
   final IAnalyticsSink analytics;
   final AnalyticsRecorder analyticsRecorder;
+
+  /// Tiến trình chuyến đi cho MÀN HÌNH (màn tổng kết). Đọc cùng nguồn với
+  /// [analyticsRecorder] nhưng giữ trạng thái đọc được thay vì đẩy một chiều
+  /// xuống sink — xem doc đầu tour_progress_service.dart.
+  final TourProgressService tourProgress;
 
   final StreamSubscription<SessionState>? _analyticsDockSub;
 
@@ -150,6 +156,7 @@ class AppGraph {
     required this.bluetoothGate,
     required this.analytics,
     required this.analyticsRecorder,
+    required this.tourProgress,
     required StartupStatus startupStatus,
     required this.imagePathResolver,
     required IPowerMonitor power,
@@ -348,6 +355,7 @@ class AppGraph {
     await chime.dispose();
     bluetoothGate.dispose();
     await analyticsRecorder.dispose();
+    await tourProgress.dispose();
     await analytics.dispose();
     _ble.dispose();
   }
@@ -484,6 +492,11 @@ abstract final class Injection {
       audioSink: TourAudioSinkAdapter(audioController),
       sessionSilence:
           cfg?.arbitration.sessionSilence ?? const Duration(minutes: 30),
+      // Hạn giữ màn Cảm ơn, do bảo tàng chỉnh (`farewell.autoReturnSeconds`).
+      // Mặc định 0 = giữ tới khi có người bấm. Đọc MỘT LẦN lúc dựng graph, cùng
+      // cách với sessionSilence ngay trên: một lần đồng bộ đổi giá trị này sẽ
+      // có hiệu lực sau lần khởi động lại kế tiếp.
+      farewellHold: cfg?.summary.farewellAutoReturn ?? Duration.zero,
     );
     session.start();
 
@@ -626,6 +639,19 @@ abstract final class Injection {
       headphonesConnected: () => headphones.isConnected,
     );
 
+    // Cùng bốn nguồn với recorder ở trên. Mẫu số đọc qua callback vì kho nội
+    // dung nạp bất đồng bộ: chụp một con số ở đây thì máy vừa khởi động sẽ hiện
+    // "0/0" suốt tour đầu tiên.
+    final tourProgress = TourProgressService(
+      sessionState: session.state,
+      zoneEvents: presence.events,
+      audioState: engine.onStateChanged,
+      audioCompleted: engine.onCompleted,
+      totalZones: () => repository.allZones.length,
+      totalExhibits: () => repository.allZones
+          .fold<int>(0, (sum, z) => sum + z.exhibits.length),
+    );
+
     // Về dock = cửa sổ an toàn để đẩy analytics. LUÔN chạy, độc lập content sync.
     //
     // Nghe session.state (KHÔNG phải onChargingChanged): recorder subscribe trước
@@ -663,6 +689,7 @@ abstract final class Injection {
       bluetoothGate: bluetoothGate,
       analytics: analytics,
       analyticsRecorder: analyticsRecorder,
+      tourProgress: tourProgress,
       startupStatus: startupStatus,
       imagePathResolver: imagePathResolver,
       power: power,

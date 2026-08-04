@@ -66,8 +66,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/presentation/app/app_router.dart';
+import 'package:beacon_client/presentation/menu/menu_sheet.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
+import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
@@ -85,7 +87,164 @@ class ZoneScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: t.surface,
       body: SafeArea(
-        child: zp.isStandby ? const _RadarStandby() : const _ZoneRankingView(),
+        // Nút ☰ đặt ở ĐÂY chứ không trong hai view bên dưới: cả hai trạng thái
+        // (đang quét / đã xếp hạng) đều cần lối vào menu, và cả hai đều có bố
+        // cục được dựng rất kỹ mà một vật thể chồng lên sẽ phá.
+        //
+        // PHẠM VI CÓ CHỦ ĐÍCH: chỉ màn khu vực có nút này. Màn danh sách và màn
+        // hiện vật thì không — khách ở đó lùi một bước là tới đây. Đổi lại,
+        // chrome của hai màn đó giữ nguyên như đã dựng.
+        child: Column(
+          children: [
+            const _TourChrome(),
+            const _CompletionPrompt(),
+            Expanded(
+              child: zp.isStandby
+                  ? const _RadarStandby()
+                  : const _ZoneRankingView(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Hàng chrome của tour: hiện chỉ có nút mở menu, căn phải.
+///
+/// Một hàng riêng thay vì một vật nổi trong Stack — vật nổi sẽ chồng lên chữ
+/// tiêu đề khi nó xuống dòng ở textScaler 1.6×.
+class _TourChrome extends StatelessWidget {
+  const _TourChrome();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(
+          AppSpace.gutter, AppSpace.x2, AppSpace.gutter, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [MenuButton()],
+      ),
+    );
+  }
+}
+
+/// "Bạn đã đi hết N khu trưng bày" — GỢI Ý, không phải chuyển màn.
+///
+/// ═════════════════════════════════════════════════════════════════════════
+/// VÌ SAO KHÔNG TỰ ĐẨY SANG MÀN TỔNG KẾT
+/// ═════════════════════════════════════════════════════════════════════════
+/// Điều kiện "đã ghé đủ mọi khu" chạm được tại đúng khoảnh khắc khách BƯỚC VÀO
+/// khu cuối — tức là lúc họ vừa mới bắt đầu xem nó, và thuyết minh của khu đó
+/// còn chưa phát xong câu đầu. Tự chuyển màn ở đó là cắt ngang chính cái phần
+/// mà khách vừa đi tới. "Ghé đủ" không có nghĩa là "xem xong".
+///
+/// Nên nó là một thẻ nằm im, tắt được, và không bao giờ tự làm gì.
+class _CompletionPrompt extends StatefulWidget {
+  const _CompletionPrompt();
+
+  @override
+  State<_CompletionPrompt> createState() => _CompletionPromptState();
+}
+
+class _CompletionPromptState extends State<_CompletionPrompt> {
+  /// Đã bấm "Để sau". Sống cùng ZoneScreen — mà ZoneScreen là gốc ngăn xếp
+  /// suốt tour, nên một lần tắt là tắt tới hết chuyến đi. Tour sau dựng lại
+  /// cây từ đầu nên cờ tự sạch.
+  bool _dismissed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_dismissed) return const SizedBox.shrink();
+    final progress = context.watch<TourProgressProvider>().progress;
+    if (!progress.hasVisitedEveryZone) return const SizedBox.shrink();
+
+    final t = context.tokens;
+    final content = context.watch<ContentProvider>();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.gutter, AppSpace.x3, AppSpace.gutter, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: t.surfaceRaised,
+          borderRadius: t.sharpAll,
+          border: Border.all(color: t.outline),
+        ),
+        padding: const EdgeInsets.all(AppSpace.x3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              content.uif(UiKeys.tourCompleteTitle,
+                  {'n': '${progress.totalZones}'}),
+              style: AppText.cardTitle.copyWith(color: t.ink),
+            ),
+            const SizedBox(height: AppSpace.x2),
+            Text(content.ui(UiKeys.tourCompleteBody),
+                style: AppText.meta.copyWith(color: t.inkMuted)),
+            const SizedBox(height: AppSpace.x3),
+            Row(
+              children: [
+                _PromptAction(
+                  label: content.ui(UiKeys.tourCompleteCta),
+                  emphasised: true,
+                  onTap: () => Navigator.of(context)
+                      .pushNamed(AppRouter.summaryRoute),
+                ),
+                const SizedBox(width: AppSpace.x2),
+                _PromptAction(
+                  label: content.ui(UiKeys.tourCompleteDismiss),
+                  emphasised: false,
+                  onTap: () => setState(() => _dismissed = true),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PromptAction extends StatelessWidget {
+  final String label;
+  final bool emphasised;
+  final VoidCallback onTap;
+
+  const _PromptAction({
+    required this.label,
+    required this.emphasised,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      onTap: onTap,
+      child: Material(
+        color: emphasised ? t.ctaFill : Colors.transparent,
+        borderRadius: t.sharpAll,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: t.sharpAll,
+          child: Container(
+            height: AppSpace.tap,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.x4),
+            alignment: Alignment.center,
+            child: Text(
+              label.toUpperCase(),
+              style: AppText.button
+                  .copyWith(color: emphasised ? t.ctaLabel : t.inkMuted),
+            ),
+          ),
+        ),
       ),
     );
   }

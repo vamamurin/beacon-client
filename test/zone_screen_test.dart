@@ -27,17 +27,21 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/domain/interfaces/i_settings_store.dart';
 import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/audio_clip_info.dart';
+import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
+import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
+import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/zone/zone_screen.dart';
 import 'package:beacon_client/services/nearby_zones_tracker.dart';
+import 'package:beacon_client/services/tour_progress_service.dart';
 import 'package:beacon_client/services/zone_presence_service.dart';
 
 // ============================================================================
@@ -157,6 +161,20 @@ Widget _app({
           initialRanking: initialRanking,
           repository: repo,
         ),
+      ),
+      // Màn khu vực giờ mang thêm hàng chrome (nút menu) và thẻ gợi ý "đã đi
+      // hết các khu". Service thật cần bốn stream nguồn; ở đây chỉ cần một
+      // TourProgress im lặng — mọi test trong file này nói về xếp hạng khu, và
+      // với tiến trình rỗng thì thẻ gợi ý không dựng gì cả.
+      ChangeNotifierProvider<TourProgressProvider>(
+        create: (_) => TourProgressProvider(TourProgressService(
+          sessionState: const Stream<SessionState>.empty(),
+          zoneEvents: const Stream<ZoneEvent>.empty(),
+          audioState: const Stream<AudioQueueState>.empty(),
+          audioCompleted: const Stream<AudioTrackRef>.empty(),
+          totalZones: () => 0,
+          totalExhibits: () => 0,
+        )),
       ),
     ],
     child: MaterialApp(

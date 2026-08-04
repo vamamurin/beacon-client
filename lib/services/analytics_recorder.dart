@@ -129,6 +129,33 @@ class AnalyticsRecorder {
     }
   }
 
+  // ============================================================ feedback
+  //
+  // Đường vào DUY NHẤT từ tầng UI vào recorder. Mọi thứ khác ở lớp này là
+  // listener thuần; đánh giá thì không suy ra được từ stream nào — nó là một
+  // hành động của khách.
+  //
+  // Ở ĐÂY chứ không ở widget vì `_sid` là private và phải như vậy: một màn hình
+  // tự sinh session id sẽ đẻ ra những bản ghi không nối được với tour nào.
+
+  /// Ghi đánh giá của khách. NO-OP ngoài phiên — xem doc [FeedbackGiven]: màn
+  /// tổng kết cố tình nằm trong phase touring để chỗ này còn id mà đóng dấu.
+  void recordFeedback({
+    required String scale,
+    required int rating,
+    required List<String> tags,
+  }) {
+    final sid = _sid;
+    if (sid == null) return;
+    _emit(FeedbackGiven(
+      sessionId: sid,
+      at: _now(),
+      scale: scale,
+      rating: rating,
+      tags: List.unmodifiable(tags),
+    ));
+  }
+
   // ============================================================ zone dwell
   void _onZone(ZoneEvent e) {
     if (_sid == null) return; // ignore radio traffic outside a tour

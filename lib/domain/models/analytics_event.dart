@@ -115,6 +115,47 @@ class TourEnded extends AnalyticsEvent {
       };
 }
 
+/// Visitor rated the tour on the summary screen.
+///
+/// WHY IT CAN CARRY A [sessionId] AT ALL: the summary screen lives INSIDE
+/// `SessionPhase.touring` (it is a confirmation screen with a way back), so the
+/// recorder's session id is still alive when this is emitted. Moving the rating
+/// to the farewell screen — after `endTour()` — would strand every rating with
+/// no tour to join it to. That constraint is the reason the panel sits where it
+/// does, not a layout preference.
+///
+/// [scale] travels WITH the value because the museum can switch scales from the
+/// CMS (`feedback.scale`): a bare "3" means something different on stars5 than
+/// on nps, and the server must not have to guess which bundle was live.
+class FeedbackGiven extends AnalyticsEvent {
+  /// Thang đo đang dùng (`stars5` / `nps` / `emoji3`).
+  final String scale;
+
+  /// Điểm khách chọn, đã kẹp vào biên của thang.
+  final int rating;
+
+  /// Khóa các nhãn lý do đã chọn (ổn định, không phải nhãn hiển thị).
+  final List<String> tags;
+
+  const FeedbackGiven({
+    required super.sessionId,
+    required super.at,
+    required this.scale,
+    required this.rating,
+    required this.tags,
+  });
+
+  @override
+  String get name => 'feedback_given';
+
+  @override
+  Map<String, Object?> payload() => {
+        'scale': scale,
+        'rating': rating,
+        'tags': tags,
+      };
+}
+
 /// Time spent continuously present in one zone, emitted when the visitor leaves
 /// it (switch, standby, or tour end).
 class ZoneDwell extends AnalyticsEvent {
