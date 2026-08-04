@@ -75,20 +75,21 @@ class SessionController {
     DateTime Function()? now,
     Duration sweepInterval = const Duration(seconds: 1),
 
-    /// How long [SessionPhase.ending] is HELD before settling to atDesk.
+    /// Giữ [SessionPhase.farewell] bao lâu trước khi tự về [SessionPhase.atDesk].
     ///
-    /// Zero (default) = the historical behaviour: `ending` is published and
-    /// superseded in the same synchronous call, so it is an EDGE only. Set it
-    /// non-zero to give the phase a real window an end screen can render in —
-    /// see the note on [_endSession] for what else that requires.
-    Duration endingHold = Duration.zero,
+    /// [Duration.zero] (mặc định) = GIỮ TỚI KHI CÓ NGƯỜI BẤM. Không giới hạn
+    /// thời gian ở đây là an toàn vì [_onChargingChanged] xử lý phase này: máy
+    /// lên dock là về atDesk ngay, nên một máy bị bỏ quên vẫn sạch khi về quầy.
+    /// Đặt khác 0 (từ manifest `farewell.autoReturnSeconds`) nếu thực địa cho
+    /// thấy khách hay bỏ máy trên ghế.
+    Duration farewellHold = Duration.zero,
   })  : _audio = audioSink,
         _lastBeaconAt = lastBeaconAt,
         _sessionSilence = sessionSilence,
         _startGraceTimeout = startGraceTimeout,
         _now = now ?? DateTime.now,
         _sweepInterval = sweepInterval,
-        _endingHold = endingHold {
+        _farewellHold = farewellHold {
     _zoneSub = zoneEvents.listen(_onZoneEvent);
     _chargeSub = chargingChanges.listen(_onChargingChanged);
     _deskSub = deskStableChanges.listen(_onDeskStableChanged);
@@ -110,12 +111,11 @@ class SessionController {
   final Duration _startGraceTimeout;
   final DateTime Function() _now;
   final Duration _sweepInterval;
-  final Duration _endingHold;
+  final Duration _farewellHold;
 
-  /// Pending settle from `ending` to `atDesk`. Non-null only while the hold
-  /// window is open; cancelled on dispose so a torn-down controller can't
-  /// publish afterwards.
-  Timer? _endingTimer;
+  /// Hẹn giờ tự rời `farewell`. Non-null chỉ trong lúc cửa sổ giữ còn mở; huỷ
+  /// khi dispose để một controller đã chết không phát trạng thái nữa.
+  Timer? _farewellTimer;
 
   late final StreamSubscription<ZoneEvent> _zoneSub;
   late final StreamSubscription<bool> _chargeSub;
@@ -175,11 +175,32 @@ class SessionController {
     ));
   }
 
-  /// Staff pressed "End session".
+  /// Nút "Kết thúc tham quan" trên notification keep-alive (và mọi lối kết thúc
+  /// thủ công KHÔNG có người đứng trước máy).
+  ///
+  /// KHÔNG đi qua [SessionPhase.farewell]: lối này được bấm từ shade thông báo,
+  /// thường là nhân viên thu máy về, và màn "Cảm ơn quý khách" lúc đó nói với
+  /// một cái ghế trống. Cùng lý do ba nhánh tự động không đi qua đó.
   void staffEndSession() {
     if (_state.phase == SessionPhase.touring) {
-      _endSession(SessionEndReason.manual);
+      _endSession(SessionEndReason.manual, next: SessionPhase.atDesk);
     }
+  }
+
+  /// Khách tự bấm "Kết thúc chuyến đi" ở màn tổng kết.
+  ///
+  /// Dọn dẹp Y HỆT mọi lối kết thúc khác — điểm khác duy nhất là điểm đến:
+  /// [SessionPhase.farewell] thay vì [SessionPhase.atDesk], để màn Cảm ơn có
+  /// một trạng thái thật mà sống trong đó.
+  void visitorEndedTour() {
+    if (_state.phase != SessionPhase.touring) return;
+    _endSession(SessionEndReason.manual, next: SessionPhase.farewell);
+  }
+
+  /// Khách bấm "Xong" ở màn Cảm ơn. Đóng cửa sổ giữ sớm hơn hạn.
+  void dismissFarewell() {
+    if (_state.phase != SessionPhase.farewell) return;
+    _settleFromFarewell();
   }
 
   // ------------------------------------------------------------- signal inputs
@@ -200,7 +221,15 @@ class SessionController {
         break;
       case SessionPhase.touring:
         // Docked mid-tour -> end immediately (P1, 0 ms).
-        if (charging) _endSession(SessionEndReason.charging);
+        if (charging) {
+          _endSession(SessionEndReason.charging, next: SessionPhase.atDesk);
+        }
+        break;
+      case SessionPhase.farewell:
+        // ĐƯỜNG THOÁT VẬT LÝ của màn Cảm ơn, và là thứ khiến `farewellHold = 0`
+        // (giữ vô hạn) an toàn: máy lên dock thì phiên đóng lại ngay, bất kể
+        // khách có bấm "Xong" hay không.
+        if (charging) _settleFromFarewell();
         break;
       case SessionPhase.ending:
         break;
@@ -221,7 +250,7 @@ class SessionController {
     // React to the rising edge immediately (don't wait for the sweep) when
     // not in grace.
     if (_state.phase == SessionPhase.touring && _deskStable && !_inGrace()) {
-      _endSession(SessionEndReason.desk);
+      _endSession(SessionEndReason.desk, next: SessionPhase.atDesk);
     }
   }
 
@@ -244,7 +273,7 @@ class SessionController {
     // grace and was ignored; the change-gated stream won't re-emit). Re-check
     // the level here so leaving grace next to the desk still ends the tour.
     if (_deskStable && !_inGrace()) {
-      _endSession(SessionEndReason.desk);
+      _endSession(SessionEndReason.desk, next: SessionPhase.atDesk);
       return;
     }
 
@@ -257,7 +286,7 @@ class SessionController {
     final DateTime anchor =
         (heard != null && heard.isAfter(started)) ? heard : started;
     if (now.difference(anchor) > _sessionSilence) {
-      _endSession(SessionEndReason.silence);
+      _endSession(SessionEndReason.silence, next: SessionPhase.atDesk);
     }
   }
 
@@ -265,44 +294,39 @@ class SessionController {
 
   // ------------------------------------------------------------- transitions
 
-  /// The single atomic cleanup: stop audio -> wipe visited -> rest.
+  /// Dọn dẹp nguyên tử của một tour: dừng tiếng → về trạng thái nghỉ.
   ///
   /// ─────────────────────────────────────────────────────────────────────────
-  /// ABOUT [SessionPhase.ending] AND `endingHold`
+  /// HAI ĐIỂM ĐẾN, MỘT ĐƯỜNG DỌN DẸP
   ///
-  /// `ending` always carries [SessionEndReason] out of the touring phase, and
-  /// AnalyticsRecorder emits TourEnded on the first non-touring state it sees —
-  /// which is this one. That role is unconditional.
+  /// [next] chỉ quyết định KHÁCH THẤY GÌ sau đó, không đổi bất cứ điều gì về
+  /// việc dọn dẹp — đó là lý do cả hai lối kết thúc đi chung hàm này thay vì có
+  /// hai bản sao lệch nhau dần theo thời gian:
   ///
-  /// Whether it is also RENDERABLE depends on `endingHold`:
+  ///   • [SessionPhase.atDesk]   — kết thúc TỰ ĐỘNG (sạc / về bàn / im lặng)
+  ///     và nút trên notification. `ending` chỉ là một CẠNH ở giữa: nó mang
+  ///     [SessionEndReason] ra khỏi touring cho AnalyticsRecorder rồi bị thay
+  ///     thế ngay trong cùng một lần gọi đồng bộ. Không frame nào được bơm, và
+  ///     điều đó đúng — ba nhánh đó đều xảy ra khi KHÔNG ai đang nhìn màn hình.
   ///
-  ///   • hold == zero (default): `ending` is published and superseded inside
-  ///     this one synchronous call. The state stream is a broadcast controller,
-  ///     so both values are queued before any listener runs — subscribers see
-  ///     `ending` then `atDesk` in back-to-back microtasks with no frame pumped
-  ///     between them. A widget keyed on `ending` would be replaced before it
-  ///     could paint. Treat it as an EDGE.
+  ///   • [SessionPhase.farewell] — khách TỰ bấm ở màn tổng kết. Một trạng thái
+  ///     thật, giữ theo `farewellHold`, để màn Cảm ơn sống trong đó.
   ///
-  ///   • hold > zero: the settle to `atDesk` is deferred, so the phase is a
-  ///     real state with a real window and an end screen CAN render in it.
+  /// AnalyticsRecorder phát TourEnded ở trạng thái non-touring ĐẦU TIÊN nó thấy
+  /// — `ending` ở lối thứ nhất, `farewell` ở lối thứ hai. Cả hai đều mang
+  /// [SessionEndReason], nên số liệu giống nhau ở cả hai đường.
   ///
-  /// TO ADD AN END SCREEN, three things are needed together:
-  ///   1. pass `endingHold:` (a few seconds) where this is constructed
-  ///      (Injection.build),
-  ///   2. a route for it, and
-  ///   3. a branch in MuseumApp._syncNavigation — which today treats every
-  ///      non-touring phase as "go to the gate", so `ending` would flash past
-  ///      to the Gate even with a hold in place.
-  /// Doing only (1) buys nothing visible; that is the trap this note exists to
-  /// prevent.
-  ///
-  /// ⚠ The order of statements below does NOT establish an order for listeners.
-  /// `_setState` only enqueues; [_audio.stopAll] runs before ANY subscriber
-  /// observes `ending`, at any hold value.
-  void _endSession(SessionEndReason reason) {
+  /// ⚠ Thứ tự các câu lệnh dưới đây KHÔNG thiết lập thứ tự cho listener.
+  /// `_setState` chỉ xếp hàng; [_audio.stopAll] chạy TRƯỚC khi bất kỳ subscriber
+  /// nào quan sát được trạng thái mới.
+  void _endSession(SessionEndReason reason, {required SessionPhase next}) {
     if (_state.phase != SessionPhase.touring) return;
 
-    _setState(SessionState(phase: SessionPhase.ending, endReason: reason));
+    // Trạng thái mang reason ra khỏi touring. Ở lối tự động đó là `ending` (một
+    // cạnh); ở lối khách bấm thì chính `farewell` giữ vai đó.
+    final carrier =
+        next == SessionPhase.farewell ? SessionPhase.farewell : SessionPhase.ending;
+    _setState(SessionState(phase: carrier, endReason: reason));
 
     _audio.stopAll();
     // FIX P1 — KHÔNG resetSessionMemory() ở đây nữa.
@@ -317,25 +341,42 @@ class SessionController {
     _touringSince = null;
     _deskStable = false;
 
-    // Settle to atDesk. Keep endReason for analytics until the next tour starts
-    // (cleared in userStartedTour).
-    void settle() =>
-        _setState(SessionState(phase: SessionPhase.atDesk, endReason: reason));
+    _farewellTimer?.cancel();
+    _farewellTimer = null;
 
-    _endingTimer?.cancel();
-    if (_endingHold <= Duration.zero) {
-      settle();
+    if (next == SessionPhase.farewell) {
+      // Giữ `farewell`. Hạn 0 = giữ tới khi có người bấm — an toàn vì cắm sạc
+      // cũng thoát được (xem _onChargingChanged).
+      if (_farewellHold > Duration.zero) {
+        _farewellTimer = Timer(_farewellHold, () {
+          _farewellTimer = null;
+          _settleFromFarewell();
+        });
+      }
     } else {
-      // Hold `ending` so an end screen has a window to live in. Guarded on
-      // phase: a re-plug (or any other transition) during the hold wins, and
-      // must not be stomped by a late settle.
-      _endingTimer = Timer(_endingHold, () {
-        _endingTimer = null;
-        if (_state.phase == SessionPhase.ending) settle();
-      });
+      // Giữ endReason cho analytics tới khi tour sau bắt đầu (xoá ở
+      // userStartedTour).
+      _setState(SessionState(phase: SessionPhase.atDesk, endReason: reason));
     }
 
-    if (kDebugMode) debugPrint('[SessionController] ended: $reason');
+    if (kDebugMode) {
+      debugPrint('[SessionController] ended: $reason -> $next');
+    }
+  }
+
+  /// Rời `farewell` về `atDesk`. Ba đường vào — hết giờ, khách bấm "Xong", máy
+  /// lên dock — nên nó có tên riêng thay vì được viết lặp ở ba chỗ.
+  ///
+  /// Có canh phase: một chuyển động khác xen vào giữa cửa sổ giữ sẽ thắng, và
+  /// không được để một lần hẹn giờ tới muộn giẫm lên.
+  void _settleFromFarewell() {
+    _farewellTimer?.cancel();
+    _farewellTimer = null;
+    if (_state.phase != SessionPhase.farewell) return;
+    _setState(SessionState(
+      phase: SessionPhase.atDesk,
+      endReason: _state.endReason,
+    ));
   }
 
   void _setState(SessionState next) {
@@ -347,8 +388,8 @@ class SessionController {
   Future<void> dispose() async {
     _sweepTimer?.cancel();
     _sweepTimer = null;
-    _endingTimer?.cancel();
-    _endingTimer = null;
+    _farewellTimer?.cancel();
+    _farewellTimer = null;
     await _zoneSub.cancel();
     await _chargeSub.cancel();
     await _deskSub.cancel();

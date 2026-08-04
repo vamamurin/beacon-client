@@ -45,7 +45,7 @@ class Rig {
   Rig(this.now,
       {bool initialCharging = true,
       Duration? silence,
-      Duration endingHold = Duration.zero}) {
+      Duration farewellHold = Duration.zero}) {
     ctrl = SessionController(
       zoneEvents: zones.stream,
       chargingChanges: charging.stream,
@@ -56,7 +56,7 @@ class Rig {
       sessionSilence: silence ?? const Duration(seconds: 5),
       startGraceTimeout: const Duration(seconds: 20),
       now: now,
-      endingHold: endingHold,
+      farewellHold: farewellHold,
     );
   }
 
@@ -300,11 +300,14 @@ void main() {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Pins the contract documented on SessionPhase.ending and
-  // SessionController._endSession: an EDGE by default, a real held state when
-  // `endingHold` is set (which is what an end screen will need).
+  // Chốt hợp đồng ghi trên SessionPhase.ending: nó là một CẠNH, luôn luôn.
+  //
+  // Ba lối kết thúc TỰ ĐỘNG đi qua đây, và cả ba đều xảy ra khi không ai đang
+  // nhìn màn hình (máy trên dock / khách đứng ở quầy trả máy / máy bị bỏ quên),
+  // nên không có gì cần vẽ. Lối kết thúc DO KHÁCH BẤM thì đi qua
+  // SessionPhase.farewell — nhóm test ở cuối file.
   // ─────────────────────────────────────────────────────────────────────────
-  group('SessionPhase.ending with the default zero hold', () {
+  group('SessionPhase.ending là một cạnh', () {
     test('it is never the settled phase a listener can observe at rest', () {
       fakeAsync((async) {
         final rig = Rig(() => DateTime(2026).add(async.elapsed));
@@ -378,71 +381,147 @@ void main() {
     });
   });
 
-  group('SessionPhase.ending with a non-zero hold (end-screen support)', () {
-    const hold = Duration(seconds: 3);
-
-    /// Drives a rig to the moment a tour ends, without settling.
-    Rig endedRig(FakeAsync async) {
-      final rig = Rig(() => DateTime(2026).add(async.elapsed), endingHold: hold);
+  // ─────────────────────────────────────────────────────────────────────────
+  // SessionPhase.farewell — lối kết thúc DO KHÁCH BẤM ở màn tổng kết.
+  //
+  // Khác `ending` ở đúng hai điểm, và cả hai đều được chốt ở đây:
+  //   • là một TRẠNG THÁI THẬT, có cửa sổ thời gian để màn Cảm ơn sống trong đó;
+  //   • cắm sạc thoát được — đó là thứ khiến hạn giữ 0 (vô hạn) an toàn.
+  // Phần dọn dẹp thì phải giống hệt mọi lối kết thúc khác.
+  // ─────────────────────────────────────────────────────────────────────────
+  group('SessionPhase.farewell', () {
+    /// Đưa rig tới đúng khoảnh khắc khách vừa bấm "Kết thúc chuyến đi".
+    Rig farewellRig(FakeAsync async, {Duration hold = Duration.zero}) {
+      final rig = Rig(() => DateTime(2026).add(async.elapsed), farewellHold: hold);
       rig.ctrl.start();
       rig.charging.add(false);
       async.flushMicrotasks();
       rig.ctrl.userStartedTour();
       rig.zones.add(const EnteredZone(1));
       async.flushMicrotasks();
-      rig.desk.add(true); // end the tour
+      rig.ctrl.visitorEndedTour();
       async.flushMicrotasks();
       return rig;
     }
 
-    test('the phase is HELD, giving an end screen a window to paint in', () {
+    test('là trạng thái quan sát được, mang theo lý do manual', () {
       fakeAsync((async) {
-        final rig = endedRig(async);
-
-        // This is the whole point: a settled, observable state.
-        expect(rig.ctrl.current.phase, SessionPhase.ending);
-        expect(rig.ctrl.current.endReason, SessionEndReason.desk);
-
-        async.elapse(const Duration(seconds: 2)); // still inside the window
-        expect(rig.ctrl.current.phase, SessionPhase.ending);
-
-        async.elapse(const Duration(seconds: 2)); // past it
-        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
-        expect(rig.ctrl.current.endReason, SessionEndReason.desk);
+        final rig = farewellRig(async);
+        expect(rig.ctrl.current.phase, SessionPhase.farewell);
+        expect(rig.ctrl.current.endReason, SessionEndReason.manual);
+        expect(rig.ctrl.current.isFarewell, isTrue);
         rig.dispose();
       });
     });
 
-    test('audio is cut immediately, NOT after the hold', () {
+    // Đây là điều kiện để `farewell.autoReturnSeconds: 0` là một lựa chọn hợp
+    // lệ chứ không phải một cách treo máy.
+    test('hạn giữ 0 ⇒ giữ vô hạn, không tự trôi về atDesk', () {
       fakeAsync((async) {
-        final rig = endedRig(async);
-        // 1 from userStartedTour's dock-residue cleanup + 1 from _endSession.
-        // A visitor must not keep hearing narration through the end screen.
+        final rig = farewellRig(async);
+        async.elapse(const Duration(hours: 2));
+        expect(rig.ctrl.current.phase, SessionPhase.farewell);
+        rig.dispose();
+      });
+    });
+
+    test('hạn giữ khác 0 ⇒ tự về atDesk khi hết giờ', () {
+      fakeAsync((async) {
+        final rig = farewellRig(async, hold: const Duration(seconds: 10));
+        async.elapse(const Duration(seconds: 9));
+        expect(rig.ctrl.current.phase, SessionPhase.farewell);
+        async.elapse(const Duration(seconds: 2));
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        expect(rig.ctrl.current.endReason, SessionEndReason.manual);
+        rig.dispose();
+      });
+    });
+
+    test('khách bấm "Xong" ⇒ về atDesk ngay, không đợi hết hạn', () {
+      fakeAsync((async) {
+        final rig = farewellRig(async, hold: const Duration(minutes: 5));
+        rig.ctrl.dismissFarewell();
+        async.flushMicrotasks();
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        rig.dispose();
+      });
+    });
+
+    // ĐƯỜNG THOÁT VẬT LÝ: máy bị bỏ quên ở màn Cảm ơn vẫn sạch khi về tới quầy.
+    test('cắm sạc ⇒ về atDesk kể cả khi đang giữ vô hạn', () {
+      fakeAsync((async) {
+        final rig = farewellRig(async);
+        rig.charging.add(true);
+        async.flushMicrotasks();
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        rig.dispose();
+      });
+    });
+
+    test('tiếng bị cắt NGAY, không đợi hết hạn giữ', () {
+      fakeAsync((async) {
+        final rig = farewellRig(async, hold: const Duration(minutes: 5));
+        // 1 lần từ userStartedTour (dọn tàn dư trên dock) + 1 từ _endSession.
+        // Khách không được nghe thuyết minh vọng qua màn cảm ơn.
         expect(rig.audio.stops, 2);
         rig.dispose();
       });
     });
 
-    test('a re-plug during the hold wins; the late settle cannot stomp it', () {
+    test('một chuyển động khác xen vào thắng; hẹn giờ tới muộn không giẫm lên',
+        () {
       fakeAsync((async) {
-        final rig = endedRig(async);
-        expect(rig.ctrl.current.phase, SessionPhase.ending);
+        final rig = farewellRig(async, hold: const Duration(seconds: 3));
+        rig.charging.add(true); // lên dock trước khi hết hạn
+        async.flushMicrotasks();
+        rig.charging.add(false); // khách kế tiếp rút máy ra ngay
+        async.flushMicrotasks();
+        expect(rig.ctrl.current.phase, SessionPhase.gate);
 
-        // Staff docks the device before the end screen finishes.
-        rig.charging.add(true);
+        async.elapse(const Duration(seconds: 5)); // hẹn giờ cũ bắn ở đây
+        expect(rig.ctrl.current.phase, SessionPhase.gate);
+        rig.dispose();
+      });
+    });
+
+    test('dispose giữa cửa sổ giữ không phát thêm gì', () {
+      fakeAsync((async) {
+        final rig = farewellRig(async, hold: const Duration(seconds: 3));
+        rig.dispose();
+        async.elapse(const Duration(seconds: 10)); // không được ném
+      });
+    });
+
+    // Nút trên notification: nhân viên thu máy về, không ai đứng trước màn hình.
+    test('staffEndSession KHÔNG đi qua farewell', () {
+      fakeAsync((async) {
+        final rig = Rig(() => DateTime(2026).add(async.elapsed));
+        rig.ctrl.start();
+        rig.charging.add(false);
+        async.flushMicrotasks();
+        rig.ctrl.userStartedTour();
+        rig.zones.add(const EnteredZone(1));
         async.flushMicrotasks();
 
-        async.elapse(const Duration(seconds: 5)); // the timer fires in here
+        final seen = <SessionPhase>[];
+        rig.ctrl.state.listen((s) => seen.add(s.phase));
+        rig.ctrl.staffEndSession();
+        async.flushMicrotasks();
+
+        expect(seen, isNot(contains(SessionPhase.farewell)));
         expect(rig.ctrl.current.phase, SessionPhase.atDesk);
         rig.dispose();
       });
     });
 
-    test('dispose during the hold does not publish afterwards', () {
+    test('visitorEndedTour bị bỏ qua ngoài phiên tham quan', () {
       fakeAsync((async) {
-        final rig = endedRig(async);
-        rig.dispose(); // tear down mid-window
-        async.elapse(const Duration(seconds: 10)); // must not throw
+        final rig = Rig(() => DateTime(2026).add(async.elapsed));
+        rig.ctrl.start();
+        rig.ctrl.visitorEndedTour(); // đang atDesk
+        async.flushMicrotasks();
+        expect(rig.ctrl.current.phase, SessionPhase.atDesk);
+        rig.dispose();
       });
     });
   });

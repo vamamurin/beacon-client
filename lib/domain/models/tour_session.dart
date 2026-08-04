@@ -12,6 +12,10 @@
 //   touring -> ending   : on charging (P1, 0ms) / deskStable after grace (P2) /
 //                         radio silence > sessionSilence (P3) / staff manual.
 //   ending  -> atDesk   : after cleanup (stop audio, wipe visited, show end).
+//   touring -> farewell : khách TỰ bấm kết thúc ở màn tổng kết. Cùng cleanup
+//                         với `ending`, khác ở chỗ nó là một trạng thái THẬT có
+//                         cửa sổ thời gian để màn "Cảm ơn" sống trong đó.
+//   farewell -> atDesk  : hết giờ giữ, khách bấm "Xong", hoặc máy lên dock.
 
 import 'package:flutter/foundation.dart';
 
@@ -27,15 +31,36 @@ enum SessionPhase {
   /// Active tour. Audio + zone pipeline live.
   touring,
 
-  /// Carries [SessionEndReason] out of [touring]. Always consumable as an EDGE
-  /// (AnalyticsRecorder emits TourEnded here).
+  /// Kết thúc TỰ ĐỘNG: sạc / về bàn / im lặng / nút trên notification. Mang
+  /// [SessionEndReason] ra khỏi [touring] (AnalyticsRecorder phát TourEnded ở
+  /// đây) rồi bị [atDesk] thay thế NGAY trong cùng một lần gọi đồng bộ.
   ///
-  /// ⚠ Whether it is also RENDERABLE depends on SessionController's
-  /// `endingHold`. At the default of zero it is superseded by [atDesk] within
-  /// one synchronous call — no frame is pumped, so a screen keyed on it can
-  /// never paint. Read SessionController._endSession BEFORE building an end
-  /// screen: it takes three coordinated changes, not just a non-zero hold.
+  /// ⚠ Đây là một CẠNH, không phải một trạng thái vẽ được: không frame nào được
+  /// bơm giữa nó và [atDesk]. Điều đó là ĐÚNG với ba lý do kết thúc tự động —
+  /// máy đang nằm trên dock, hoặc khách đang đứng ở quầy trả máy, hoặc máy bị
+  /// bỏ quên. Không ai đang nhìn màn hình, nên không có gì cần vẽ.
+  ///
+  /// Muốn một màn hình sau khi tour kết thúc thì dùng [farewell] — nó tồn tại
+  /// chính vì lý do đó. (Trước đây chỗ này có một cơ chế `endingHold` cho phép
+  /// giữ `ending` lại; nó chưa bao giờ được dùng ở production và đã bị gỡ khi
+  /// [farewell] ra đời — hai cơ chế cho một việc là hai nguồn sự thật.)
   ending,
+
+  /// Khách TỰ bấm kết thúc ở màn tổng kết. Một trạng thái THẬT, có cửa sổ thời
+  /// gian, để màn "Cảm ơn / xin gửi lại máy" sống trong đó.
+  ///
+  /// Vì sao nó xứng đáng là một phase chứ không phải một cờ ở tầng UI: "khách
+  /// chủ động kết thúc" là một sự kiện của VÒNG ĐỜI PHIÊN, và vòng đời phiên có
+  /// đúng một chủ sở hữu. Diễn đạt nó ở tầng điều hướng nghĩa là bộ định tuyến
+  /// phải biết một chuyện mà máy trạng thái không biết — và mọi thứ khác đọc
+  /// phiên (analytics, keep-alive, đồng bộ) thì không bao giờ nghe được.
+  ///
+  /// Khác [ending] ở ĐÚNG hai điểm; phần dọn dẹp (dừng tiếng, hạ keep-alive,
+  /// phát TourEnded) hoàn toàn giống nhau:
+  ///   • có thời gian giữ (`farewellHold`, chỉnh được từ manifest);
+  ///   • [SessionController] xử lý cắm sạc ở đây, nên giữ VÔ HẠN vẫn an toàn —
+  ///     máy lên dock là tự về [atDesk].
+  farewell,
 }
 
 /// Why a tour session ended — for analytics/logging. When several end signals
@@ -82,6 +107,7 @@ class SessionState {
 
   bool get isTouring => phase == SessionPhase.touring;
   bool get isAtGate => phase == SessionPhase.gate;
+  bool get isFarewell => phase == SessionPhase.farewell;
 
   SessionState copyWith({
     SessionPhase? phase,

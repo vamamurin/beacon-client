@@ -29,12 +29,21 @@ class SessionProvider extends ChangeNotifier {
 
   bool get isAtGate => _state.isAtGate;
   bool get isTouring => _state.isTouring;
+  bool get isFarewell => _state.isFarewell;
   SessionPhase get phase => _state.phase;
 
   /// Visitor pressed "Bắt đầu tham quan" on the gate.
   void startTour() => _controller.userStartedTour();
 
-  /// Staff manual end (hidden control).
+  /// Khách xác nhận "Kết thúc chuyến đi" ở màn tổng kết → phiên vào
+  /// [SessionPhase.farewell] và màn Cảm ơn hiện ra.
+  void endTourWithFarewell() => _controller.visitorEndedTour();
+
+  /// Khách bấm "Xong" ở màn Cảm ơn → về trạng thái nghỉ sớm hơn hạn giữ.
+  void dismissFarewell() => _controller.dismissFarewell();
+
+  /// Kết thúc thủ công KHÔNG có người đứng trước máy (nút trên notification).
+  /// Không đi qua màn Cảm ơn — xem doc [SessionController.staffEndSession].
   void endTour() => _controller.staffEndSession();
 
   @override
