@@ -40,6 +40,7 @@ import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
+import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
@@ -71,7 +72,16 @@ String? tourNavigationTarget({
   if (prev == null || prev == next) return null;
 
   return switch (next) {
-    SessionPhase.touring => AppRouter.zoneRoute,
+    // Cả hai nhánh dưới đây HÔM NAY trỏ về cùng một route ([AppRouter.restRoute]
+    // == [AppRouter.shellRoute]), nhưng chúng được viết riêng vì chúng là hai ý
+    // khác nhau và sẽ TÁCH RA: khi màn poster trở thành màn nghỉ, `restRoute`
+    // đổi còn `shellRoute` thì không. Gộp chúng lại bây giờ là hẹn một lần sửa
+    // sai vào ngày đó.
+    //
+    // Dựng lại shell ở MỌI chuyển phase là chủ đích, không phải lãng phí: ba
+    // ngăn xếp tab trở lại rỗng, nên khách kế tiếp không nhận máy đang dở dang
+    // của người trước. Shell tự chọn tab mở đầu theo phase.
+    SessionPhase.touring => AppRouter.shellRoute,
     SessionPhase.farewell => AppRouter.farewellRoute,
 
     // `ending` là một CẠNH ở lối kết thúc tự động: nó bị `atDesk` thay thế
@@ -133,6 +143,21 @@ class _MuseumAppState extends State<MuseumApp> {
       navigatorKey: _navKey,
       theme: themeCtrl.theme,
       initialRoute: AppRouter.initialRoute,
+      // ⚠ ĐỪNG BỎ DÒNG NÀY. Mặc định của Flutter cho `initialRoute` là
+      // `Navigator.defaultGenerateInitialRoutes`, và nó CẮT TÊN ROUTE THEO DẤU
+      // '/' rồi dựng một ngăn xếp cho từng tiền tố. Với `/shell` nó sẽ sinh ra
+      // ['/', '/shell'] — mà '/' là màn chào. Tức app khởi động với một màn
+      // chào nằm SẴN dưới khung máy, vô hình nhưng có thật: nút lùi rơi vào nó,
+      // và nó giữ nguyên một cây widget không ai nhìn thấy.
+      //
+      // Lỗi này đã có từ trước bản sửa này (màn nghỉ khi ấy là `/menu`, và ngăn
+      // xếp khởi động là ['/', '/menu']). Nó không lộ ra vì màn chào lúc đó
+      // cũng là một đích hợp lệ để lùi về.
+      //
+      // Một route, đúng một route: app này không có deep-link phân cấp nào.
+      onGenerateInitialRoutes: (name) => <Route<dynamic>>[
+        AppRouter.onGenerateRoute(RouteSettings(name: name)),
+      ],
       onGenerateRoute: AppRouter.onGenerateRoute,
       onUnknownRoute: AppRouter.onUnknownRoute,
       navigatorObservers: [routeObserver, _routeTracker],
@@ -194,27 +219,24 @@ class _MuseumAppState extends State<MuseumApp> {
     });
   }
 
-  /// After a CONFIRMED zone switch, rebuild the stack as [Zone, ExhibitList(B)]
-  /// so Back from the new exhibit list returns to the zone card (screen 2),
-  /// consistent with the normal forward flow. Post-frame + one-shot consume so
-  /// a later rebuild doesn't re-navigate.
+  /// Sau khi khách XÁC NHẬN chuyển khu, đưa họ tới danh sách hiện vật của khu
+  /// mới — nhưng chỉ khi họ đang ở sâu trong tab Tham quan.
+  ///
+  /// ⚠ QUYẾT ĐỊNH ĐÃ CHUYỂN CHỖ Ở, và đó là bản sửa chứ không phải bản dời.
+  /// Trước đây chỗ này tự kiểm "khách có đang ở màn 3/4 không" bằng cách so tên
+  /// route trên navigator GỐC. Từ khi ba màn đó sống trong `Navigator` của một
+  /// tab, navigator gốc không còn nhìn thấy chúng — phép so ấy sẽ luôn cho sai,
+  /// và tính năng lặng lẽ chết. Câu hỏi "khách đang đứng đâu trong tab Tham
+  /// quan" chỉ shell trả lời được, nên nó thuộc về shell.
+  ///
+  /// Ở đây chỉ còn: chuyển tiếp ý định, rồi tiêu thụ one-shot. Post-frame để
+  /// không điều hướng giữa lúc build; tiêu thụ DÙ shell có làm gì hay không,
+  /// nếu không nó sẽ bắn lại ở mọi rebuild sau đó.
   void _syncConfirmedNav(BuildContext context, int major) {
     final provider = context.read<PendingZoneChangeProvider>();
-    // Only pull the visitor to zone B's exhibit list if they're currently ON
-    // screen 3 or 4. On screen 2 (zone list) the change already shows in place
-    // via ZoneProvider — yanking them into screen 3 would be unwanted. Consume
-    // the one-shot either way so it doesn't linger.
-    final current = _routeTracker.currentRouteName;
-    final onExhibitScreen = current == AppRouter.exhibitListRoute ||
-        current == AppRouter.exhibitDetailRoute;
+    final shell = context.read<ShellController>();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (onExhibitScreen) {
-        final nav = _navKey.currentState;
-        if (nav != null) {
-          nav.pushNamedAndRemoveUntil(AppRouter.zoneRoute, (_) => false);
-          nav.pushNamed(AppRouter.exhibitListRoute, arguments: major);
-        }
-      }
+      shell.followZoneChange(major);
       provider.consumeConfirmedNavTarget();
     });
   }
@@ -222,16 +244,18 @@ class _MuseumAppState extends State<MuseumApp> {
 /// NavigatorObserver nhớ tên route đang ở trên cùng.
 ///
 /// Hai người dùng, và họ cần hai thứ khác nhau từ cùng một giá trị:
-///   • `_syncConfirmedNav` ĐỌC một lần khi có xác nhận đổi khu (chỉ điều hướng
-///     khi khách đang ở màn 3/4);
 ///   • lớp phủ toàn cục (banner đổi khu, overlay mất Bluetooth) phải VẼ LẠI khi
 ///     route đổi — nên giá trị là một [ValueNotifier], không phải một field.
+///
+/// NGƯỜI DÙNG THỨ HAI ĐÃ RA ĐI: `_syncConfirmedNav` từng đọc tên route ở đây để
+/// biết khách có đang ở màn 3/4 không. Từ khi ba màn đó sống trong Navigator
+/// của một tab, navigator gốc không còn nhìn thấy chúng — câu hỏi ấy nay do
+/// shell trả lời. Getter `currentRouteName` bị xoá cùng lúc: một API chỉ còn
+/// phục vụ một câu hỏi không ai hỏi nữa.
 ///
 /// Không giẫm lên [routeObserver] (RouteAware) — hai observer độc lập.
 class _RouteNameTracker extends NavigatorObserver {
   final ValueNotifier<String?> currentRoute = ValueNotifier<String?>(null);
-
-  String? get currentRouteName => currentRoute.value;
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {

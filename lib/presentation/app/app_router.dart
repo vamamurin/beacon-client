@@ -8,12 +8,10 @@ import 'package:flutter/material.dart';
 
 import 'package:beacon_client/presentation/exhibits/exhibit_detail_screen.dart';
 import 'package:beacon_client/presentation/exhibits/exhibit_list_screen.dart';
+import 'package:beacon_client/presentation/app/tour_shell.dart';
 import 'package:beacon_client/presentation/farewell/farewell_screen.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart';
-import 'package:beacon_client/presentation/guide/guide_screen.dart';
-import 'package:beacon_client/presentation/menu/menu_screen.dart';
 import 'package:beacon_client/presentation/summary/summary_screen.dart';
-import 'package:beacon_client/presentation/zone/zone_screen.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/settings/settings_screen.dart';
@@ -29,35 +27,54 @@ class ExhibitDetailArgs {
 
 abstract final class AppRouter {
   static const String gateRoute = '/'; // Screen 1: welcome / start
-  static const String zoneRoute = '/zone'; // Screen 2: current zone card / radar
   static const String exhibitListRoute = '/exhibits'; // Screen 3
   static const String exhibitDetailRoute = '/exhibit'; // Screen 4
   static const String settingsRoute = '/settings'; // setting screen
 
-  // ── các màn thêm ở nhánh add-on-screens ──
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// KHUNG MÁY — chứa các tab, và gần như mọi màn chạy BÊN TRONG nó
+  /// ═══════════════════════════════════════════════════════════════════════
+  ///
+  /// Đây là route DUY NHẤT mà `MuseumApp._syncNavigation` dựng lại ở mỗi ranh
+  /// giới phiên. Bên trong nó, mỗi tab có `Navigator` riêng và các trang con
+  /// (danh sách hiện vật, chi tiết hiện vật) sống ở đó — nên chúng KHÔNG phủ
+  /// lên tab bar, và tab của chính chúng vẫn sáng.
+  ///
+  /// ⚠ [exhibitListRoute] và [exhibitDetailRoute] KHÔNG còn được đẩy lên
+  /// navigator gốc. Bảng dưới đây vẫn dựng được chúng vì các Navigator lồng
+  /// trong shell ỦY QUYỀN cho `onGenerateRoute` này — một bảng, không phải hai
+  /// bản sao sẽ lệch nhau ở lần sửa đầu tiên.
+  ///
+  /// `zoneRoute` ĐÃ BỊ XOÁ cùng lúc: màn khu vực nay là màn GỐC của tab Tham
+  /// quan, dựng thẳng trong shell, nên cái tên route ấy không còn ai gọi. Một
+  /// hằng số không có call site là một hằng số sẽ nói dối ở lần đọc sau.
+  static const String shellRoute = '/shell';
+
+  // ── các màn TOÀN MÀN HÌNH, nằm TRÊN shell ──
   //
-  // Ba màn dưới đây chia nhau một đặc điểm quan trọng: KHÔNG màn nào tự dựng
-  // lại stack theo vòng đời phiên. [menuRoute] và [guideRoute] sống trong phase
-  // `gate`; [summaryRoute] sống trong phase `touring` (nó là màn XÁC NHẬN, có
-  // đường lui); chỉ [farewellRoute] nằm sau khi phiên đã dọn — và nó tới được
-  // đó là do MuseumApp._syncNavigation đưa sang, không phải tự đẩy.
-  static const String menuRoute = '/menu'; // trung tâm điều hướng
-  static const String guideRoute = '/guide'; // hướng dẫn sử dụng
+  // Ba màn dưới đây phủ cả tab bar, và mỗi màn có một lý do riêng:
+  //   [summaryRoute]  màn XÁC NHẬN của cả phiên (vẫn trong `touring`, có đường
+  //                   lui). Khách đang đọc bản ghi chuyến đi thì không nên có
+  //                   năm lối mời đi tiếp ở dưới chân.
+  //   [farewellRoute] sau khi phiên đã dọn; tới được đó là do
+  //                   MuseumApp._syncNavigation đưa sang, không phải tự đẩy.
+  //   [settingsRoute] màn của NHÂN VIÊN.
   static const String summaryRoute = '/summary'; // tổng kết (VẪN trong phiên)
   static const String farewellRoute = '/farewell'; // cảm ơn / gửi lại máy
 
   /// MÀN NGHỈ — nơi máy quay về mỗi khi không có tour nào chạy: lúc nằm trên
   /// dock, lúc vừa được nhấc lên, và sau khi một chuyến đi khép lại.
   ///
-  /// Có tên riêng thay vì viết thẳng [menuRoute] ở các call site, vì thứ tự đầu
-  /// luồng còn đổi: màn poster/giới thiệu sẽ được đặt TRƯỚC Menu, và ngày đó
-  /// màn nghỉ là poster chứ không phải Menu nữa. Khi ấy đây là DÒNG DUY NHẤT
-  /// phải sửa — bộ định tuyến và mọi đường quay về đều đọc qua hằng này.
+  /// Nay là [shellRoute]: shell tự chọn tab mở đầu theo phase (chưa tour ⇒ tab
+  /// Trang chính). Hằng này vẫn tồn tại riêng vì thứ tự đầu luồng CÒN ĐỔI —
+  /// màn poster sẽ được đặt TRƯỚC Menu ở bước sau, và ngày đó màn nghỉ là
+  /// poster chứ không phải shell nữa. Khi ấy đây là DÒNG DUY NHẤT phải sửa.
   ///
   /// Hệ quả trách nhiệm: màn nào đứng ở đây thì màn đó phải mang các thẻ trạng
   /// thái dành cho nhân viên (xem `deviceNotReadyCard`), vì nó là thứ nhân viên
-  /// nhìn khi nhấc máy khỏi dock.
-  static const String restRoute = menuRoute;
+  /// nhìn khi nhấc máy khỏi dock. Hiện trách nhiệm đó nằm ở màn gốc của tab
+  /// Trang chính.
+  static const String restRoute = shellRoute;
 
   static const String initialRoute = restRoute;
 
@@ -65,8 +82,6 @@ abstract final class AppRouter {
     switch (settings.name) {
       case gateRoute:
         return _page(const GateScreen(), settings);
-      case zoneRoute:
-        return _page(const ZoneScreen(), settings);
       case exhibitListRoute:
         final args = settings.arguments;
         if (args is! int) {
@@ -84,12 +99,10 @@ abstract final class AppRouter {
           ExhibitDetailScreen(major: args.major, minor: args.minor),
           settings,
         );
+      case shellRoute:
+        return _page(const TourShell(), settings);
       case settingsRoute:
         return _page(const SettingsScreen(), settings);
-      case menuRoute:
-        return _page(const MenuScreen(), settings);
-      case guideRoute:
-        return _page(const GuideScreen(), settings);
       case summaryRoute:
         return _page(const SummaryScreen(), settings);
       case farewellRoute:

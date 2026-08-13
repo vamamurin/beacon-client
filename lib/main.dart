@@ -34,6 +34,7 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/core/injection.dart';
 import 'package:beacon_client/presentation/app/app.dart';
 import 'package:beacon_client/presentation/app/app_restarter.dart';
+import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
@@ -101,6 +102,13 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => ThemeController(store: settings)),
         ChangeNotifierProvider(
             create: (_) => SettingsProvider(store: settings)),
+
+        // Tay cầm để root điều khiển shell (chọn tab, theo khách sang khu mới).
+        // Nằm NGOÀI _BootstrapHost cùng lý do với ThemeController: nó là trạng
+        // thái của KHUNG GIAO DIỆN, không phải của graph, nên AppRestarter
+        // không được thổi bay nó. Nó KHÔNG giữ GlobalKey nào — xem doc đầu
+        // `shell_controller.dart` cho cái bẫy mà điều đó tránh được.
+        ChangeNotifierProvider(create: (_) => ShellController()),
       ],
       child: _BootstrapHost(settings: settings, audioHandler: audioHandler),
     ),

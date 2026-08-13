@@ -1,11 +1,22 @@
 // Destination: lib/presentation/menu/menu_items.dart
 //
 // Danh sách các mục Menu — DÙNG CHUNG cho hai chỗ hiện nó:
-//   • [MenuScreen]  — màn đầy đủ TRƯỚC tour (phase gate)
-//   • [MenuSheet]   — sheet kéo lên GIỮA tour
+//   • [MenuScreen]   — màn gốc của tab Trang chính
+//   • [MuseumDrawer] — ngăn kéo trượt từ trái, mở được ở mọi màn
 //
 // Một widget cho cả hai vì đó chính là lời hứa với khách: "menu" phải là cùng
 // một thứ ở mọi thời điểm. Hai bản sao sẽ lệch nhau ngay lần thêm mục thứ ba.
+//
+// ⚠ HÀNG THAY CHO THẺ. Mỗi mục từng là một thẻ `surfaceRaised` bo góc có đĩa
+// icon 36dp; nay là [AppRow] — tràn hết bề ngang, nền trong suốt, không icon,
+// chỉ nhãn và dấu ›. Đó là một trong BA hình dáng của cả app (xem doc đầu
+// `app_row.dart`): một mục menu là một THAO TÁC, và thao tác thì đeo dấu ›.
+//
+// Hệ quả về bố cục: [AppRow] TỰ MANG lề ngang [AppSpace.gutter]. Chỗ gọi phải
+// đặt widget này NGOÀI vùng đã có padding ngang, nếu không lề sẽ cộng đôi.
+//
+// `MuseumIcons.forMenu` mất call site cuối cùng ở đây. Chưa xoá: màn Sơ đồ và
+// Danh mục sắp dựng có thể cần lại. Nếu tới lúc đó vẫn không ai gọi, xoá nó.
 //
 // BA TẦNG LỌC, theo thứ tự — nhầm thứ tự là ra một nút bấm không dẫn đi đâu:
 //   1. bundle BẬT mục đó                (MenuEntry.enabled)
@@ -21,10 +32,7 @@ import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
-import 'package:beacon_client/presentation/theme/app_space.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/museum_icons.dart';
-import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 
 /// Menu đang được hiện ở đâu.
@@ -121,99 +129,17 @@ class MenuItemList extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final a in actions)
-          _MenuRow(
+          AppRow(
             key: ValueKey('menu.item.${a.id}'),
-            action: a,
-            title: content.ui(_labelKey(a)),
-            description: content.ui(_descKey(a)),
+            label: content.ui(_labelKey(a)),
+            // Câu mô tả rời khỏi MẮT nhưng ở lại với TAI. Xem doc
+            // `AppRow.semanticLabel`: hai nhãn "Bắt đầu tham quan" và "Chọn
+            // tuyến tham quan" nghe gần như nhau nếu chỉ đọc tiêu đề.
+            semanticLabel:
+                '${content.ui(_labelKey(a))}. ${content.ui(_descKey(a))}',
             onTap: () => onSelect(a),
           ),
       ],
-    );
-  }
-}
-
-class _MenuRow extends StatelessWidget {
-  final MenuAction action;
-  final String title;
-  final String description;
-  final VoidCallback onTap;
-
-  const _MenuRow({
-    super.key,
-    required this.action,
-    required this.title,
-    required this.description,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-
-    return Semantics(
-      button: true,
-      // Đọc cả mô tả: ở màn này mô tả KHÔNG phải trang trí — nó là thứ phân
-      // biệt "Bắt đầu tham quan" với "Chọn tuyến tham quan" cho người dùng
-      // screen reader, hai nhãn nghe gần như nhau nếu chỉ đọc tiêu đề.
-      label: '$title. $description',
-      excludeSemantics: true,
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.x3),
-        child: Material(
-          color: t.surfaceRaised,
-          borderRadius: t.sharpAll,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: t.sharpAll,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.x4),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Đĩa icon: cùng vật liệu với badge màn khu vực, nên hai màn
-                  // đọc ra là cùng một bảo tàng.
-                  Container(
-                    width: AppSpace.badge,
-                    height: AppSpace.badge,
-                    decoration: BoxDecoration(
-                      color: t.badgeWell,
-                      borderRadius: t.sharpAll,
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(MuseumIcons.forMenu(action),
-                        size: 18, color: t.ink),
-                  ),
-                  const SizedBox(width: AppSpace.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(title,
-                            style: AppText.cardTitle.copyWith(color: t.ink)),
-                        const SizedBox(height: AppSpace.x1),
-                        Text(description,
-                            style: AppText.meta.copyWith(color: t.inkMuted)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.x3),
-                  // Mũi tên ngồi trên dòng tiêu đề, không giữa thẻ: thẻ cao
-                  // thấp khác nhau tuỳ độ dài mô tả, mũi tên trôi theo thì cả
-                  // cột mất đường thẳng.
-                  Padding(
-                    padding: const EdgeInsets.only(top: AppSpace.x1),
-                    child: Icon(Icons.chevron_right,
-                        size: 18, color: t.inkFaint),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

@@ -32,6 +32,7 @@ import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
 import 'package:beacon_client/domain/models/tour_session.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
+import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
@@ -176,6 +177,11 @@ Widget _app({
           totalExhibits: () => 0,
         )),
       ),
+      // Nút ☰ của hàng chrome nay mở ngăn kéo của shell, nên nó đọc
+      // [ShellController]. Ở đây không có shell nào gắn vào — và đó đúng là
+      // hành vi cần: mọi lệnh của controller thành no-op, nên test bấm nhầm nút
+      // menu cũng không điều hướng đi đâu. Xem doc đầu `shell_controller.dart`.
+      ChangeNotifierProvider<ShellController>(create: (_) => ShellController()),
     ],
     child: MaterialApp(
       theme: buildMuseumTheme(themeId),

@@ -19,8 +19,16 @@ String? target(SessionPhase? prev, SessionPhase next) =>
     tourNavigationTarget(prev: prev, next: next);
 
 void main() {
-  test('vào tour ⇒ màn khu vực', () {
-    expect(target(SessionPhase.gate, SessionPhase.touring), AppRouter.zoneRoute);
+  test('vào tour ⇒ dựng lại KHUNG MÁY', () {
+    // Trước đây là `zoneRoute`. Màn khu vực nay sống trong tab Tham quan của
+    // shell, nên đích đến là shell — và shell tự chọn tab mở đầu theo phase.
+    //
+    // ⚠ `shellRoute` HÔM NAY BẰNG `restRoute`, nên assertion này và các
+    // assertion "về màn nghỉ" bên dưới đang so cùng một chuỗi. Đó KHÔNG phải
+    // thừa: hai hằng mang hai ý, và chúng sẽ tách ra khi màn poster trở thành
+    // màn nghỉ. Giữ đúng tên hằng ở mỗi chỗ để ngày đó test tự chỉ ra chỗ sai.
+    expect(target(SessionPhase.gate, SessionPhase.touring),
+        AppRouter.shellRoute);
   });
 
   group('kết thúc TỰ ĐỘNG (sạc / về bàn / im lặng / nút trên notification)', () {
@@ -98,7 +106,7 @@ void main() {
       expect(
         t,
         anyOf(isNull, isIn(const [
-          AppRouter.zoneRoute,
+          AppRouter.shellRoute,
           AppRouter.farewellRoute,
           AppRouter.restRoute,
         ])),

@@ -29,6 +29,7 @@ import 'package:provider/provider.dart';
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
+import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart'
     show deviceNotReadyCard;
 import 'package:beacon_client/presentation/menu/menu_items.dart';
@@ -37,6 +38,7 @@ import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/tab_icons.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 import 'package:beacon_client/presentation/widgets/language_picker.dart';
 
@@ -88,15 +90,18 @@ class _MenuBody extends StatelessWidget {
 
     // CustomScrollView chứ không Column: ở textScaler 1.6× với năm mục cộng
     // một thẻ trạng thái, nội dung vượt chiều cao màn và Column sẽ tràn.
+    // BA SLIVER, KHÔNG PHẢI MỘT — và lý do là hình học, không phải thẩm mỹ:
+    // [MenuItemList] nay dựng bằng [AppRow], mà hàng thì TRÀN HẾT bề ngang và
+    // TỰ MANG lề [AppSpace.gutter]. Để nó nằm trong một `SliverPadding` ngang
+    // là cộng lề thành 40dp, và hàng thôi tràn mép — tức nó thôi đọc ra là một
+    // thao tác. Khối chữ ở trên và bộ chọn tiếng ở dưới vẫn cần lề, nên lề đi
+    // theo CHÚNG chứ không đi theo cả màn.
+    const hPad = EdgeInsets.symmetric(horizontal: AppSpace.gutter);
+
     return CustomScrollView(
       slivers: [
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpace.gutter,
-            AppSpace.x6,
-            AppSpace.gutter,
-            AppSpace.x8,
-          ),
+          padding: hPad.add(const EdgeInsets.only(top: AppSpace.x6)),
           sliver: SliverList(
             delegate: SliverChildListDelegate([
               _MuseumKicker(name: museum),
@@ -114,20 +119,22 @@ class _MenuBody extends StatelessWidget {
                 notReady,
                 const SizedBox(height: AppSpace.x6),
               ],
-
-              MenuItemList(
-                placement: MenuPlacement.beforeTour,
-                deviceReady: notReady == null,
-                onSelect: (a) => _onSelect(context, a),
-              ),
-
-              const SizedBox(height: AppSpace.x6),
-              // Ngôn ngữ đổi được từ đây và từ cả màn chào — khách nhận máy từ
-              // tay nhân viên thường chỉ nhận ra mình cần đổi ở một trong hai
-              // chỗ, và không đoán được là chỗ nào.
-              const LanguagePicker(),
             ]),
           ),
+        ),
+        SliverToBoxAdapter(
+          child: MenuItemList(
+            placement: MenuPlacement.beforeTour,
+            deviceReady: notReady == null,
+            onSelect: (a) => _onSelect(context, a),
+          ),
+        ),
+        SliverPadding(
+          padding: hPad.add(const EdgeInsets.fromLTRB(0, AppSpace.x6, 0, AppSpace.x8)),
+          // Ngôn ngữ đổi được từ đây và từ cả màn chào — khách nhận máy từ tay
+          // nhân viên thường chỉ nhận ra mình cần đổi ở một trong hai chỗ, và
+          // không đoán được là chỗ nào.
+          sliver: const SliverToBoxAdapter(child: LanguagePicker()),
         ),
       ],
     );
@@ -139,9 +146,18 @@ class _MenuBody extends StatelessWidget {
         // KHÔNG gọi startTour() ở đây. Màn chào mới là chỗ phát biểu ý định đó
         // — nó còn phải chào khách và cho đổi ngôn ngữ lần cuối trước khi
         // thuyết minh bắt đầu phát.
-        Navigator.of(context).pushNamed(AppRouter.gateRoute);
+        //
+        // `rootNavigator` chứ không phải navigator của tab: màn chào phủ CẢ tab
+        // bar. Nó là một khoảnh khắc của cả phiên, không phải một trang bên
+        // trong tab Trang chính.
+        Navigator.of(context, rootNavigator: true)
+            .pushNamed(AppRouter.gateRoute);
       case MenuAction.guide:
-        Navigator.of(context).pushNamed(AppRouter.guideRoute);
+        // ĐỔI TAB, KHÔNG ĐẨY ROUTE. Hướng dẫn nay là một đích CẤP MỘT — nó có
+        // tab của riêng nó. Đẩy nó vào ngăn xếp của tab Trang chính sẽ cho ra
+        // một màn Hướng dẫn mà tab đang sáng lại là Trang chính, đúng hai tín
+        // hiệu ngược nhau mà thiết kế đã bác.
+        context.read<ShellController>().selectTab(ShellTab.guide);
       case MenuAction.catalog:
       case MenuAction.map:
       case MenuAction.tours:

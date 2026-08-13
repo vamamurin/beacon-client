@@ -188,6 +188,18 @@ abstract final class UiKeys {
   static const menuItemTours = 'menu.item.tours';
   static const menuItemToursDesc = 'menu.item.tours.desc';
 
+  // ── nhãn tab bar ─────────────────────────────────────────────────────────
+  //
+  // TÁCH KHỎI `menu.item.*` DÙ VÀI CẶP TRỎ CÙNG MỘT ĐÍCH. Nhãn menu là một câu
+  // mời ("Hướng dẫn sử dụng"); nhãn tab là một cái tên phải lọt trong ~78dp
+  // ("Hướng dẫn"). Dùng chung một khoá là buộc bảo tàng phải chọn một chuỗi
+  // vừa đủ dài để mời vừa đủ ngắn để không tràn — tức là buộc họ chọn sai.
+  static const tabHome = 'tab.home';
+  static const tabTour = 'tab.tour';
+  static const tabMap = 'tab.map';
+  static const tabForYou = 'tab.foryou';
+  static const tabGuide = 'tab.guide';
+
   // ── hướng dẫn sử dụng ──
   static const guideTitle = 'guide.title';
   static const guideSubtitle = 'guide.subtitle';
@@ -422,6 +434,12 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.menuBack: 'Quay lại',
   UiKeys.menuSheetTitle: 'Menu',
   UiKeys.menuOpen: 'Mở menu',
+
+  UiKeys.tabHome: 'Trang chính',
+  UiKeys.tabTour: 'Tham quan',
+  UiKeys.tabMap: 'Sơ đồ',
+  UiKeys.tabForYou: 'Gợi ý',
+  UiKeys.tabGuide: 'Hướng dẫn',
   UiKeys.menuClose: 'Đóng menu',
   UiKeys.menuItemStart: 'Bắt đầu tham quan',
   UiKeys.menuItemStartDesc:

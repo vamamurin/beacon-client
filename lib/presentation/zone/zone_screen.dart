@@ -66,7 +66,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/presentation/app/app_router.dart';
-import 'package:beacon_client/presentation/menu/menu_sheet.dart';
+import 'package:beacon_client/presentation/app/museum_drawer.dart';
+import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
@@ -119,12 +120,21 @@ class _TourChrome extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(
+    final t = context.tokens;
+    // ☰ nay mở NGĂN KÉO của shell, không mở bottom sheet nữa. Hàng chrome tạm
+    // này sẽ biến mất ở bước dựng lại màn khu vực, khi thanh trên `.mbar` của
+    // thiết kế thay chỗ nó — lúc đó ☰ về đúng góc trái cùng hàng với tên màn.
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
           AppSpace.gutter, AppSpace.x2, AppSpace.gutter, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.end,
-        children: [MenuButton()],
+        children: [
+          MuseumMenuButton(
+            color: t.ink,
+            onTap: () => context.read<ShellController>().openDrawer(),
+          ),
+        ],
       ),
     );
   }
