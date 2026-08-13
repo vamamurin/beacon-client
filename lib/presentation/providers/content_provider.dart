@@ -18,6 +18,7 @@ import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/feedback_config.dart';
 import 'package:beacon_client/domain/models/guide_content.dart';
+import 'package:beacon_client/domain/models/news_item.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/summary_config.dart';
@@ -98,6 +99,18 @@ class ContentProvider extends ChangeNotifier {
 
   LocalizedText? get museumName => _repo.config?.museumName;
 
+  /// Tên RIÊNG của bảo tàng, không kèm chữ "Bảo tàng" — dòng lớn của cặp chữ ký
+  /// ở màn Poster, nơi chữ "Bảo tàng" đã là dòng nhỏ đứng trên.
+  ///
+  /// Thiếu `museum.shortName` ⇒ lùi về tên đầy đủ. Lùi như vậy sẽ lặp chữ "Bảo
+  /// tàng" trên màn Poster, và đó là ĐÚNG hành vi cần: nó nhìn thấy được ngay,
+  /// nên bảo tàng biết phải bổ sung khoá — im lặng cắt chuỗi hộ mới là thứ
+  /// không ai phát hiện.
+  String get museumShortName =>
+      textOrNull(_repo.config?.museumShortName) ??
+      textOrNull(museumName) ??
+      ui(UiKeys.gateMuseumFallback);
+
   bool get isWarmed => _repo.isWarmed;
 
   // ── cấu hình các màn phụ trợ ───────────────────────────────────────────────
@@ -110,6 +123,14 @@ class ContentProvider extends ChangeNotifier {
   MenuConfig get menu => _repo.config?.menu ?? MenuConfig.defaults;
 
   GuideContent get guide => _repo.config?.guide ?? GuideContent.empty;
+
+  /// "Giới thiệu bảo tàng" và "Câu hỏi thường gặp" — hai bài đọc của màn
+  /// Poster. Rỗng ⇒ hàng tương ứng không hiện (xem [MuseumConfig.about]).
+  GuideContent get about => _repo.config?.about ?? GuideContent.empty;
+  GuideContent get faq => _repo.config?.faq ?? GuideContent.empty;
+
+  /// Tin tức của bảo tàng — nửa dưới màn Menu.
+  NewsFeed get news => _repo.config?.news ?? NewsFeed.empty;
 
   SummaryConfig get summary => _repo.config?.summary ?? SummaryConfig.defaults;
 

@@ -12,7 +12,7 @@
 // Đó là một tính chất đo được, và nó là thứ dễ mất nhất: chỉ cần một trong hai
 // màn thêm một `SizedBox` phía trên, hoặc đổi `height` của [AppText.posterKicker],
 // là sự đối xứng đi mất mà không có gì kêu lên. Trước file này, cái canh nó là
-// việc cả hai cùng đọc [AppRatio.gateTop] — một thoả thuận, không phải một cơ
+// việc cả hai cùng đọc [DesignSize.gateTop] — một thoả thuận, không phải một cơ
 // chế.
 //
 // FILE NÀY THAY `gate_layout_test.dart` ĐÃ XOÁ. Test cũ đo hình học của collage
@@ -41,7 +41,7 @@ Widget _host(Widget child, {MuseumThemeId theme = MuseumThemeId.light}) =>
 /// Poster: cụm chữ mang các hàng thao tác ngay bên dưới.
 Widget _poster() => const SignatureScreen(
       imagePath: null, // ⇒ gradient dự phòng; test không đụng đĩa
-      veil: SignatureVeil.poster,
+      kind: SignatureKind.poster,
       kicker: 'Bảo tàng',
       title: 'Chứng tích Chiến tranh',
       poweredBy: true,
@@ -51,7 +51,7 @@ Widget _poster() => const SignatureScreen(
 Widget _farewell({String lede = 'Chuyến tham quan đã kết thúc.'}) =>
     SignatureScreen(
       imagePath: null,
-      veil: SignatureVeil.backdrop,
+      kind: SignatureKind.farewell,
       kicker: 'Cảm ơn',
       title: 'quý khách',
       lede: lede,
@@ -78,18 +78,18 @@ void main() {
 
       expect(farewell, moreOrLessEquals(poster, epsilon: 0.5),
           reason: 'Dòng nhỏ của hai màn lệch nhau ${(farewell - poster).abs()}dp. '
-              'Cả hai phải neo ở AppRatio.gateTop — nếu một màn vừa được thêm '
+              'Cả hai phải neo ở DesignSize.gateTop — nếu một màn vừa được thêm '
               'một khối phía trên cụm chữ, hãy neo nó bằng Positioned thay vì '
               'để nó đẩy cụm chữ xuống.');
     });
 
-    testWidgets('neo đúng AppRatio.gateTop tính từ MÉP TRÊN MÁY', (tester) async {
+    testWidgets('neo đúng DesignSize.gateTop tính từ MÉP TRÊN MÁY', (tester) async {
       final top = await topOf(tester, _poster(), 'Bảo tàng');
 
       // Đo từ mép trên thiết bị, KHÔNG phải từ vùng an toàn: bản vẽ đo
       // `--gate-top` từ đỉnh khung máy, và ảnh nền cũng chạm mép trên.
-      expect(top, moreOrLessEquals(_phone.height * AppRatio.gateTop, epsilon: 1),
-          reason: 'Cụm chữ không còn neo ở AppRatio.gateTop. Nếu đây là thay '
+      expect(top, moreOrLessEquals(DesignSize.gateTop, epsilon: 1),
+          reason: 'Cụm chữ không còn neo ở DesignSize.gateTop. Nếu đây là thay '
               'đổi có chủ đích thì sửa hằng số, đừng sửa con số ở test — hằng '
               'số là thứ hai màn cùng đọc.');
     });

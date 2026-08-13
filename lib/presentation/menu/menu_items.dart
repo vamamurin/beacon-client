@@ -1,11 +1,15 @@
 // Destination: lib/presentation/menu/menu_items.dart
 //
-// Danh sách các mục Menu — DÙNG CHUNG cho hai chỗ hiện nó:
-//   • [MenuScreen]   — màn gốc của tab Trang chính
-//   • [MuseumDrawer] — ngăn kéo trượt từ trái, mở được ở mọi màn
+// Danh sách các mục Menu — nay CHỈ hiện ở [MuseumDrawer].
 //
-// Một widget cho cả hai vì đó chính là lời hứa với khách: "menu" phải là cùng
-// một thứ ở mọi thời điểm. Hai bản sao sẽ lệch nhau ngay lần thêm mục thứ ba.
+// ⚠ NÓ VỪA RỜI KHỎI MÀN MENU, và đó là bản sửa cho một lỗi thật: bản vẽ của màn
+// Menu KHÔNG có danh sách hàng nào. Nó có hero + nút, rồi khối thứ hai. Đặt
+// danh sách này ở đó sinh ra hai lỗi cùng lúc — "Bắt đầu tham quan" xuất hiện
+// HAI LẦN (một lần là nút trên hero, một lần là hàng), và "Hướng dẫn sử dụng"
+// mọc ra một lối đi mà bản vẽ đặt trong ngăn kéo.
+//
+// Giữ nguyên hình dạng dùng-chung (tham số [MenuPlacement], ba tầng lọc) vì
+// ngăn kéo có hai ngữ cảnh và vì màn Danh mục sắp dựng sẽ cần lại.
 //
 // ⚠ HÀNG THAY CHO THẺ. Mỗi mục từng là một thẻ `surfaceRaised` bo góc có đĩa
 // icon 36dp; nay là [AppRow] — tràn hết bề ngang, nền trong suốt, không icon,

@@ -174,72 +174,65 @@ abstract final class AppSpace {
 }
 
 /// ═══════════════════════════════════════════════════════════════════════════
-/// TỈ LỆ DỌC — hằng số hình học ĐO THEO CHIỀU CAO MÀN, không phải theo px
+/// KÍCH THƯỚC LẤY THẲNG TỪ BẢN VẼ — dp tuyệt đối, không quy đổi
 /// ═══════════════════════════════════════════════════════════════════════════
 ///
-/// Thiết kế beacon-v6 được vẽ trên khung 390×844 và ghi các con số bằng px:
-/// hero Menu 580, ảnh khu 480, khu bên cạnh 178, sân khấu 422, neo cặp chữ 200.
-/// **Không con số nào trong đó được phép vào code dưới dạng px.**
+/// ⚠ ĐÂY LÀ BẢN SỬA CHO MỘT LẦN TÔI TỰ QUYẾT SAI. Trước file này có một lớp
+/// `AppRatio` quy mọi chiều cao của bản vẽ thành TỈ LỆ theo chiều cao màn:
+/// hero Menu là `0.687 × screenH` thay vì 580dp. Lý lẽ nghe hợp lý — máy thực
+/// địa cao từ 800 tới 915dp, tỉ lệ thì "co giãn được".
 ///
-/// Máy Android thực địa là 360×800, 393×873, 412×915. Một hằng số hình học đo
-/// trong một ngữ cảnh rồi đem sang ngữ cảnh khác thì nó KHÔNG lệch đi một chút
-/// — nó chết. Dự án này đã dính đúng ba lần, và lần đầu tiên được ghi ngay ở
-/// đầu `museum_tokens.dart`: *"hero 250px→80% (veil đen đặc)"*.
+/// Nó SAI, và sai theo cách khó thấy: trên máy 844dp nó cho đúng 580, trên máy
+/// 915dp nó cho 629. Tức app chỉ giống bản vẽ trên đúng một cỡ máy, và lệch dần
+/// ở mọi cỡ khác — trong khi bản vẽ là thứ đã được vẽ, được duyệt, và được đo
+/// từng con số một.
 ///
-/// ⚠ TỈ LỆ GIỮ ĐƯỢC Ý ĐỒ, NHƯNG KHÔNG GIỮ ĐƯỢC LÝ LẼ. Lý lẽ chọn 480 của thiết
-/// kế là một lý lẽ về CHỖ ĐƯỜNG CẮT RƠI VÀO: *"ở 580 thì khối khu bên cạnh đầu
-/// tiên bị cắt ngang đúng chỗ tiêu đề của nó; ở 480 thì khối thứ nhất lọt trọn
-/// và khối thứ hai ló ra 92px."* Tỉ lệ giữ cho tương quan đúng ở mọi màn, nhưng
-/// "ló ra bao nhiêu" thì phải NHÌN THẬT ở 800 và 915 trước khi chốt.
-abstract final class AppRatio {
-  /// Hero của màn Menu — 580/844.
-  static const double menuHero = 0.687;
+/// Sai lầm gốc không phải chọn nhầm hệ số. Nó là việc TỰ ĐỔI ĐƠN VỊ của một bản
+/// thiết kế đã chốt, rồi ghi lý do vào doc thay vì hỏi.
+///
+/// Khung của bản vẽ là **390×844** — đúng cỡ logic của iPhone 12/13/14 và rất
+/// gần đa số máy Android tầm trung. Dùng dp tuyệt đối tái tạo bản vẽ CHÍNH XÁC
+/// trên lớp máy đó, và lệch tối thiểu ở nơi khác.
+///
+/// ⚠ HỆ QUẢ PHẢI CANH: trên máy THẤP hơn 844, các khối này chiếm tỉ lệ lớn hơn
+/// dự tính. Chỗ nguy hiểm nhất là màn Chi tiết hiện vật (sân khấu 422 + bản lý
+/// lịch) — nếu tràn thì cách sửa là cho khối đó cuộn, KHÔNG phải bóp con số.
+abstract final class DesignSize {
+  /// `.mhero` — hero của màn Menu. Chui lên dưới thanh trên nên phần nhìn thấy
+  /// dưới thanh còn 480.
+  static const double menuHero = 580;
 
-  /// Ảnh của khu đang đứng — 480/844.
-  static const double zoneHero = 0.569;
-
-  /// Khu BÊN CẠNH so với khu đang đứng — 178/480.
+  /// `.zhero` — ảnh của khu đang đứng.
   ///
-  /// Tỉ lệ này KHÔNG đo theo chiều cao màn mà theo chính khối ở trên nó: thiết
-  /// kế lấy nó từ màn Menu (hero 580 : ảnh thẻ chủ đề 215 = 0.371) chứ không
-  /// bịa mới. Một hình dáng lặp lại ở hai cỡ nói được "cùng loại, khác khoảng
-  /// cách" mà không cần thêm chữ nào.
-  static const double nearZoneOfHero = 0.371;
+  /// Vì sao 480 chứ không 580 cho bằng màn Menu: ở 580 thì khối khu bên cạnh
+  /// đầu tiên bị cắt ngang ĐÚNG chỗ tiêu đề của nó, ngay trên tab bar. Ở 480 thì
+  /// 480 + 16 + 178 = 674 — khối thứ nhất lọt trọn, khối thứ hai ló ra 92dp, vừa
+  /// đủ để mắt biết bên dưới còn nữa. Chiều sâu ở đây do CHỖ ĐƯỜNG CẮT RƠI VÀO
+  /// quyết định, không do gu — nên nó không co giãn được.
+  static const double zoneHero = 480;
 
-  /// Sân khấu của màn Chi tiết hiện vật — chia đôi màn.
-  static const double exhibitStage = 0.50;
+  /// `.zhero.near` — khu bên cạnh. 178 : 480 = 0.371, đúng tỉ lệ mà màn Menu
+  /// dùng giữa hero 580 và ảnh thẻ 215. Không bịa tỉ lệ mới.
+  static const double nearZone = 178;
 
-  /// Neo dọc của cặp chữ ký 22/48 — 200/844, đo từ mép trên máy xuống ĐỈNH
+  /// `.stage` — sân khấu màn Chi tiết hiện vật. Đúng một nửa của 844.
+  static const double exhibitStage = 422;
+
+  /// `.tgrid` — lưới ảnh của một thẻ ở khối thứ hai màn Menu.
+  static const double cardGrid = 215;
+
+  /// `--gate-top` — neo dọc của cặp chữ ký 22/48, đo từ MÉP TRÊN MÁY xuống đỉnh
   /// dòng nhỏ.
   ///
   /// Màn Poster và màn Cảm ơn là một cặp đối xứng: khách phải nhận ra mình quay
-  /// về đúng nơi bắt đầu, mà nhận ra được thì cụm chữ phải rơi đúng một chỗ
-  /// trên cả hai màn. Để hai nơi cùng đọc một hằng thay vì cùng gõ một số.
-  ///
-  /// ⚠ KHOÁ VỚI `AppText.posterKicker.height`: neo đo tới đỉnh dòng đó.
-  static const double gateTop = 0.237;
+  /// về đúng nơi bắt đầu, mà nhận ra được thì cụm chữ phải rơi đúng MỘT chỗ trên
+  /// cả hai màn. Để hai nơi cùng đọc một hằng thay vì cùng gõ một số.
+  static const double gateTop = 200;
+
+  /// `.divider` — vạch 92×1 đóng một cụm chữ.
+  static const double dividerWidth = 92;
 }
 
-/// ═══════════════════════════════════════════════════════════════════════════
-/// MỘT NGUỒN SÁNG CHO CẢ APP
-/// ═══════════════════════════════════════════════════════════════════════════
-///
-/// Bóng đổ không phải trang trí — nó là PHÁT BIỂU về vị trí của vật trong
-/// không gian, và mắt người đọc phát biểu đó nhanh hơn đọc chữ. Hai vật cùng
-/// màn mà đổ bóng về hai hướng thì không gian đó không tồn tại, và cảm giác
-/// "sai" xuất hiện trước khi người xem kịp gọi tên.
-///
-/// LỖI ĐÃ SỬA: khung ảnh Gate dùng Offset(-6, 8) — bóng xuống-TRÁI, đèn ở
-/// trên-PHẢI. Badge màn 3 dùng Offset(2, 2) — bóng xuống-PHẢI, đèn ở
-/// trên-TRÁI. Hai mặt trời trong một bảo tàng.
-///
-/// ĐÈN Ở TRÊN-PHẢI, mọi bóng đổ xuống-trái. Chọn hướng này vì bố cục Gate đã
-/// được dựng quanh nó (bóng khung 2 hắt lên mép khung 1 tạo lớp lang) — đổi
-/// hướng đèn là phải dựng lại collage.
-///
-/// MÀU bóng vẫn là token theo theme ([MuseumTokens.frameShadow]); chỉ HÌNH HỌC
-/// sống ở đây. Ở highContrast frameShadow trong suốt ⇒ mọi bóng tự tắt, và đó
-/// là chủ đích.
 abstract final class AppShadow {
   /// Bóng của khung ảnh lớn (collage Gate).
   static const Offset frameOffset = Offset(-6, 8);

@@ -26,28 +26,36 @@
 // một hàng công khai trong ngăn kéo (xem `museum_drawer.dart`), nên màn này
 // không còn giữ cửa sau nào.
 //
-// ⚠ CÒN THIẾU SO VỚI BẢN VẼ: hero 69% chiều cao màn và lưới thẻ chủ đề. Cả hai
-// chờ khối `topics` trong manifest — chưa có dữ liệu thì dựng ra một cái vỏ
-// rỗng cũng không nói được gì. Hiện màn này vẫn là danh sách hàng.
+// ═══════════════════════════════════════════════════════════════════════════
+// HAI KHỐI CỦA BẢN VẼ, CẢ HAI ĐỀU CÓ MẶT
+// ═══════════════════════════════════════════════════════════════════════════
+//
+//   trên   hero + nút — LỐI THAM QUAN DUY NHẤT của app: khách đi tới đâu, máy
+//          kể tới đó. Bản vẽ gọi nửa dưới là "tuyến chính" và không cần nhãn
+//          nào cho điều đó, vì CỠ đã nói.
+//   dưới   TIN TỨC. Bản vẽ dành chỗ này cho các tuyến tham quan theo chủ đề;
+//          app không có khái niệm tuyến, nên chỗ ấy đổi NỘI DUNG mà giữ nguyên
+//          HÌNH DÁNG (lưới mosaic, tiêu đề, mô tả, dòng meta).
+//
+// KHÔNG KHỐI NÀO BIẾN MẤT KHI CHƯA CÓ DỮ LIỆU. Tin tức rỗng thì hiện "Sắp có",
+// không phải một khoảng trống. Một lối đi có trong bản vẽ mà bị ẩn vì CMS chưa
+// theo kịp là một quyết định kỹ thuật đang âm thầm sửa bản thiết kế.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/presentation/app/museum_top_bar.dart';
 import 'package:beacon_client/presentation/app/shell_controller.dart';
-import 'package:beacon_client/presentation/menu/menu_items.dart';
+import 'package:beacon_client/presentation/menu/menu_hero.dart';
+import 'package:beacon_client/presentation/menu/menu_news.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
-import 'package:beacon_client/presentation/theme/app_space.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/theme/tab_icons.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 import 'package:beacon_client/presentation/widgets/device_status.dart';
-import 'package:beacon_client/presentation/widgets/language_picker.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -97,13 +105,13 @@ class _MenuScreenState extends State<MenuScreen> with WidgetsBindingObserver {
 
     return Scaffold(
       backgroundColor: t.surface,
-      body: Column(
+      // THANH TRÊN NẰM ĐÈ LÊN HERO, không đứng trên nó. Luật của app: màn nào
+      // có ảnh hero thì ảnh CHẠM MÉP TRÊN của máy. Nếu thanh chiếm một dải
+      // riêng, ảnh thành một khối kẹp giữa hai vùng đặc và cả màn thôi đọc ra
+      // là một trang biên tập.
+      body: Stack(
         children: [
-          MuseumTopBar(title: content.ui(UiKeys.menuTitle)),
-          Expanded(
-            // ValueListenableBuilder chứ không watch: `bleStatus` là
-            // ValueListenable của graph. Cấp quyền xong là mục "Bắt đầu tham
-            // quan" tự hiện, không cần khởi động lại app.
+          Positioned.fill(
             child: ValueListenableBuilder<StartupStatus>(
               valueListenable: startup.bleStatus,
               builder: (context, bleStatus, _) {
@@ -111,9 +119,18 @@ class _MenuScreenState extends State<MenuScreen> with WidgetsBindingObserver {
                   bleStatus: bleStatus,
                   needsSync: startup.needsSync,
                 );
-                _maybeShowStatus(startup, bleStatus, ready);
+                _maybeShowStatus(startup, ready);
                 return _MenuBody(deviceReady: ready);
               },
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: MuseumTopBar(
+              title: content.ui(UiKeys.menuBarTitle),
+              solid: false,
             ),
           ),
         ],
@@ -126,102 +143,75 @@ class _MenuScreenState extends State<MenuScreen> with WidgetsBindingObserver {
   /// Post-frame vì nó được gọi TỪ TRONG `build` của một builder: đẩy một route
   /// giữa lúc dựng cây là lỗi. Kiểm `mounted` lần nữa trong callback — hộp
   /// thoại là thứ chậm nhất ở đây và màn có thể đã bị gỡ.
-  void _maybeShowStatus(
-      StartupProvider startup, StartupStatus bleStatus, bool ready) {
+  ///
+  /// KHÔNG truyền trạng thái vào: hộp thoại tự nghe `startup.bleStatus`. Bản
+  /// trước truyền một ảnh chụp, và đó chính là lỗi "bật Bluetooth lên mà hộp
+  /// thoại không đổi gì" — xem doc `showDeviceStatusDialog`.
+  Future<void> _maybeShowStatus(StartupProvider startup, bool ready) async {
     if (ready || _statusShown) return;
     _statusShown = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      showDeviceStatusDialog(
-        context,
-        startup: startup,
-        bleStatus: bleStatus,
-        needsSync: startup.needsSync,
-      );
+      await showDeviceStatusDialog(context, startup: startup);
+      // Mở cờ SAU KHI hộp thoại đóng. Hộp thoại chỉ đóng khi máy đã sẵn sàng,
+      // nên trong thực tế cờ này không bật lại lần nữa — trừ khi Bluetooth bị
+      // tắt lại giữa chừng, và lúc đó hiện lại đúng là điều cần.
+      if (mounted) _statusShown = false;
     });
   }
 }
 
 class _MenuBody extends StatelessWidget {
-  /// false ⇒ ẩn lối vào tour. ẨN chứ không làm mờ: hộp thoại vừa hiện đã giải
-  /// thích vì sao, và một nút xám không bấm được bên cạnh một lời giải thích là
-  /// nói hai lần.
+  /// Máy đã đủ điều kiện bắt đầu tour chưa.
+  ///
+  /// KHÔNG dùng để ẩn gì cả — xem [_onPrimary]. Bố cục của bản vẽ giữ nguyên ở
+  /// mọi trạng thái; cái đổi là chạm vào nút thì xảy ra chuyện gì.
   final bool deviceReady;
 
   const _MenuBody({required this.deviceReady});
 
   @override
   Widget build(BuildContext context) {
-    final t = context.tokens;
-    final content = context.watch<ContentProvider>();
-    final museum = content.textOrNull(content.museumName) ??
-        content.ui(UiKeys.gateMuseumFallback);
-
-    // BA SLIVER, KHÔNG PHẢI MỘT — và lý do là hình học, không phải thẩm mỹ:
-    // [MenuItemList] dựng bằng `AppRow`, mà hàng thì TRÀN HẾT bề ngang và TỰ
-    // MANG lề [AppSpace.gutter]. Để nó nằm trong một `SliverPadding` ngang là
-    // cộng lề thành 40dp, và hàng thôi tràn mép — tức nó thôi đọc ra là một
-    // thao tác. Khối chữ ở trên và bộ chọn tiếng ở dưới vẫn cần lề, nên lề đi
-    // theo CHÚNG chứ không đi theo cả màn.
-    const hPad = EdgeInsets.symmetric(horizontal: AppSpace.gutter);
-
+    // HAI KHỐI, KHÔNG LỀ NGANG NÀO Ở TẦNG NÀY. Cả hero lẫn khối tin tức đều
+    // TRÀN HẾT bề ngang — ảnh chạm hai mép máy, chữ tự giữ lề bên trong. Bọc
+    // màn này trong một `SliverPadding` ngang là cắt ảnh khỏi hai mép, tức làm
+    // chúng thôi đọc ra là những nơi chốn.
     return CustomScrollView(
       slivers: [
-        SliverPadding(
-          padding: hPad.add(const EdgeInsets.only(top: AppSpace.x6)),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              Text(museum.toUpperCase(),
-                  style: AppText.kicker.copyWith(color: t.inkFaint)),
-              const SizedBox(height: AppSpace.x3),
-              Text(content.ui(UiKeys.menuTitle),
-                  style: AppText.heroTitle.copyWith(color: t.ink)),
-              const SizedBox(height: AppSpace.x3),
-              Text(content.ui(UiKeys.menuSubtitle),
-                  style: AppText.lede.copyWith(color: t.inkMuted)),
-              const SizedBox(height: AppSpace.x6),
-            ]),
-          ),
-        ),
         SliverToBoxAdapter(
-          child: MenuItemList(
-            placement: MenuPlacement.beforeTour,
-            deviceReady: deviceReady,
-            onSelect: (a) => _onSelect(context, a),
-          ),
+          child: MenuHero(onPrimary: () => _onPrimary(context)),
         ),
-        SliverPadding(
-          padding:
-              hPad.add(const EdgeInsets.fromLTRB(0, AppSpace.x6, 0, AppSpace.x8)),
-          // Ngôn ngữ đổi được từ đây và từ chip `VI` trên thanh trên — khách
-          // nhận máy từ tay nhân viên thường chỉ nhận ra mình cần đổi ở một
-          // trong hai chỗ, và không đoán được là chỗ nào.
-          sliver: const SliverToBoxAdapter(child: LanguagePicker()),
-        ),
+        // KHỐI THỨ HAI CỦA BẢN VẼ, và là khối DUY NHẤT dưới hero. Chỗ này vốn
+        // dành cho các tuyến tham quan; app chỉ có một kiểu tham quan nên nó
+        // nhận tin tức, giữ nguyên hình dáng. Xem doc [MenuNews].
+        const SliverToBoxAdapter(child: MenuNews()),
       ],
     );
   }
 
-  void _onSelect(BuildContext context, MenuAction action) {
-    switch (action) {
-      case MenuAction.startTour:
-        // GỌI THẲNG, không đẩy màn nào. Phiên vào `touring`, và root dựng lại
-        // ngăn xếp thành khung máy mở ở tab Tham quan — màn này không đụng
-        // Navigator, đúng luật "màn hình chỉ phát biểu ý định".
-        context.read<SessionProvider>().startTour();
-      case MenuAction.guide:
-        // ĐỔI TAB, KHÔNG ĐẨY ROUTE. Hướng dẫn là một đích CẤP MỘT — nó có tab
-        // của riêng nó. Đẩy nó vào ngăn xếp của tab Trang chính sẽ cho ra một
-        // màn Hướng dẫn mà tab đang sáng lại là Trang chính, đúng hai tín hiệu
-        // ngược nhau mà bản vẽ đã bác.
-        context.read<ShellController>().selectTab(ShellTab.guide);
-      case MenuAction.catalog:
-      case MenuAction.map:
-      case MenuAction.tours:
-        // Không tới được: [menuActionIsImplemented] đã lọc từ trước. Để trống
-        // có chủ đích thay vì ném — thêm màn mới là bật cờ ở đó, không phải
-        // nhớ ra chỗ này.
-        break;
+  /// Nút chính trên hero. Hai nghĩa, một nút — xem doc [MenuHero].
+  void _onPrimary(BuildContext context) {
+    // MÁY CHƯA SẴN SÀNG ⇒ MỞ LẠI HỘP THOẠI, KHÔNG ẨN NÚT.
+    //
+    // Bản trước ẩn lối vào tour khi thiếu Bluetooth/nội dung. Cách đó đúng khi
+    // lối vào là một hàng trong danh sách; nó SAI ở đây, vì nút này là toàn bộ
+    // nửa dưới của hero và bản vẽ luôn có nó. Ẩn đi là để một quyết định kỹ
+    // thuật đục một lỗ vào bố cục đã được duyệt.
+    if (!deviceReady) {
+      showDeviceStatusDialog(context,
+          startup: context.read<StartupProvider>());
+      return;
     }
+    final session = context.read<SessionProvider>();
+    if (session.isTouring) {
+      // "Tiếp tục" = về chỗ tiếng đang phát. KHÔNG gọi lại `startTour()`: nó sẽ
+      // dọn sổ tiến trình và mở lại đồng hồ, tức xoá đúng chuyến đi mà chữ
+      // "Tiếp tục" vừa hứa sẽ giữ.
+      context.read<ShellController>().selectTab(ShellTab.tour);
+      return;
+    }
+    // Chỉ phát biểu ý định. Phiên vào `touring`, và root dựng lại ngăn xếp
+    // thành khung máy mở ở tab Tham quan — màn này không đụng Navigator.
+    session.startTour();
   }
 }

@@ -12,6 +12,7 @@ import 'package:beacon_client/presentation/app/tour_shell.dart';
 import 'package:beacon_client/presentation/farewell/farewell_screen.dart';
 import 'package:beacon_client/presentation/gate/gate_screen.dart';
 import 'package:beacon_client/presentation/summary/summary_screen.dart';
+import 'package:beacon_client/presentation/widgets/article_screen.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/settings/settings_screen.dart';
@@ -60,6 +61,10 @@ abstract final class AppRouter {
   //                   MuseumApp._syncNavigation đưa sang, không phải tự đẩy.
   //   [settingsRoute] màn của NHÂN VIÊN.
   static const String summaryRoute = '/summary'; // tổng kết (VẪN trong phiên)
+  /// Bài đọc mở từ màn Poster ("Giới thiệu bảo tàng" / "Câu hỏi thường gặp").
+  /// MỘT route cho cả hai: nội dung đi qua [ArticleArgs], nên thêm một bài đọc
+  /// thứ ba không sinh thêm route nào.
+  static const String articleRoute = '/article';
   static const String farewellRoute = '/farewell'; // cảm ơn / gửi lại máy
 
   /// MÀN NGHỈ — nơi máy quay về mỗi khi không có tour nào chạy: lúc nằm trên
@@ -107,6 +112,12 @@ abstract final class AppRouter {
         return _page(const TourShell(), settings);
       case settingsRoute:
         return _page(const SettingsScreen(), settings);
+      case articleRoute:
+        final args = settings.arguments;
+        if (args is! ArticleArgs) {
+          return _error(settings, 'articleRoute cần arguments là ArticleArgs.');
+        }
+        return _page(ArticleScreen(args: args), settings);
       case summaryRoute:
         return _page(const SummaryScreen(), settings);
       case farewellRoute:

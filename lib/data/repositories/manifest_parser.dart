@@ -4,6 +4,7 @@ import 'package:beacon_client/domain/models/audio_clip_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/feedback_config.dart';
 import 'package:beacon_client/domain/models/guide_content.dart';
+import 'package:beacon_client/domain/models/news_item.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
@@ -85,6 +86,10 @@ abstract final class ManifestParser {
 
     final museum = _reqMap(root, 'museum', 'root');
     final museumName = _reqLocalized(museum, 'name', 'museum', fallbackLanguage);
+    // Tên riêng, không kèm chữ "Bảo tàng" — dòng lớn của cặp chữ ký ở màn
+    // Poster. Tuỳ chọn: thiếu thì màn đó lùi về tên đầy đủ.
+    final museumShortName =
+        _optLocalized(museum, 'shortName', 'museum', fallbackLanguage);
     final welcomeImagePath = _optPath(museum, 'welcomeImage', 'museum');
     // Vùng ảnh 2 của màn chào — optional, cùng _pathRule với mọi payload khác.
     final welcomeAccentImagePath =
@@ -117,7 +122,13 @@ abstract final class ManifestParser {
     // Menu thì cả bảo tàng đứng, còn một câu hỏi đánh giá gõ sai thì chỉ mất
     // câu hỏi đó. Mọi lỗi ở đây đi vào [warnings] rồi rơi về mặc định.
     final menu = _optMenu(root, warnings);
-    final guide = _optGuide(root, fallbackLanguage, warnings);
+    // BA KHỐI, MỘT BỘ PHÂN TÍCH. `guide`, `about` và `faq` đều là "một danh
+    // sách mục có tiêu đề và thân bài" — cùng hình dạng, cùng luật hỏng-thì-bỏ-
+    // riêng-lẻ. Chép bộ phân tích ra ba bản là hẹn ngày ba bản lệch nhau.
+    final guide = _optArticle(root, 'guide', fallbackLanguage, warnings);
+    final about = _optArticle(root, 'about', fallbackLanguage, warnings);
+    final faq = _optArticle(root, 'faq', fallbackLanguage, warnings);
+    final news = _optNews(root, fallbackLanguage, warnings);
     final summary = _optSummary(root, fallbackLanguage, warnings);
     final feedback = _optFeedback(root, fallbackLanguage, warnings);
 
@@ -157,6 +168,7 @@ abstract final class ManifestParser {
       config: MuseumConfig(
         bundleVersion: bundleVersion,
         museumName: museumName,
+        museumShortName: museumShortName,
         welcomeImagePath: welcomeImagePath,
         welcomeAccentImagePath: welcomeAccentImagePath,
         languages: List.unmodifiable(languages),
@@ -170,6 +182,9 @@ abstract final class ManifestParser {
         policies: policies,
         menu: menu,
         guide: guide,
+        about: about,
+        faq: faq,
+        news: news,
         summary: summary,
         feedback: feedback,
       ),
@@ -451,29 +466,32 @@ abstract final class ManifestParser {
     return MenuConfig(entries: List.unmodifiable(out));
   }
 
-  /// Khối `guide`. Bước hỏng bị bỏ riêng lẻ (cùng cách xử lý với `exhibit`),
+  /// Một khối dạng BÀI ĐỌC: `guide`, `about`, hoặc `faq`.
+  ///
+  /// Mục hỏng bị bỏ riêng lẻ (cùng cách xử lý với `exhibit`),
   /// vì mất một bước vẫn còn hướng dẫn để đọc.
-  static GuideContent _optGuide(
+  static GuideContent _optArticle(
     Map<String, dynamic> root,
+    String block,
     String fallbackLang,
     List<String> warnings,
   ) {
-    final raw = root['guide'];
+    final raw = root[block];
     if (raw == null) return GuideContent.empty;
     if (raw is! Map<String, dynamic>) {
-      warnings.add('guide: không phải object — dùng hướng dẫn mặc định');
+      warnings.add('$block: không phải object — bỏ khối');
       return GuideContent.empty;
     }
     final list = raw['steps'];
     if (list is! List) {
-      warnings.add('guide: "steps" không phải mảng — dùng hướng dẫn mặc định');
+      warnings.add('$block: "steps" không phải mảng — bỏ khối');
       return GuideContent.empty;
     }
 
     final out = <GuideStep>[];
     for (var i = 0; i < list.length; i++) {
       final item = list[i];
-      final ctx = 'guide.steps[$i]';
+      final ctx = '$block.steps[$i]';
       if (item is! Map<String, dynamic>) {
         warnings.add('$ctx: không phải object — bỏ');
         continue;
@@ -800,5 +818,75 @@ abstract final class ManifestParser {
   static LocalizedText _reqLocalized(
       Map<String, dynamic> m, String key, String ctx, String fallbackLang) {
     return _localized(_reqMap(m, key, ctx), '$ctx.$key', fallbackLang);
+  }
+
+  /// Như [_reqLocalized] nhưng thiếu khoá thì trả `null` thay vì ném.
+  static LocalizedText? _optLocalized(
+      Map<String, dynamic> m, String key, String ctx, String fallbackLang) {
+    final raw = m[key];
+    if (raw == null) return null;
+    return _localized(_reqMap(m, key, ctx), '$ctx.$key', fallbackLang);
+  }
+
+  /// Khối `news`. Mẩu tin hỏng bị bỏ RIÊNG LẺ — cùng luật với `guide` và
+  /// `exhibit`: một bản ghi sai chính tả trong CMS không được làm cả khối biến
+  /// mất khỏi màn hình.
+  static NewsFeed _optNews(
+    Map<String, dynamic> root,
+    String fallbackLang,
+    List<String> warnings,
+  ) {
+    final raw = root['news'];
+    if (raw == null) return NewsFeed.empty;
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('news: không phải object — bỏ khối');
+      return NewsFeed.empty;
+    }
+    final list = raw['items'];
+    if (list is! List) {
+      warnings.add('news: "items" không phải mảng — bỏ khối');
+      return NewsFeed.empty;
+    }
+
+    final out = <NewsItem>[];
+    for (var i = 0; i < list.length; i++) {
+      final item = list[i];
+      final ctx = 'news.items[$i]';
+      if (item is! Map<String, dynamic>) {
+        warnings.add('$ctx: không phải object — bỏ');
+        continue;
+      }
+
+      // Ảnh hỏng KHÔNG làm mất mẩu tin — cùng lý do với ảnh minh hoạ của
+      // `guide`: chữ mới là nội dung, ảnh là trang trí. Lọc từng ảnh một, giữ
+      // những ảnh còn dùng được.
+      final images = <String>[];
+      final rawImages = item['images'];
+      if (rawImages is List) {
+        for (var k = 0; k < rawImages.length; k++) {
+          final v = rawImages[k];
+          if (v is String && v.isNotEmpty) {
+            images.add(v);
+          } else {
+            warnings.add('$ctx.images[$k]: không phải chuỗi — bỏ ảnh');
+          }
+        }
+      }
+
+      try {
+        final id = item['id'];
+        out.add(NewsItem(
+          id: id is String && id.isNotEmpty ? id : null,
+          title: _reqLocalized(item, 'title', ctx, fallbackLang),
+          summary: _reqLocalized(item, 'summary', ctx, fallbackLang),
+          meta: _optLocalized(item, 'meta', ctx, fallbackLang),
+          body: _optLocalized(item, 'body', ctx, fallbackLang),
+          imagePaths: List.unmodifiable(images),
+        ));
+      } on BundleValidationException catch (err) {
+        warnings.add('$ctx: bỏ — ${err.message}');
+      }
+    }
+    return out.isEmpty ? NewsFeed.empty : NewsFeed(items: List.unmodifiable(out));
   }
 }

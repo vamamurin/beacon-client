@@ -12,7 +12,7 @@
 // DÙNG CHUNG KHUÔN VỚI MÀN MỞ — và đó là toàn bộ ý nghĩa của nó
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Cùng bức ảnh, cùng bộ lọc, cùng cặp chữ 22/48, cùng neo [AppRatio.gateTop].
+// Cùng bức ảnh, cùng bộ lọc, cùng cặp chữ 22/48, cùng neo [DesignSize.gateTop].
 // Khách phải nhận ra mình đã quay về đúng nơi bắt đầu — và điều đó chỉ xảy ra
 // nếu cụm chữ rơi đúng một chỗ trên cả hai màn, chứ không phải "trông na ná".
 // Xem [SignatureScreen] cho cách sự đối xứng được biến thành một tính chất.
@@ -46,7 +46,7 @@ class FarewellScreen extends StatelessWidget {
 
     return SignatureScreen(
       imagePath: content.welcomeImagePath,
-      veil: SignatureVeil.backdrop,
+      kind: SignatureKind.farewell,
       kicker: content.ui(UiKeys.farewellKicker),
       title: content.ui(UiKeys.farewellTitle),
       lede: content.ui(UiKeys.farewellBody),

@@ -26,24 +26,36 @@
 // parser đột ngột từ chối nó thì không.
 //
 // ═══════════════════════════════════════════════════════════════════════════
-// HAI HÀNG PHỤ CỦA BẢN VẼ CHƯA CÓ MẶT
+// HAI HÀNG PHỤ — CÓ, VÀ CHỈ HIỆN KHI BẢO TÀNG ĐÃ VIẾT NỘI DUNG
 // ═══════════════════════════════════════════════════════════════════════════
 //
-// Bản vẽ có thêm "Giới thiệu bảo tàng" và "Câu hỏi thường gặp" dưới hàng chính.
-// Cả hai đều chưa có: manifest không có khoá nội dung cho chúng, và không có
-// màn hình nào để dẫn tới.
+// "Giới thiệu bảo tàng" và "Câu hỏi thường gặp" đọc từ hai khối `about` và
+// `faq` trong manifest — cùng hình dạng với `guide`, cùng bộ phân tích, cùng
+// một màn bài đọc.
 //
-// Chúng bị BỎ chứ không dựng thành hàng chờ sẵn — một hàng bấm vào không đi đâu
-// tệ hơn hẳn một hàng vắng mặt, và ở đây nó còn cạnh tranh với lối vào duy nhất
-// được nhấn. Khi CMS có nội dung, thêm chúng vào `rows` là xong.
+// KHỐI RỖNG KHÔNG LÀM HÀNG BIẾN MẤT. Hàng vẫn có mặt và dẫn tới màn bài đọc ở
+// trạng thái "Sắp có".
+//
+// Bản trước ẩn hàng khi thiếu nội dung, và đó là một lỗi cùng loại với việc bỏ
+// hẳn hai hàng này: nó để một quyết định KỸ THUẬT (bundle chưa có khoá) âm thầm
+// sửa một quyết định THIẾT KẾ (poster có ba lối đi). App vẫn không bịa nội dung
+// của bảo tàng — nó chỉ không giấu đi cái cửa.
+//
+// Bản vẽ giữ hai mục này và BỎ hai mục khác của Rijksmuseum (*are you in the
+// museum*, *tickets*) vì cả hai vô nghĩa ở đây — khách đang cầm máy của bảo
+// tàng, đứng trong bảo tàng, đã có vé. Còn `faq` là thứ khách cần TRƯỚC khi
+// bước vào (máy này là gì, có mất tiền không, hỏng thì sao), khác hẳn "Hướng
+// dẫn sử dụng" vốn nói về lúc tour đã chạy.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/domain/models/guide_content.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
+import 'package:beacon_client/presentation/widgets/article_screen.dart';
 import 'package:beacon_client/presentation/widgets/signature_screen.dart';
 
 class GateScreen extends StatelessWidget {
@@ -55,12 +67,21 @@ class GateScreen extends StatelessWidget {
 
     return SignatureScreen(
       imagePath: content.welcomeImagePath,
-      veil: SignatureVeil.poster,
-      // Cặp chữ ký của app: nhãn "Bảo tàng" 22 mờ, ĐỨNG TRÊN tên thật 48 trắng
+      kind: SignatureKind.poster,
+      // Cặp chữ ký của app: nhãn "Bảo tàng" 22 mờ, ĐỨNG TRÊN tên riêng 48 trắng
       // đặc. Chỉ dùng lại đúng một lần nữa — ở màn Cảm ơn.
+      //
+      // ⚠ DÙNG TÊN NGẮN, KHÔNG DÙNG TÊN ĐẦY ĐỦ. Bản vẽ tách tên bảo tàng làm
+      // hai: chữ "Bảo tàng" là NHÃN ở dòng nhỏ, phần còn lại là TÊN RIÊNG ở
+      // dòng lớn ("Chứng tích Chiến tranh"). Ghép nhãn với tên đầy đủ cho ra
+      // "Bảo tàng / Bảo tàng Chứng tích Chiến tranh" — chữ "Bảo tàng" đọc hai
+      // lần, và dòng lớn dài thêm một nửa nên vạch 92 bên dưới trông hụt hẳn.
+      //
+      // Tên ngắn là dữ liệu của bảo tàng nên nó ở manifest (`museum.shortName`),
+      // không phải một phép cắt chuỗi trong app: cắt tiền tố "Bảo tàng " chỉ
+      // chạy được với tiếng Việt và sẽ sai ngay ở tiếng thứ hai.
       kicker: content.ui(UiKeys.posterKicker),
-      title: content.textOrNull(content.museumName) ??
-          content.ui(UiKeys.gateMuseumFallback),
+      title: content.museumShortName,
       poweredBy: true,
       rows: [
         AppRow(
@@ -76,7 +97,26 @@ class GateScreen extends StatelessWidget {
             Navigator.of(context).pushNamed(AppRouter.shellRoute);
           },
         ),
+        // HAI HÀNG NÀY LUÔN CÓ MẶT. Bundle chưa có nội dung thì màn bài đọc
+        // hiện trạng thái "Sắp có" — hàng KHÔNG biến mất. Xem chú giải ở đầu
+        // file cho lý do.
+        AppRow(
+          label: content.ui(UiKeys.posterAbout),
+          onTap: () =>
+              _openArticle(context, UiKeys.posterAbout, content.about),
+        ),
+        AppRow(
+          label: content.ui(UiKeys.posterFaq),
+          onTap: () => _openArticle(context, UiKeys.posterFaq, content.faq),
+        ),
       ],
+    );
+  }
+
+  void _openArticle(BuildContext context, String titleKey, GuideContent body) {
+    Navigator.of(context).pushNamed(
+      AppRouter.articleRoute,
+      arguments: ArticleArgs(titleKey: titleKey, content: body),
     );
   }
 }

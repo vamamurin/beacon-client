@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'feedback_config.dart';
 import 'guide_content.dart';
+import 'news_item.dart';
 import 'localized_text.dart';
 import 'menu_config.dart';
 import 'summary_config.dart';
@@ -190,6 +191,14 @@ class MuseumConfig {
   final String bundleVersion;
   final LocalizedText museumName;
 
+  /// Tên RIÊNG, không kèm loại hình ("Chứng tích Chiến tranh", không phải "Bảo
+  /// tàng Chứng tích Chiến tranh").
+  ///
+  /// Màn Poster đặt chữ "Bảo tàng" làm dòng nhỏ 22 và tên riêng làm dòng lớn
+  /// 48; ghép nhãn đó với [museumName] đầy đủ sẽ đọc hai lần. Null ⇒ lùi về
+  /// [museumName].
+  final LocalizedText? museumShortName;
+
   final String? welcomeImagePath;
 
   /// Ảnh thứ hai của màn chào (vùng ảnh 2 — khung nhỏ chồng lệch bên phải).
@@ -245,6 +254,29 @@ class MuseumConfig {
   /// Các bước của màn Hướng dẫn sử dụng. Rỗng ⇒ UI vẽ bộ bước mặc định.
   final GuideContent guide;
 
+  /// Khối `about` — "Giới thiệu bảo tàng", đọc được từ màn Poster TRƯỚC khi
+  /// khách bước vào.
+  ///
+  /// Cùng hình dạng với [guide] và cố ý dùng chung kiểu: cả ba đều là "một danh
+  /// sách mục có tiêu đề và thân bài". Rỗng ⇒ hàng tương ứng trên Poster KHÔNG
+  /// hiện — app không bịa nội dung của bảo tàng.
+  final GuideContent about;
+
+  /// Khối `faq` — "Câu hỏi thường gặp".
+  ///
+  /// KHÁC HẲN [guide], dù nghe gần nhau: `faq` trả lời những gì khách hỏi TRƯỚC
+  /// khi bước vào (máy này là gì, có mất tiền không, hỏng thì sao), còn [guide]
+  /// nói về lúc tour ĐÃ chạy (đeo tai nghe, cứ đi tự nhiên). Đó là lý do chúng
+  /// là hai khối chứ không phải hai mục của một khối.
+  final GuideContent faq;
+
+  /// Khối `news` — tin tức của bảo tàng, bày ở nửa dưới màn Menu.
+  ///
+  /// Chỗ đó trong bản vẽ dành cho các TUYẾN tham quan. App không có khái niệm
+  /// tuyến (chỉ có một kiểu tham quan: đi tới đâu máy kể tới đó), nên chỗ ấy đổi
+  /// nội dung mà giữ nguyên hình dáng. Xem doc [NewsItem].
+  final NewsFeed news;
+
   /// Màn tổng kết + màn cảm ơn.
   final SummaryConfig summary;
 
@@ -254,6 +286,7 @@ class MuseumConfig {
   const MuseumConfig({
     required this.bundleVersion,
     required this.museumName,
+    this.museumShortName,
     this.welcomeImagePath,
     this.welcomeAccentImagePath,
     required this.languages,
@@ -268,6 +301,9 @@ class MuseumConfig {
     this.uiStrings = const {},
     this.menu = MenuConfig.defaults,
     this.guide = GuideContent.empty,
+    this.about = GuideContent.empty,
+    this.faq = GuideContent.empty,
+    this.news = NewsFeed.empty,
     this.summary = SummaryConfig.defaults,
     this.feedback = FeedbackConfig.defaults,
   });
@@ -278,6 +314,7 @@ class MuseumConfig {
     return other is MuseumConfig &&
         other.bundleVersion == bundleVersion &&
         other.museumName == museumName &&
+        other.museumShortName == museumShortName &&
         other.welcomeImagePath == welcomeImagePath &&
         other.welcomeAccentImagePath == welcomeAccentImagePath &&
         listEquals(other.languages, languages) &&
@@ -290,15 +327,29 @@ class MuseumConfig {
         other.zoneChangeConfirmWindow == zoneChangeConfirmWindow &&
         other.menu == menu &&
         other.guide == guide &&
+        other.about == about &&
+        other.faq == faq &&
+        other.news == news &&
         other.summary == summary &&
         other.feedback == feedback &&
         mapEquals(other.languageNames, languageNames);
   }
 
+  /// ⚠ `Object.hashAll([...])`, KHÔNG PHẢI `Object.hash(...)`.
+  ///
+  /// `Object.hash` nhận TỐI ĐA 20 tham số vị trí, và class này vừa vượt qua
+  /// mốc đó khi thêm `museumShortName`, `about`, `faq`, `news`. Lỗi đó là lỗi
+  /// biên dịch nên nó lộ ra ngay — nhưng cái bẫy thật nằm ở lần sau: người tiếp
+  /// theo thêm một field sẽ gặp đúng bức tường ấy và dễ "sửa" bằng cách BỎ BỚT
+  /// một field khỏi hash, tức lặng lẽ làm hai config khác nhau băm ra cùng một
+  /// giá trị.
+  ///
+  /// Dạng `hashAll` không có trần, nên câu hỏi đó không bao giờ phải đặt ra nữa.
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
         bundleVersion,
         museumName,
+        museumShortName,
         welcomeImagePath,
         welcomeAccentImagePath,
         Object.hashAll(languages),
@@ -311,10 +362,13 @@ class MuseumConfig {
         zoneChangeConfirmWindow,
         menu,
         guide,
+        about,
+        faq,
+        news,
         summary,
         feedback,
         Object.hashAllUnordered(
           languageNames.entries.map((e) => Object.hash(e.key, e.value)),
         ),
-      );
+      ]);
 }

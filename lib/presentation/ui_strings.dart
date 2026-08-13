@@ -173,6 +173,40 @@ abstract final class UiKeys {
   // thêm một đích đến mới ở tầng domain là biết ngay phải bổ sung khóa nào.
   static const menuTitle = 'menu.title';
   static const menuSubtitle = 'menu.subtitle';
+
+  /// Tên màn trên THANH TRÊN. Tách khỏi [menuTitle] vì hai chỗ có hai ràng
+  /// buộc: thanh trên cần một cái NHÃN ngắn nằm gọn giữa hai ô 48dp, còn
+  /// [menuTitle] nay là TIÊU ĐỀ HERO cỡ 40 — chỗ bảo tàng viết tên tuyến tham
+  /// quan của mình ("Chứng tích của một thời").
+  static const menuBarTitle = 'menu.bar.title';
+
+  /// Tiêu đề khối thứ hai của màn Menu.
+  ///
+  /// Bản vẽ ghi "Tham quan theo chủ đề" và bày các TUYẾN tham quan ở đó. App
+  /// không có khái niệm tuyến — chỉ có một kiểu tham quan duy nhất: đi tới đâu
+  /// máy kể tới đó, và đó chính là thứ nút trên hero mở ra. Nên chỗ này đổi
+  /// NỘI DUNG chứ không đổi hình dáng: cùng khối, cùng lưới ảnh, bày TIN TỨC.
+  static const menuNewsTitle = 'menu.news.title';
+
+  // ── màn "sắp có" ─────────────────────────────────────────────────────────
+  //
+  // Dùng cho mọi lối đi đã có mặt trong bản vẽ nhưng chưa có nội dung hoặc chưa
+  // có màn hình thật. HÀNG VẪN HIỆN, và nó dẫn tới đây.
+  //
+  // ⚠ ĐÂY LÀ LUẬT, KHÔNG PHẢI GIẢI PHÁP TẠM: một lối đi trong bản vẽ KHÔNG được
+  // biến mất chỉ vì CMS chưa theo kịp. Ẩn nó đi là âm thầm sửa bản thiết kế
+  // bằng một quyết định kỹ thuật, và người thiết kế không bao giờ biết.
+  static const comingSoonTitle = 'coming.soon.title';
+  static const comingSoonBody = 'coming.soon.body';
+
+  // ── hero của màn Menu ────────────────────────────────────────────────────
+  //
+  // [menuHeroCtaResume] và [menuHeroProgress] chỉ hiện GIỮA TOUR. Đó là toàn bộ
+  // khác biệt giữa màn 02 và 02b của bản vẽ: cùng một màn, khác đúng hai dòng
+  // chữ. Nút ghi "Bắt đầu tham quan" với người đã đi được nửa bảo tàng thì đọc
+  // thành "bắt đầu LẠI" — nghe như sắp mất hết những khu đã ghé.
+  static const menuHeroCtaResume = 'menu.hero.resume';
+  static const menuHeroProgress = 'menu.hero.progress';
   static const menuBack = 'menu.back';
   static const menuSheetTitle = 'menu.sheetTitle';
   static const menuOpen = 'menu.open'; // a11y nhãn nút ☰
@@ -210,6 +244,8 @@ abstract final class UiKeys {
   // tàng"; khoá này là một NHÃN luôn hiện, đứng trên tên thật. Một khoá gánh
   // hai việc là một khoá sẽ sai ở lần bảo tàng đầu tiên muốn đổi một trong hai.
   static const posterKicker = 'poster.kicker';
+  static const posterAbout = 'poster.about';
+  static const posterFaq = 'poster.faq';
   static const posterEnter = 'poster.enter';
 
   /// Dòng nhỏ của màn Cảm ơn. [farewellTitle] cũ là MỘT câu ("Cảm ơn quý
@@ -444,9 +480,25 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.settingsSyncMock: 'Chế độ thử — không có máy chủ',
   UiKeys.settingsLastSync: 'Lần đồng bộ gần nhất: {time}',
 
-  UiKeys.menuTitle: 'Bạn muốn bắt đầu thế nào?',
-  UiKeys.menuSubtitle:
-      'Chọn một mục bên dưới. Bạn có thể quay lại đây bất cứ lúc nào.',
+  UiKeys.menuBarTitle: 'Tham quan',
+  UiKeys.menuNewsTitle: 'Tin tức',
+  UiKeys.comingSoonTitle: 'Sắp có',
+  UiKeys.comingSoonBody:
+      'Phần này đang được bảo tàng chuẩn bị. Bạn có thể quay lại sau.',
+  // ⚠ MỌI CHUỖI MẶC ĐỊNH DƯỚI ĐÂY LẤY NGUYÊN VĂN TỪ BẢN VẼ beacon-v6.
+  //
+  // Luật: KHÔNG được thay chữ của bản vẽ bằng câu tự nghĩ. Đã vi phạm hai lần
+  // ở đây — "Bạn muốn bắt đầu thế nào?" rồi "Tham quan bảo tàng", cả hai đều là
+  // chữ của lập trình viên chứ không phải chữ của người thiết kế.
+  //
+  // Bản vẽ được dựng cho Bảo tàng Chứng tích Chiến tranh, nên chuỗi mặc định
+  // mang tên tuyến của bảo tàng đó. Đó là ĐÚNG cách một giá trị mặc định nên
+  // hoạt động ở đây: nó là chữ THẬT, không phải chữ giữ chỗ, và bảo tàng khác
+  // ghi đè bằng `ui.menu.title` trong bundle của họ.
+  UiKeys.menuTitle: 'Chứng tích của một thời',
+  UiKeys.menuHeroCtaResume: 'Tiếp tục',
+  UiKeys.menuHeroProgress: 'Đang ở khu {zone} · đã đi {done} trong {total} khu.',
+  UiKeys.menuSubtitle: 'Bảy khu trưng bày theo trình tự của bảo tàng.',
   UiKeys.menuBack: 'Quay lại',
   UiKeys.menuSheetTitle: 'Menu',
   UiKeys.menuOpen: 'Mở menu',
@@ -458,6 +510,8 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.tabGuide: 'Hướng dẫn',
 
   UiKeys.posterKicker: 'Bảo tàng',
+  UiKeys.posterAbout: 'Giới thiệu bảo tàng',
+  UiKeys.posterFaq: 'Câu hỏi thường gặp',
   UiKeys.posterEnter: 'Tham quan',
   UiKeys.farewellKicker: 'Cảm ơn',
   UiKeys.menuClose: 'Đóng menu',

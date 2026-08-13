@@ -79,40 +79,75 @@ bool deviceIsReady({
 }) =>
     bleStatus == StartupStatus.ready && !needsSync;
 
-/// Bật hộp thoại trạng thái. Trả về ngay nếu máy đã sẵn sàng.
+/// Bật hộp thoại trạng thái, và GIỮ nó cho tới khi máy sẵn sàng.
 ///
-/// ĐÓNG ĐƯỢC — xem khối doc ở đầu file. `barrierDismissible` để true và không
-/// có nút "Đóng" riêng: chạm ra ngoài là đóng, đúng quy ước mà chính ngăn kéo
-/// cũng dùng.
+/// ═══════════════════════════════════════════════════════════════════════════
+/// HAI LỖI ĐÃ SỬA Ở ĐÂY — đọc trước khi "đơn giản hoá" lại
+/// ═══════════════════════════════════════════════════════════════════════════
 ///
-/// Hộp thoại KHÔNG tự theo dõi trạng thái để tự tắt khi nhân viên bật Bluetooth
-/// xong: ruột của nó (`_BleNotReady`) đã tự cập nhật tại chỗ, và một hộp thoại
-/// tự biến mất dưới tay người đang đọc là một hành vi khó chịu hơn là một hộp
-/// thoại phải chạm để đóng.
+/// **1. Hộp thoại từng CHỤP MỘT ẢNH TĨNH của trạng thái.** Bản đầu nhận
+/// `bleStatus` làm tham số rồi dựng thẻ MỘT LẦN trong `builder`. Hậu quả nhìn
+/// thấy được trên máy thật: tắt Bluetooth ⇒ hộp thoại hiện đúng; bật lại ⇒ hộp
+/// thoại **không đổi gì**, và nút "Thử lại" bấm cũng như không.
+///
+/// Nút ấy KHÔNG hỏng — `retryBluetooth()` vẫn chạy và `startup.bleStatus` vẫn
+/// lật sang `ready`. Cái hỏng là không ai nghe. Thẻ này trước đây sống trong
+/// `ValueListenableBuilder` của màn Menu nên nó được vẽ lại miễn phí; chuyển nó
+/// vào một hộp thoại đã cắt mất sợi dây đó mà không ai để ý.
+///
+/// Nên `ValueListenableBuilder` phải nằm BÊN TRONG `builder` của hộp thoại.
+/// Đây là bẫy chung của mọi thứ hiện qua `showDialog`: route của hộp thoại là
+/// một nhánh riêng của cây, nó KHÔNG dựng lại khi màn gọi nó dựng lại.
+///
+/// **2. Hộp thoại từng đóng được khi máy chưa sẵn sàng.** Đó là quyết định ban
+/// đầu và nó đã bị lật sau khi nhìn trên máy: đóng được nghĩa là khách có thể
+/// gạt thông báo đi rồi đứng trước một màn Menu không có lối vào tour và không
+/// còn lời giải thích nào. Nay `barrierDismissible: false` + [PopScope] chặn cả
+/// chạm-ra-ngoài lẫn nút lùi.
+///
+/// Cái giá đã biết và đã chấp nhận: trong lúc bị chặn, khách không đọc được màn
+/// Hướng dẫn. Đổi lại, trạng thái bị chặn giờ là một trạng thái **tự thoát** —
+/// bật Bluetooth lên là hộp thoại tự đóng, không cần chạm gì.
 Future<void> showDeviceStatusDialog(
   BuildContext context, {
   required StartupProvider startup,
-  required StartupStatus bleStatus,
-  required bool needsSync,
 }) async {
-  final card = deviceStatusCard(
-    startup: startup,
-    bleStatus: bleStatus,
-    needsSync: needsSync,
-  );
-  if (card == null) return;
-
   final t = context.tokens;
+
   await showDialog<void>(
     context: context,
-    barrierDismissible: true,
-    builder: (_) => Dialog(
-      backgroundColor: t.surface,
-      shape: RoundedRectangleBorder(borderRadius: t.sharpAll),
-      insetPadding: const EdgeInsets.all(AppSpace.gutter),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpace.x4),
-        child: card,
+    barrierDismissible: false,
+    builder: (dialogContext) => PopScope(
+      canPop: false,
+      child: ValueListenableBuilder<StartupStatus>(
+        valueListenable: startup.bleStatus,
+        builder: (ctx, bleStatus, _) {
+          final card = deviceStatusCard(
+            startup: startup,
+            bleStatus: bleStatus,
+            needsSync: startup.needsSync,
+          );
+
+          // MÁY ĐÃ SẴN SÀNG ⇒ TỰ ĐÓNG. Post-frame vì ta đang ở giữa một lần
+          // dựng cây; pop tại chỗ là gỡ chính cái đang được dựng.
+          if (card == null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              final nav = Navigator.of(ctx);
+              if (nav.canPop()) nav.pop();
+            });
+            return const SizedBox.shrink();
+          }
+
+          return Dialog(
+            backgroundColor: t.surface,
+            shape: RoundedRectangleBorder(borderRadius: t.sharpAll),
+            insetPadding: const EdgeInsets.all(AppSpace.gutter),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpace.x4),
+              child: card,
+            ),
+          );
+        },
       ),
     ),
   );

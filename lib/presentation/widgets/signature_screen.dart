@@ -12,7 +12,7 @@
 //
 // Nếu hai màn tự dựng, "đúng một chỗ" trở thành hai con số gõ ở hai file, và
 // chúng sẽ lệch nhau ở lần chỉnh đầu tiên. Ở đây chúng đọc chung
-// [AppRatio.gateTop], nên sự đối xứng là một TÍNH CHẤT chứ không phải một thoả
+// [DesignSize.gateTop], nên sự đối xứng là một TÍNH CHẤT chứ không phải một thoả
 // thuận miệng.
 //
 // Cặp chữ 22/48 ([AppText.posterKicker] / [AppText.posterTitle]) chỉ được dùng
@@ -42,17 +42,35 @@ import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 
-/// Lớp phủ trên ảnh nền. Hai màn cần hai đường cong khác nhau, và khác vì ảnh
-/// làm hai việc khác nhau.
-enum SignatureVeil {
-  /// Poster: ảnh vẫn là NỘI DUNG. Đỉnh hơi tối để chữ trạng thái của hệ thống
-  /// đọc được, rồi MỞ RA gần như trong suốt ở 22% — đó là vùng bức ảnh được
-  /// nhìn — trước khi đóng dần xuống đáy nơi cụm chữ và các hàng ngồi.
+/// Màn nào trong hai màn. Nó chọn CẢ lớp phủ LẪN nhịp dọc, vì hai thứ đó là
+/// hai mặt của cùng một câu hỏi: bức ảnh ở đây đang làm việc gì.
+///
+/// ⚠ HAI MÀN KHÔNG DÙNG CHUNG NHỊP DỌC, và tôi từng cho chúng dùng chung. Bản
+/// vẽ ghi rõ hai bộ số khác nhau:
+///
+///     Poster    tbig ─10─ divider ─34─ hàng
+///     Cảm ơn    tbig ─20─ divider ─20─ câu dặn dò
+///
+/// Poster kéo divider SÁT tiêu đề rồi mở một khoảng rộng trước các hàng: vạch
+/// đóng cụm chữ lại, khoảng trống 34 tách "đây là ai" khỏi "đi vào bằng đường
+/// nào". Màn Cảm ơn cân đối 20/20 vì cả ba khối là một lời chào liền mạch,
+/// không có thao tác nào chen vào.
+enum SignatureKind {
+  /// Ảnh vẫn là NỘI DUNG. Đỉnh hơi tối để chữ trạng thái của hệ thống đọc được,
+  /// rồi MỞ RA gần như trong suốt ở 22% — đó là vùng bức ảnh được nhìn — trước
+  /// khi đóng dần xuống đáy nơi cụm chữ và các hàng ngồi.
   poster,
 
-  /// Cảm ơn: ảnh chỉ còn làm NỀN cho chữ. Tối đều từ trên xuống, đậm hơn hẳn.
-  /// Không có cửa sổ nào để nhìn ảnh, vì lúc này không còn gì để mời chào.
-  backdrop,
+  /// Ảnh chỉ còn làm NỀN cho chữ. Tối đều từ trên xuống, đậm hơn hẳn. Không có
+  /// cửa sổ nào để nhìn ảnh, vì lúc này không còn gì để mời chào.
+  farewell;
+
+  /// Khe giữa dòng chữ lớn và vạch 92.
+  double get titleToDivider => this == poster ? 10 : 20;
+
+  /// Khe dưới vạch 92 — trước hàng thao tác (Poster) hoặc trước câu dặn dò
+  /// (Cảm ơn).
+  double get dividerToBody => this == poster ? 34 : 20;
 }
 
 /// Khung của một màn "khoảnh khắc". Xem chú giải đầu file.
@@ -61,7 +79,7 @@ class SignatureScreen extends StatelessWidget {
   /// [HeroImage] — vẫn tối, nên chữ trắng vẫn đọc được.
   final String? imagePath;
 
-  final SignatureVeil veil;
+  final SignatureKind kind;
 
   /// Dòng nhỏ 22 ("Bảo tàng" / "Cảm ơn").
   final String kicker;
@@ -86,7 +104,7 @@ class SignatureScreen extends StatelessWidget {
   const SignatureScreen({
     super.key,
     required this.imagePath,
-    required this.veil,
+    required this.kind,
     required this.kicker,
     required this.title,
     this.lede,
@@ -111,7 +129,6 @@ class SignatureScreen extends StatelessWidget {
 
   Widget _buildBody(BuildContext context) {
     final t = context.tokens;
-    final h = MediaQuery.sizeOf(context).height;
 
     return Scaffold(
       backgroundColor: t.surface,
@@ -138,10 +155,11 @@ class SignatureScreen extends StatelessWidget {
           // dụng phụ. Neo tuyệt đối cho cụm chữ đứng im ở một chỗ với mọi độ
           // dài nội dung, và đứng đúng chỗ của màn kia.
           Positioned(
-            top: h * AppRatio.gateTop,
+            top: DesignSize.gateTop,
             left: 0,
             right: 0,
             child: _Titles(
+              kind: kind,
               kicker: kicker,
               title: title,
               lede: lede,
@@ -164,11 +182,11 @@ class SignatureScreen extends StatelessWidget {
             ),
 
           if (poweredBy)
-            Positioned(
+            const Positioned(
               left: 0,
               right: 0,
               bottom: 0,
-              child: SafeArea(top: false, child: const _PoweredBy()),
+              child: SafeArea(top: false, child: _PoweredBy()),
             ),
         ],
       ),
@@ -184,8 +202,8 @@ class SignatureScreen extends StatelessWidget {
   /// được; ở đây `Color.withValues` làm thẳng.
   LinearGradient _gradient(MuseumTokens t) {
     final s = t.surface;
-    return switch (veil) {
-      SignatureVeil.poster => LinearGradient(
+    return switch (kind) {
+      SignatureKind.poster => LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
@@ -196,7 +214,7 @@ class SignatureScreen extends StatelessWidget {
           ],
           stops: const [0.0, 0.22, 0.58, 1.0],
         ),
-      SignatureVeil.backdrop => LinearGradient(
+      SignatureKind.farewell => LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
@@ -211,12 +229,14 @@ class SignatureScreen extends StatelessWidget {
 }
 
 class _Titles extends StatelessWidget {
+  final SignatureKind kind;
   final String kicker;
   final String title;
   final String? lede;
   final List<Widget> rows;
 
   const _Titles({
+    required this.kind,
     required this.kicker,
     required this.title,
     required this.lede,
@@ -244,13 +264,14 @@ class _Titles extends StatelessWidget {
               Text(kicker,
                   style: AppText.posterKicker
                       .copyWith(color: t.ink.withValues(alpha: 0.68))),
+              // `.tsmall { margin-bottom: 8px }`
               const SizedBox(height: AppSpace.x2),
               Text(title,
                   style: AppText.posterTitle.copyWith(color: t.ink)),
-              const SizedBox(height: AppSpace.x5),
+              SizedBox(height: kind.titleToDivider),
               const AppDivider(),
               if (lede != null) ...[
-                const SizedBox(height: AppSpace.x5),
+                SizedBox(height: kind.dividerToBody),
                 Text(lede!,
                     style: AppText.lede.copyWith(color: t.inkMuted)),
               ],
@@ -258,7 +279,7 @@ class _Titles extends StatelessWidget {
           ),
         ),
         if (rows.isNotEmpty) ...[
-          const SizedBox(height: AppSpace.x8),
+          SizedBox(height: kind.dividerToBody),
           ...rows,
         ],
       ],

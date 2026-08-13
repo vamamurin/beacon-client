@@ -32,14 +32,14 @@
 
 import 'package:flutter/material.dart';
 
+import 'app_space.dart';
 import 'museum_tokens.dart';
 
 /// Vạch 92×1 đóng một cụm chữ. Xem chú giải đầu file.
 class AppDivider extends StatelessWidget {
-  /// 92 là con số của bản vẽ và nó KHÔNG co theo màn: divider là một dấu câu
-  /// đặt cạnh chữ, không phải một đường chia không gian. Cho nó co theo bề
-  /// ngang máy là biến nó thành thứ thứ hai.
-  static const double width = 92;
+  /// 92dp — con số của bản vẽ, KHÔNG co theo màn: divider là một dấu câu đặt
+  /// cạnh chữ, không phải một đường chia không gian.
+  static const double width = DesignSize.dividerWidth;
 
   const AppDivider({super.key});
 
