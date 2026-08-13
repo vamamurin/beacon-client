@@ -1,101 +1,59 @@
 // Destination: lib/presentation/farewell/farewell_screen.dart
 //
-// MÀN CẢM ƠN / XIN GỬI LẠI MÁY — sau khi phiên đã thật sự dọn.
+// MÀN 07 · CẢM ƠN — nửa còn lại của cặp đối xứng với màn Poster.
 //
-// Đây là màn hình của [SessionPhase.farewell], và nó KHÔNG TỰ LÀM GÌ CẢ:
-// không hẹn giờ, không tự điều hướng, không giữ cờ nào. Nó chỉ vẽ một trạng
-// thái của phiên và phát biểu một ý định khi khách bấm.
+// MÀN NÀY KHÔNG TỰ LÀM GÌ CẢ. Nó không hẹn giờ, không tự điều hướng, không dọn
+// dẹp. Đồng hồ giữ màn (`farewellHold`) do [SessionController] cầm, và nút
+// "Xong" chỉ phát biểu ý định — phiên về `atDesk`, rồi root đưa ngăn xếp về màn
+// nghỉ VÌ PHASE ĐỔI. Đó là lý do nó vẫn là một màn thuần trình bày dù nằm ở
+// cuối một luồng phức tạp.
 //
-// Toàn bộ phần "sống được bao lâu" nằm ở [SessionController]:
-//   • hạn giữ (`farewellHold`, từ manifest `farewell.autoReturnSeconds`),
-//   • khách bấm "Xong" ⇒ `dismissFarewell()`,
-//   • máy lên dock ⇒ controller tự về `atDesk`.
-// Cả ba đều dẫn tới cùng một chỗ, và root đưa stack về màn nghỉ vì PHASE đổi —
-// không phải vì màn này gọi Navigator.
+// ═══════════════════════════════════════════════════════════════════════════
+// DÙNG CHUNG KHUÔN VỚI MÀN MỞ — và đó là toàn bộ ý nghĩa của nó
+// ═══════════════════════════════════════════════════════════════════════════
 //
-// Đó là lý do màn hình này lại là StatelessWidget: mọi thứ từng cần state
-// (timer, cờ điều hướng) đã về đúng chỗ của nó là máy trạng thái phiên. Giữ
-// vô hạn (`autoReturnSeconds: 0`) an toàn cũng nhờ vậy — cắm sạc là đường
-// thoát vật lý được xử lý ngay trong controller.
+// Cùng bức ảnh, cùng bộ lọc, cùng cặp chữ 22/48, cùng neo [AppRatio.gateTop].
+// Khách phải nhận ra mình đã quay về đúng nơi bắt đầu — và điều đó chỉ xảy ra
+// nếu cụm chữ rơi đúng một chỗ trên cả hai màn, chứ không phải "trông na ná".
+// Xem [SignatureScreen] cho cách sự đối xứng được biến thành một tính chất.
+//
+// Khác màn Poster ở đúng ba điểm:
+//   • veil ĐẬM hơn — ở đây ảnh chỉ còn làm nền cho chữ, không còn là nội dung;
+//   • có câu dặn dò dưới divider (trả máy ở đâu);
+//   • hàng thao tác GHIM Ở ĐÁY, không nằm trong cụm chữ: "Xong" là một dấu
+//     chấm hết, không phải câu tiếp theo của một lời mời.
+//
+// ⚠ TAB BAR VẪN CÒN Ở MÀN NÀY — quyết định tạm. Lý lẽ giữ: phiên chưa đóng cho
+// tới khi khách chạm "Xong", nên năm lối điều hướng vẫn hợp lệ. Lý lẽ bỏ (chưa
+// thắng): cả màn đang nói "xin trả máy tại quầy", mà bên dưới lại mời đi tiếp.
+// Nếu thực địa cho thấy khách đi lạc từ đây, đó là chỗ để sửa.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
-import 'package:beacon_client/presentation/theme/app_space.dart';
-import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
+import 'package:beacon_client/presentation/widgets/signature_screen.dart';
 
 class FarewellScreen extends StatelessWidget {
   const FarewellScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final t = context.tokens;
     final content = context.watch<ContentProvider>();
 
-    return Scaffold(
-      backgroundColor: t.surface,
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpace.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Spacer(),
-              Icon(Icons.check_circle_outline, size: 48, color: t.accent),
-              const SizedBox(height: AppSpace.x6),
-              Text(content.ui(UiKeys.farewellTitle),
-                  style: AppText.heroTitle.copyWith(color: t.ink)),
-              const SizedBox(height: AppSpace.x3),
-              Text(content.ui(UiKeys.farewellBody),
-                  style: AppText.lede.copyWith(color: t.inkMuted)),
-              const Spacer(),
-              _DoneButton(
-                label: content.ui(UiKeys.farewellCta),
-                // Chỉ phát biểu ý định. Phiên về `atDesk`, và root đưa stack
-                // về màn nghỉ vì phase đổi — màn này không đụng Navigator.
-                onPressed: () =>
-                    context.read<SessionProvider>().dismissFarewell(),
-              ),
-              const SizedBox(height: AppSpace.x8),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DoneButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-
-  const _DoneButton({required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      onTap: onPressed,
-      child: Material(
-        color: t.ctaFill,
-        borderRadius: t.sharpAll,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: t.sharpAll,
-          child: Container(
-            height: AppSpace.ctaHeight,
-            alignment: Alignment.center,
-            child: Text(label.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ctaLabel)),
-          ),
-        ),
+    return SignatureScreen(
+      imagePath: content.welcomeImagePath,
+      veil: SignatureVeil.backdrop,
+      kicker: content.ui(UiKeys.farewellKicker),
+      title: content.ui(UiKeys.farewellTitle),
+      lede: content.ui(UiKeys.farewellBody),
+      bottom: AppRow(
+        label: content.ui(UiKeys.farewellCta),
+        lead: true,
+        onTap: () => context.read<SessionProvider>().dismissFarewell(),
       ),
     );
   }

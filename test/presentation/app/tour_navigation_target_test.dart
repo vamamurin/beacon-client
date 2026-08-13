@@ -23,10 +23,9 @@ void main() {
     // Trước đây là `zoneRoute`. Màn khu vực nay sống trong tab Tham quan của
     // shell, nên đích đến là shell — và shell tự chọn tab mở đầu theo phase.
     //
-    // ⚠ `shellRoute` HÔM NAY BẰNG `restRoute`, nên assertion này và các
-    // assertion "về màn nghỉ" bên dưới đang so cùng một chuỗi. Đó KHÔNG phải
-    // thừa: hai hằng mang hai ý, và chúng sẽ tách ra khi màn poster trở thành
-    // màn nghỉ. Giữ đúng tên hằng ở mỗi chỗ để ngày đó test tự chỉ ra chỗ sai.
+    // `shellRoute` và `restRoute` từng trùng giá trị; từ khi màn poster trở
+    // thành màn nghỉ thì chúng đã tách ra. Việc mỗi assertion gọi đúng tên hằng
+    // của mình chính là thứ khiến lần tách đó không cần sửa một dòng test nào.
     expect(target(SessionPhase.gate, SessionPhase.touring),
         AppRouter.shellRoute);
   });

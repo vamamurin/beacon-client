@@ -61,9 +61,10 @@ const double kDrawerWidth = 312;
 /// kéo. Đổi tiếng là một thao tác khách làm rồi ở lại đúng chỗ cũ — đẩy họ sang
 /// một màn khác để làm một việc dài hai giây là bắt họ tìm đường quay về.
 ///
-/// Lối vào CÀI ĐẶT cũng không ở đây: nó là màn của NHÂN VIÊN, và nó giữ nguyên
-/// cử chỉ cũ — nhấn giữ tên bảo tàng. Cho nó một hàng bình thường trong ngăn
-/// kéo là mời khách vào một chỗ không dành cho họ.
+/// CÀI ĐẶT cũng không có mặt ở đây, nhưng vì lý do ngược lại: nó là một hàng
+/// THẬT trong ngăn kéo và tự mở lấy màn của nó. Enum này chỉ liệt kê những gì
+/// ngăn kéo phải NHỜ chỗ gọi làm — mà chỗ gọi là shell, và shell không cần biết
+/// về màn Cài đặt.
 enum DrawerResult { guide, summary }
 
 class MuseumDrawer extends StatelessWidget {
@@ -126,7 +127,22 @@ class MuseumDrawer extends StatelessWidget {
                       AppRow(
                         label: content.ui(UiKeys.languageLabel),
                         status: content.languageName(content.language),
-                        onTap: () => _pickLanguage(context),
+                        onTap: () => showLanguageSheet(context),
+                      ),
+                      // LỐI VÀO CÀI ĐẶT LÀ MỘT HÀNG CÔNG KHAI, không còn là
+                      // cử chỉ nhấn giữ tên bảo tàng.
+                      //
+                      // Nhấn giữ là một cửa sau: nhân viên phải được DẠY nó, và
+                      // ai không được dạy thì không tìm ra. Một hàng nhìn thấy
+                      // được thì không phải dạy ai cả.
+                      //
+                      // ⚠ CÒN NỢ: nó công khai nghĩa là khách cũng vào được.
+                      // Chấp nhận trong lúc dựng; khoá bằng mật khẩu sau khi
+                      // mọi màn đã xong, và khi ấy chỗ đặt khoá là ĐÂY chứ
+                      // không phải là làm cho hàng này khó tìm lại.
+                      AppRow(
+                        label: content.ui(UiKeys.settingsTitle),
+                        onTap: () => _openSettings(context),
                       ),
                       if (inTour)
                         AppRow(
@@ -148,29 +164,12 @@ class MuseumDrawer extends StatelessWidget {
     );
   }
 
-  /// Bảng chọn tiếng, mở ngay trên ngăn kéo. Ngăn kéo KHÔNG đóng lại: khách
-  /// đổi tiếng xong thường còn muốn đi tiếp tới chỗ họ vừa định tới.
-  Future<void> _pickLanguage(BuildContext context) async {
-    final t = context.tokens;
-    final title = context.read<ContentProvider>().ui(UiKeys.languagePickerTitle);
-    await showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: t.surface,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.gutter),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(title, style: AppText.sheetTitle.copyWith(color: t.ink)),
-              const SizedBox(height: AppSpace.x5),
-              const LanguagePicker(),
-            ],
-          ),
-        ),
-      ),
-    );
+  void _openSettings(BuildContext context) {
+    // `rootNavigator` chứ không phải Navigator của tab: Cài đặt là màn toàn
+    // màn hình của NHÂN VIÊN — nó phủ cả tab bar, không sống trong một tab.
+    final nav = Navigator.of(context, rootNavigator: true);
+    onClose();
+    nav.pushNamed(AppRouter.settingsRoute);
   }
 
   void _onMenuAction(BuildContext context, MenuAction a) {
@@ -246,14 +245,6 @@ class _Header extends StatelessWidget {
 
   const _Header({required this.museum, required this.onClose});
 
-  void _openSettings(BuildContext context) {
-    // `rootNavigator` chứ không phải Navigator của tab: Cài đặt là một màn toàn
-    // màn hình của NHÂN VIÊN — nó phủ cả tab bar, không sống bên trong một tab.
-    final nav = Navigator.of(context, rootNavigator: true);
-    onClose();
-    nav.pushNamed(AppRouter.settingsRoute);
-  }
-
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
@@ -279,23 +270,8 @@ class _Header extends StatelessWidget {
                   style: AppText.kicker.copyWith(color: t.inkFaint),
                 ),
                 const SizedBox(height: AppSpace.x2),
-                // NHẤN GIỮ TÊN BẢO TÀNG = MỞ CÀI ĐẶT. Cùng cử chỉ, cùng vị trí
-                // (góc trên-trái), cùng chuỗi gợi ý a11y với màn Menu và màn
-                // chào: nhân viên đã học một lần thì không phải học lại chỉ vì
-                // lối vào đổi chỗ. `excludeSemantics` + `onLongPress` đi thành
-                // cặp — thiếu `onLongPress` ở Semantics là không mở được bằng
-                // TalkBack.
-                Semantics(
-                  label: museum,
-                  onLongPressHint: content.ui(UiKeys.gateSettingsHint),
-                  excludeSemantics: true,
-                  onLongPress: () => _openSettings(context),
-                  child: GestureDetector(
-                    onLongPress: () => _openSettings(context),
-                    child: Text(museum,
-                        style: AppText.museumName.copyWith(color: t.ink)),
-                  ),
-                ),
+                Text(museum,
+                    style: AppText.museumName.copyWith(color: t.ink)),
                 const SizedBox(height: AppSpace.x4),
                 const AppDivider(),
               ],

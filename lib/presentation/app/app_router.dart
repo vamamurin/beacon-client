@@ -65,16 +65,20 @@ abstract final class AppRouter {
   /// MÀN NGHỈ — nơi máy quay về mỗi khi không có tour nào chạy: lúc nằm trên
   /// dock, lúc vừa được nhấc lên, và sau khi một chuyến đi khép lại.
   ///
-  /// Nay là [shellRoute]: shell tự chọn tab mở đầu theo phase (chưa tour ⇒ tab
-  /// Trang chính). Hằng này vẫn tồn tại riêng vì thứ tự đầu luồng CÒN ĐỔI —
-  /// màn poster sẽ được đặt TRƯỚC Menu ở bước sau, và ngày đó màn nghỉ là
-  /// poster chứ không phải shell nữa. Khi ấy đây là DÒNG DUY NHẤT phải sửa.
+  /// Nay là [gateRoute] — MÀN POSTER. Doc trước của hằng này tiên đoán đúng
+  /// ngày nó đổi: *"màn poster sẽ được đặt TRƯỚC Menu ở bước sau, và ngày đó
+  /// màn nghỉ là poster chứ không phải shell nữa."* Đây là dòng duy nhất phải
+  /// sửa, và nó vừa được sửa.
   ///
-  /// Hệ quả trách nhiệm: màn nào đứng ở đây thì màn đó phải mang các thẻ trạng
-  /// thái dành cho nhân viên (xem `deviceNotReadyCard`), vì nó là thứ nhân viên
-  /// nhìn khi nhấc máy khỏi dock. Hiện trách nhiệm đó nằm ở màn gốc của tab
-  /// Trang chính.
-  static const String restRoute = shellRoute;
+  /// ⚠ [restRoute] VÀ [shellRoute] NAY LÀ HAI GIÁ TRỊ KHÁC NHAU. Trong một thời
+  /// gian chúng trùng nhau, và `tourNavigationTarget` đã cố ý viết hai nhánh
+  /// riêng để hôm nay không phải đi tìm chỗ nào nhầm.
+  ///
+  /// TRÁCH NHIỆM "THẺ TRẠNG THÁI NHÂN VIÊN" KHÔNG ĐI THEO HẰNG NÀY NỮA. Poster
+  /// là một cái cổng và không mang gì khác (quyết định sản phẩm) — câu hỏi "máy
+  /// đã sẵn sàng chưa" nay sống ở màn Menu dưới dạng hộp thoại. Xem
+  /// `widgets/device_status.dart`.
+  static const String restRoute = gateRoute;
 
   static const String initialRoute = restRoute;
 

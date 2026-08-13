@@ -15,6 +15,39 @@ import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
+import 'package:beacon_client/presentation/ui_strings.dart';
+
+/// Mở bảng chọn tiếng dưới dạng sheet. Dùng từ chip `VI` trên thanh trên và từ
+/// hàng "Ngôn ngữ" trong ngăn kéo.
+///
+/// KHÔNG ĐÓNG chỗ gọi lại: khách đổi tiếng xong thường còn muốn đi tiếp tới chỗ
+/// họ vừa định tới, nên ngăn kéo (nếu đang mở) vẫn mở.
+///
+/// Một hàm dùng chung thay vì hai bản sao, vì hai lối vào này phải mở ra CÙNG
+/// một thứ — nếu không, "đổi ngôn ngữ" thành hai tính năng khác nhau tuỳ chỗ
+/// khách bấm.
+Future<void> showLanguageSheet(BuildContext context) async {
+  final t = context.tokens;
+  final title = context.read<ContentProvider>().ui(UiKeys.languagePickerTitle);
+  await showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: t.surface,
+    builder: (_) => SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpace.gutter),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(title, style: AppText.sheetTitle.copyWith(color: t.ink)),
+            const SizedBox(height: AppSpace.x5),
+            const LanguagePicker(),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 class LanguagePicker extends StatelessWidget {
   const LanguagePicker({super.key});

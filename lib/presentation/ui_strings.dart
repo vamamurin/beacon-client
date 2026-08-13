@@ -200,6 +200,22 @@ abstract final class UiKeys {
   static const tabForYou = 'tab.foryou';
   static const tabGuide = 'tab.guide';
 
+  // ── màn Poster (cổng vào) và màn Cảm ơn — CẶP ĐỐI XỨNG ──────────────────
+  //
+  // Hai màn dùng chung khuôn chữ 22/48, nên chúng cũng dùng chung CẤU TRÚC
+  // khoá: một dòng nhỏ, một dòng lớn.
+  //
+  // [posterKicker] KHÔNG dùng lại `gate.museum.fallback` dù hai chuỗi hôm nay
+  // giống hệt nhau ("Bảo tàng"). Khoá kia trả lời "hiện gì khi THIẾU tên bảo
+  // tàng"; khoá này là một NHÃN luôn hiện, đứng trên tên thật. Một khoá gánh
+  // hai việc là một khoá sẽ sai ở lần bảo tàng đầu tiên muốn đổi một trong hai.
+  static const posterKicker = 'poster.kicker';
+  static const posterEnter = 'poster.enter';
+
+  /// Dòng nhỏ của màn Cảm ơn. [farewellTitle] cũ là MỘT câu ("Cảm ơn quý
+  /// khách"); bản vẽ bẻ nó làm hai cỡ chữ, nên nó thành hai khoá.
+  static const farewellKicker = 'farewell.kicker';
+
   // ── hướng dẫn sử dụng ──
   static const guideTitle = 'guide.title';
   static const guideSubtitle = 'guide.subtitle';
@@ -440,6 +456,10 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.tabMap: 'Sơ đồ',
   UiKeys.tabForYou: 'Gợi ý',
   UiKeys.tabGuide: 'Hướng dẫn',
+
+  UiKeys.posterKicker: 'Bảo tàng',
+  UiKeys.posterEnter: 'Tham quan',
+  UiKeys.farewellKicker: 'Cảm ơn',
   UiKeys.menuClose: 'Đóng menu',
   UiKeys.menuItemStart: 'Bắt đầu tham quan',
   UiKeys.menuItemStartDesc:
@@ -512,7 +532,8 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.feedbackEmojiOk: 'Bình thường',
   UiKeys.feedbackEmojiGood: 'Rất hài lòng',
 
-  UiKeys.farewellTitle: 'Cảm ơn quý khách',
+  // Dòng LỚN của cặp 22/48; [farewellKicker] là dòng nhỏ đứng trên nó.
+  UiKeys.farewellTitle: 'quý khách',
   UiKeys.farewellBody:
       'Chuyến tham quan đã kết thúc. Xin vui lòng gửi lại thiết bị tại quầy '
           'lễ tân. Chúc quý khách một ngày tốt lành.',
