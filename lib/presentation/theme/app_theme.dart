@@ -30,8 +30,17 @@ enum MuseumThemeId {
   Brightness get brightness =>
       this == MuseumThemeId.light ? Brightness.light : Brightness.dark;
 
+  /// ⚠ MẶC ĐỊNH LÀ `light` KỂ TỪ THIẾT KẾ v6 (quyết định D6) — trước đây là
+  /// `dark`. Thiết kế nói rõ: *"Đây là máy của bảo tàng, không phải điện thoại
+  /// của khách… một chiếc máy mượn ở quầy thì phải hiện ra đúng một bộ mặt cho
+  /// mọi người. Sáng là mặc định, tối chỉ bật khi có người chọn."*
+  ///
+  /// ĐÂY LÀ DÒNG DUY NHẤT PHẢI SỬA nếu thực địa cho thấy màn sáng gây chói
+  /// trong phòng trưng bày tối — cảnh báo đó vẫn còn nguyên trong doc của
+  /// [MuseumTokens.light] và chưa được chứng minh là sai, chỉ là đã bị một lý
+  /// lẽ khác (một máy, một bộ mặt) vượt lên trên.
   static MuseumThemeId fromId(String? id) =>
-      values.firstWhere((e) => e.id == id, orElse: () => dark);
+      values.firstWhere((e) => e.id == id, orElse: () => light);
 }
 
 /// Dựng ThemeData từ tokens.
@@ -174,7 +183,7 @@ ThemeData buildMuseumTheme(MuseumThemeId id) {
 
 class ThemeController extends ChangeNotifier {
   /// [initial] chỉ để test ép một theme cụ thể. Bình thường bỏ trống: theme
-  /// đọc từ store, và MuseumThemeId.fromId(null) trả về dark.
+  /// đọc từ store, và MuseumThemeId.fromId(null) trả về `light` (xem doc ở đó).
   ThemeController({required ISettingsStore store, MuseumThemeId? initial})
       : _store = store,
         _id = initial ?? MuseumThemeId.fromId(store.themeId);

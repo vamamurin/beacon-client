@@ -109,6 +109,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     required this.ctaFill,
     required this.ctaLabel,
     required this.ctaDisabled,
+    required this.chrome,
+    required this.chromeOff,
 
     // ── on-image family: chữ / viền / lớp phủ trên ảnh hiện vật ──
     required this.inkOnImage,
@@ -262,6 +264,39 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
 
   /// Nền nút CTA khi chưa đủ điều kiện bấm.
   final Color ctaDisabled;
+
+  /// Nền của VỎ MÁY — hiện là tab bar. Không phải nền của một màn hình nào.
+  ///
+  /// TÁCH KHỎI `surface` VỀ PHÍA CỰC ĐỐI DIỆN CỦA NỘI DUNG: preset tối thì vỏ
+  /// ĐEN hơn nền, preset giấy thì vỏ SÁNG hơn giấy. Nhờ vậy thanh dưới luôn đọc
+  /// ra là "cái máy", không phải "phần cuối của trang" — ở cả hai theme, mà
+  /// không cần đổ bóng hay nâng elevation (thiết kế này phẳng tuyệt đối).
+  ///
+  /// Nó KHÔNG phải `surfaceRaised`: `surfaceRaised` là một mặt phẳng của NỘI
+  /// DUNG (kệ đỡ một hàng danh sách) và nó luôn đi cùng chiều với nội dung.
+  /// `chrome` đi ngược chiều. Hai token này sẽ không bao giờ hoán đổi được cho
+  /// nhau, dù ở preset tối chúng tình cờ cùng nằm về một phía.
+  ///
+  /// Ở highContrast nó BẰNG `surface` (#000000 không đen hơn được nữa). Thanh
+  /// vẫn tách khỏi nội dung nhờ vạch `line` ở mép trên — preset đó có `line`
+  /// #6E6E6E, đủ rõ để gánh một mình.
+  final Color chrome;
+
+  /// Icon + nhãn của tab CHƯA được chọn, đặt trên [chrome]. Tab đang chọn dùng
+  /// [ink].
+  ///
+  /// ⚠ HIỆN TRÙNG GIÁ TRỊ VỚI [inkFaint] Ở CẢ HAI PRESET — TÌNH CỜ, KHÔNG PHẢI
+  /// LUẬT, và đây chính xác là chỗ `accent` đã sập bẫy một lần (xem doc của nó).
+  ///
+  /// Lý do nó là field riêng: [inkFaint] được tính để đọc được trên `surface`;
+  /// field này phải đọc được trên [chrome] — một nền KHÁC, và ở preset giấy nó
+  /// còn sáng hơn `surface`. Hai ràng buộc khác nhau thì hai token, kể cả khi
+  /// đáp số hôm nay bằng nhau. Ngày `chrome` được chỉnh, cái này đi theo
+  /// `chrome` chứ không đi theo `inkFaint`.
+  ///
+  /// KHÔNG hạ nó xuống mờ hơn: bốn tab không được chọn là bốn đích đến thật,
+  /// không phải nền. Chúng chỉ cần lùi sau tab đang chọn, không cần biến mất.
+  final Color chromeOff;
 
   // ── on-image family ───────────────────────────────────────────────────────
 
@@ -572,123 +607,174 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
   // PRESETS
   // ═════════════════════════════════════════════════════════════════════════
 
-  /// Mặc định. Rijksmuseum-style: nền gần đen, chữ trắng. Đúng cho phòng trưng
-  /// bày tối, và không làm phiền khách đứng cạnh.
+  /// Preset TỐI. Đúng cho phòng trưng bày tối, và không làm phiền khách đứng
+  /// cạnh. KHÔNG còn là mặc định — xem [MuseumThemeId.fromId] và quyết định D6.
+  ///
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// GIÁ TRỊ MÀU SINH TỪ OKLCH — thiết kế beacon-v6, `css/01-tokens.css`
+  /// ═══════════════════════════════════════════════════════════════════════
+  ///
+  /// Ba con số OKLCH ghi kèm mỗi màu để lần sau muốn thêm một bậc thì NỘI SUY
+  /// chứ không chọn bằng mắt. Hai trục cố định:
+  ///
+  ///     TÔNG NỀN  H = 105°  giữ NGUYÊN cho toàn dải xám, từ trắng tới đen.
+  ///       Không phải màu xanh — là một sắc rêu rất nhạt nằm trong xám. Ở 62°
+  ///       dải xám đọc ra nâu be, ở 125° đã thành xám-lục thấy rõ. 105° là chỗ
+  ///       mắt nhận ra "có xanh" mà chưa gọi được tên màu.
+  ///     MÀU NHẤN  H = 74°  đồng thau. Lệch 31° khỏi tông nền (bảng cũ chỉ lệch
+  ///       12°), nên nền ngả lục thì đồng thau nổi hơn hẳn — đúng cặp vật liệu
+  ///       của một bảo tàng: đồng ngả xanh và vàng thếp.
+  ///     ĐỘ BÃO HOÀ  C = 0.014–0.018 cho dải xám, KHÔNG BAO GIỜ bằng 0. Dưới
+  ///       0.014 thì làm tròn về 8-bit xê dịch tông 15–18°, hai bậc kề nhau ngả
+  ///       về hai phía và dải xám lại bẩn.
   static const MuseumTokens dark = MuseumTokens(
-    surface: Color(0xFF151312),
-    ink: Color(0xFFFFFFFF),
-    inkMuted: Color(0xFFD4CCC2),
-    inkFaint: Color(0xFFA39A8E),
-    line: Color(0xFF262220), // 1.17:1 — CỐ Ý mờ: vạch trang trí, xem doc
-    outline: Color(0xFF736C63), // 3.55/3.22/3.36:1 trên surface/Raised/backdrop
-    surfaceRaised: Color(0xFF201D1A),
-    badgeWell: Color(0xFF141211), // ΔL* 5.2 dưới surfaceRaised — xem doc
-    ctaFill: Color(0xFFFFFFFF),
-    ctaLabel: Color(0xFF151312),
-    ctaDisabled: Color(0xFF6B655D),
+    surface: Color(0xFF12120A), // L .120 C .016
+    ink: Color(0xFFF3F3EA), // L .950 C .013 — 16.85:1
+    inkMuted: Color(0xFFCECDC1), // 11.76:1
+    inkFaint: Color(0xFF9F9F92), // 7.03:1
+    line: Color(0xFF2B2B23), // CỐ Ý mờ: vạch trang trí, xem doc
+    outline: Color(0xFF6C6B61), // 3.50/3.12:1 trên surface/Raised
+    surfaceRaised: Color(0xFF1E1E16),
+    badgeWell: Color(0xFF0C0C05), // ΔL* 7.8 dưới surfaceRaised — xem doc
+    ctaFill: Color(0xFFF3F3EA),
+    ctaLabel: Color(0xFF12120A),
+    ctaDisabled: Color(0xFF6B6B5E), // 3.37:1 với inkMuted
+    chrome: Color(0xFF000000), // vỏ ĐEN hơn nền — xem doc
+    chromeOff: Color(0xFF9F9F92), // 7.85:1 trên chrome
 
-    inkOnImage: Color(0xFFFFFFFF),
+    // #FFFFFF -> #F3F3EB: trắng ngà, không phải trắng của máy tính. Mất 1.8
+    // điểm tương phản trên ảnh tối (17.40 -> 15.61) — không đáng kể, và nó là
+    // cùng một quyết định vật liệu với việc dải xám không bao giờ có C = 0.
+    inkOnImage: Color(0xFFF3F3EB),
     mutedOnImage: Color(0xFFD6CFC5),
     artistOnImage: Color(0xFFCEC7BD),
     scrimBack: Color(0x66000000), // 40% — chủ đích, xem doc
     lineOnImage: Color(0x59FFFFFF),
     ctaOnImageFill: Color(0xFFFFFFFF),
     ctaOnImageInk: Color(0xFF000000),
+    // ⚠ BA VEIL DƯỚI ĐÂY CHƯA ĐƯỢC PORT SANG v6, CÓ CHỦ ĐÍCH.
+    // Thiết kế v6 cho veil tan vào `--veil-rgb`, vốn LUÔN BẰNG `--surface` —
+    // tức veil ĐỔI THEO THEME ("đáy một khối ảnh bao giờ cũng chảy liền vào
+    // nền trang"). Điều đó va thẳng vào bất biến "họ on-image đóng băng" ở đầu
+    // file, và cả hai lý lẽ đều đúng ở chỗ khác nhau: bất biến canh CHỮ trên
+    // ảnh, thiết kế nói về TRANG chảy ngược lên ảnh.
+    // Lời giải đòi chốt luôn màu chữ ở đáy hero (light theme: veil sáng ⇒ chữ
+    // phải là `ink`, không phải `inkOnImage`), nên nó thuộc về lúc dựng lại các
+    // khối hero — KHÔNG phải lúc đổi bảng màu. Giữ veil đen tới P3/P4.
     tourCardVeil: _tourCardVeil,
     playerVeil: _playerVeil,
     imageFallback: _imageFallback,
     heroVeil: _heroVeil,
 
-    // 6.63:1 trên surfaceRaised #201D1A, 7.30:1 trên surface — accent tự đủ ở
-    // preset tối, nên hai họ tình cờ trùng giá trị. TÌNH CỜ, không phải luật:
-    // đó chính là ngộ nhận đã sinh ra bản một-field.
-    accent: Color(0xFFC99A5B),
-    accentOnImage: Color(0xFFC99A5B),
-    accentInk: Color(0xFF201509), // 7.11:1 trên accent ✓
-    // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 5.66:1 trên surface, 5.13 trên kệ · glyph 5.49:1
+    // 7.33:1 trên surfaceRaised, 8.23:1 trên surface — accent tự đủ ở preset
+    // tối, nên hai họ tình cờ trùng giá trị. TÌNH CỜ, không phải luật: đó chính
+    // là ngộ nhận đã sinh ra bản một-field.
+    accent: Color(0xFFD3A362), // L .720 C .095 H 74
+    accentOnImage: Color(0xFFD3A362),
+    accentInk: Color(0xFF16130A), // 8.12:1 trên accent ✓
+    // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 5.75:1 trên surface, 5.13 trên kệ · glyph 5.49:1
     error: Color(0xFFD9705C),
     errorInk: Color(0xFF2A0F09),
     heroDissolveEnabled: true,
 
-    welcomeBackdrop: Color(0xFF181A1F),
-    welcomeAmbient: Color(0xB3181A1F), // ~70% — tường tranh tối, ảnh nổi
-    welcomeBandLower: Color(0xFF42231B), // nâu đất — cùng giá trị bandUpper (chủ đích)
-    welcomeBandUpper: Color(0xFF42231B),
+    // ⚠ BỐN TOKEN welcome* LÀ TẠM, VÀ CHÚNG SẼ CHẾT Ở P2.
+    // Chúng mô tả collage hai khung của Gate cũ — một màn hình mà thiết kế v6
+    // thay bằng poster toàn màn. Đặt chúng bằng surface/surfaceRaised để Gate
+    // cũ vẫn dựng được và vẫn đạt mọi ngưỡng tương phản trong thời gian chờ,
+    // KHÔNG phải vì đó là một quyết định thị giác. Xoá cả bốn khi Gate được
+    // viết lại; đừng tinh chỉnh chúng.
+    welcomeBackdrop: Color(0xFF12120A),
+    welcomeAmbient: Color(0xB312120A),
+    welcomeBandLower: Color(0xFF1E1E16),
+    welcomeBandUpper: Color(0xFF1E1E16),
     shadowInk: Color(0x80000000),
 
     radiusSharp: 2,
   );
 
-  /// Nền giấy, chữ mực. Yêu cầu từ phía sản phẩm.
+  /// Nền giấy, chữ mực. **PRESET MẶC ĐỊNH** kể từ thiết kế v6 (quyết định D6).
   ///
-  /// LƯU Ý VẬN HÀNH: màn hình sáng trong phòng trưng bày tối gây chói cho người
-  /// cầm máy và làm phiền khách đứng cạnh. Theme này tồn tại vì được yêu cầu,
-  /// không vì nó là lựa chọn tốt cho môi trường bảo tàng. Nếu sau này có dữ
-  /// liệu sử dụng, hãy kiểm xem có ai thật sự bật nó trước khi duy trì tiếp.
+  /// VÌ SAO NÓ LÊN LÀM MẶC ĐỊNH, dù doc cũ ở đây cảnh báo ngược lại: thiết kế
+  /// v6 trả lời thẳng câu hỏi vận hành đó — *"Đây là máy của bảo tàng, không
+  /// phải điện thoại của khách: một chiếc máy mượn ở quầy thì phải hiện ra đúng
+  /// một bộ mặt cho mọi người."* Tức lựa chọn không còn là "sáng hay tối cho dễ
+  /// nhìn" mà là "máy mượn thì phải có một bộ mặt", và bộ mặt đó là giấy.
+  ///
+  /// CẢNH BÁO CŨ VẪN CÒN GIÁ TRỊ và không bị xoá: màn hình sáng trong phòng
+  /// trưng bày tối gây chói cho người cầm máy và làm phiền khách đứng cạnh.
+  /// Nếu thực địa cho thấy điều đó, đường lùi là đổi lại mặc định ở
+  /// [MuseumThemeId.fromId] — một dòng — chứ không phải chỉnh bảng màu này.
   ///
   /// Toàn bộ họ on-image giữ nguyên giá trị của [dark]: ảnh hiện vật không sáng
   /// lên theo theme, nên chữ trên nó cũng không được đổi.
   static const MuseumTokens light = MuseumTokens(
-    surface: Color(0xFFF6F3EE),
-    ink: Color(0xFF171412),
-    inkMuted: Color(0xFF5D554C), // 6.61:1 trên surface ✓
-    // #7D7469 cũ = 4.15:1 trên surface — DƯỚI chuẩn AA (4.5) cho chữ 12px, và
-    // đó là cỡ của mọi style dùng nó. #6E655A: 5.17:1 trên surface, 4.56:1
-    // trên surfaceRaised (ràng buộc chặt hơn).
+    surface: Color(0xFFEEEEE2), // L .946 C .016 — giấy dó ngả rêu
+    ink: Color(0xFF17160F), // L .199 C .013 — 15.51:1
+    inkMuted: Color(0xFF333229), // L .315 C .016 — 11.03:1
+    // LƯU Ý VỀ THANG, vẫn đúng với bảng mới: ở preset giấy "mờ nhất" và "đạt
+    // AA" gần nhau hơn hẳn preset tối. Bảng v6 nới được nhờ tính NGƯỢC từ
+    // tương phản đích (mờ 7:1, thân bài 11:1, chữ chính 15.5:1) thay vì chọn
+    // bằng mắt — nên ba bậc giờ cách đều nhau ở CẢ hai preset.
+    inkFaint: Color(0xFF505045), // L .428 C .018 — 6.98:1
+    line: Color(0xFFCDCDC1), // L .845 C .016 — CỐ Ý mờ: vạch trang trí
+    // ⚠ LỆCH KHỎI THIẾT KẾ, CÓ CHỦ ĐÍCH — đọc trước khi "sửa lại cho đúng bản vẽ".
     //
-    // LƯU Ý VỀ THANG: ở preset giấy, "mờ nhất" và "đạt AA" gần như chạm nhau —
-    // inkFaint #6E655A giờ chỉ còn cách inkMuted #5D554C một bậc hẹp. Preset
-    // tối có headroom (6.70 / 15.1), preset giấy thì không. Nếu sau này thang
-    // ba bậc đọc ra hai bậc ở light, đó KHÔNG phải lỗi chọn màu — đó là giấy
-    // có ít khoảng chói hơn, và câu trả lời là bớt một bậc, không phải hạ AA.
-    inkFaint: Color(0xFF6E655A),
-    line: Color(0xFFE5DFD6), // 1.20:1 — CỐ Ý mờ: vạch trang trí, xem doc
-    outline: Color(0xFF837E75), // 3.64/3.22/3.39:1 trên surface/Raised/backdrop
-    surfaceRaised: Color(0xFFEBE5DB), // TRẦM hơn giấy, không trắng hơn
-    // ĐẢO DẤU, KHÔNG ĐÀO SÂU: badge từng tô `surface` #F6F3EE — SÁNG hơn kệ
-    // ΔL* 4.7 ⇒ đọc là đĩa NỔI. Giờ TRẦM hơn kệ ΔL* 4.6 — đúng dấu, đúng bằng
-    // độ sâu mà preset tối vẫn luôn có.
-    badgeWell: Color(0xFFDFD8CC),
-    ctaFill: Color(0xFF171412),
-    ctaLabel: Color(0xFFF6F3EE),
-    ctaDisabled: Color(0xFFC4BDB3),
+    // v6 ghi `--outline: #959588` và tự chú thích `2.59:1`. Nhưng nó đem token
+    // đó đi làm VIỀN của `.btn-sm` — tức ranh giới của một control, thứ WCAG
+    // 1.4.11 đòi ≥3:1. Đây đúng là sự lẫn lộn hai vai trò mà cặp `line`/
+    // `outline` trong file này được tách ra để bịt (xem doc hai field đó), và
+    // `museum_tokens_contract_test` bắt được ngay.
+    //
+    // #7C7C6F là một BẬC NỘI SUY trên chính thang xám H 105 của v6 (≈ L .555
+    // C .019), không phải một màu mới: 3.61:1 trên surface, 3.15:1 trên kệ —
+    // gần như đối xứng với preset tối (3.50 / 3.12).
+    //
+    // Cái giá đã biết: `.sdots` (vạch chỉ số chưa chọn) và `.stars .off` sẽ đậm
+    // hơn bản vẽ một chút. Đó là đánh đổi đúng chiều — một vạch nói "còn mấy tư
+    // liệu nữa" mà nhìn không ra thì nó không nói gì.
+    outline: Color(0xFF7C7C6F),
+    surfaceRaised: Color(0xFFDFDFD3), // L .900 — TRẦM hơn giấy, không trắng hơn
+    // ĐẢO DẤU, KHÔNG ĐÀO SÂU (bug đã ship một lần): badge phải TRẦM hơn kệ ở
+    // mọi preset, nếu không nó đọc ra đĩa NỔI. ΔL* 3.6 dưới kệ.
+    badgeWell: Color(0xFFD5D5C9), // L .870
+    ctaFill: Color(0xFF17160F),
+    ctaLabel: Color(0xFFEEEEE2),
+    ctaDisabled: Color(0xFFC1C1B5), // 7.10:1 với inkMuted
+    chrome: Color(0xFFF8F7F0), // vỏ SÁNG hơn giấy — xem doc
+    chromeOff: Color(0xFF505045), // 7.60:1 trên chrome
 
-    inkOnImage: Color(0xFFFFFFFF),
+    inkOnImage: Color(0xFFF3F3EB), // ĐÓNG BĂNG = dark (họ on-image)
     mutedOnImage: Color(0xFFD6CFC5),
     artistOnImage: Color(0xFFCEC7BD),
     scrimBack: Color(0x66000000), // đóng băng = dark (họ on-image)
     lineOnImage: Color(0x59FFFFFF),
     ctaOnImageFill: Color(0xFFFFFFFF),
     ctaOnImageInk: Color(0xFF000000),
+    // Chưa port sang v6 — xem khối chú giải cùng tên ở preset [dark].
     tourCardVeil: _tourCardVeil,
     playerVeil: _playerVeil,
     imageFallback: _imageFallback,
     heroVeil: _heroVeil,
 
-    // ĐÂY LÀ CHỖ BẢN MỘT-FIELD VỠ. Cùng hue 34.5° với #C99A5B, hạ độ sáng:
-    //   #7E5620 trên surfaceRaised #EBE5DB = 5.17:1 ✓  (ràng buộc chặt nhất)
-    //   #7E5620 trên surface       #F6F3EE = 5.86:1 ✓
-    //   #7E5620 trên welcomeBackdrop #F0EBE3 = 5.45:1 ✓
-    accent: Color(0xFF7E5620),
+    // ĐÂY LÀ CHỖ BẢN MỘT-FIELD VỠ, và bảng v6 giữ nguyên đường cắt đó:
+    //   #7F5714 trên surfaceRaised #DFDFD3 = 4.77:1 ✓  (ràng buộc chặt nhất)
+    //   #7F5714 trên surface       #EEEEE2 = 5.48:1 ✓
+    accent: Color(0xFF7F5714), // L .488 C .095 H 74 — cùng hue với dark
     // ĐÓNG BĂNG = giá trị của dark. Ảnh hiện vật không sáng lên theo theme,
     // nên kicker/vạch trên ảnh cũng không được tối đi. Xem doc của field.
-    accentOnImage: Color(0xFFC99A5B),
-    // LẬT SANG MÀU GIẤY, không còn nâu-gần-đen: nền accent của preset này là
-    // #7E5620 sẫm, nên #201509 chỉ còn 2.76:1 — rớt chuẩn. Màu giấy: 5.86:1 ✓
-    accentInk: Color(0xFFF6F3EE),
-    // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 6.90:1 trên surface, 6.09 trên kệ · glyph 6.90:1
+    accentOnImage: Color(0xFFD3A362),
+    // Màu giấy, không phải nâu-gần-đen: nền accent của preset này sẫm. 5.57:1 ✓
+    accentInk: Color(0xFFF2EFE4),
+    // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 6.53:1 trên surface, 5.68 trên kệ · glyph 6.53:1
     error: Color(0xFF8C3A28),
-    errorInk: Color(0xFFF6F3EE),
+    errorInk: Color(0xFFEEEEE2),
     heroDissolveEnabled: true,
 
-    // Giấy ấm — cùng độ chói với surface #F7F7F5 nhưng ngả đất,
-    // để hai khung ảnh nổi như tranh treo tường sáng.
-    welcomeBackdrop: Color(0xFFF0EBE3),
-    // TỐI trên theme sáng — CHỦ ĐÍCH, xem doc của field: đây là tường tranh,
-    // ảnh cần nền tối hơn chúng để nổi. Vùng chữ được band + scrim che.
+    // ⚠ TẠM, CHẾT Ở P2 — xem khối chú giải cùng tên ở preset [dark].
+    welcomeBackdrop: Color(0xFFEEEEE2),
     welcomeAmbient: Color(0xB3262019),
-    welcomeBandLower: Color(0xFFD9D0C3), // taupe ấm — giữa giấy và tường tối
-    welcomeBandUpper: Color(0xFFD9D0C3),
+    welcomeBandLower: Color(0xFFDFDFD3),
+    welcomeBandUpper: Color(0xFFDFDFD3),
     shadowInk: Color(0x4D000000), // ~30% — tường sáng, bóng nhạt hơn dark
 
     radiusSharp: 2,
@@ -711,6 +797,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     ctaFill: Color(0xFFFFFFFF),
     ctaLabel: Color(0xFF000000),
     ctaDisabled: Color(0xFF4A4A4A),
+    chrome: Color(0xFF000000), // = surface: đen không đen hơn được. `line` gánh
+    chromeOff: Color(0xFFD0D0D0), // 13.62:1 trên chrome
 
     inkOnImage: Color(0xFFFFFFFF),
     mutedOnImage: Color(0xFFF0F0F0),
@@ -821,6 +909,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     Color? ctaFill,
     Color? ctaLabel,
     Color? ctaDisabled,
+    Color? chrome,
+    Color? chromeOff,
     Color? inkOnImage,
     Color? mutedOnImage,
     Color? artistOnImage,
@@ -857,6 +947,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       ctaFill: ctaFill ?? this.ctaFill,
       ctaLabel: ctaLabel ?? this.ctaLabel,
       ctaDisabled: ctaDisabled ?? this.ctaDisabled,
+      chrome: chrome ?? this.chrome,
+      chromeOff: chromeOff ?? this.chromeOff,
       inkOnImage: inkOnImage ?? this.inkOnImage,
       mutedOnImage: mutedOnImage ?? this.mutedOnImage,
       artistOnImage: artistOnImage ?? this.artistOnImage,
@@ -898,6 +990,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
       ctaFill: Color.lerp(ctaFill, other.ctaFill, t)!,
       ctaLabel: Color.lerp(ctaLabel, other.ctaLabel, t)!,
       ctaDisabled: Color.lerp(ctaDisabled, other.ctaDisabled, t)!,
+      chrome: Color.lerp(chrome, other.chrome, t)!,
+      chromeOff: Color.lerp(chromeOff, other.chromeOff, t)!,
       inkOnImage: Color.lerp(inkOnImage, other.inkOnImage, t)!,
       mutedOnImage: Color.lerp(mutedOnImage, other.mutedOnImage, t)!,
       artistOnImage: Color.lerp(artistOnImage, other.artistOnImage, t)!,

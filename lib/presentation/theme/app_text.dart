@@ -95,7 +95,26 @@ import 'package:flutter/material.dart';
 /// đã tinh chỉnh quanh font cũ. Lần sau đổi font, soát lại cả file này.
 abstract final class AppFonts {
   static const String serif = 'CormorantGaramond';
-  static const String sans = 'Inter';
+
+  /// `null` = FONT SANS CỦA HỆ ĐIỀU HÀNH, và đó là một quyết định, không phải
+  /// một chỗ chưa làm xong.
+  ///
+  /// Trước đây field này là `'Inter'` — một font **không có trong `pubspec.yaml`
+  /// và không có file nào trong `assets/fonts/`**. Flutter im lặng rơi về font
+  /// mặc định của máy, nên hành vi vẫn ĐÚNG suốt thời gian qua; chỉ cái tên là
+  /// nói dối. Một hằng số nói dối thì sớm muộn có người tin nó và đi tinh chỉnh
+  /// một thứ không tồn tại.
+  ///
+  /// Và font hệ thống mới là thứ ĐÚNG ở đây: thiết kế beacon-v6 khai báo
+  /// `--sans: -apple-system, 'Segoe UI', Roboto, …` — tức chính là ngăn xếp
+  /// font hệ thống. Serif là giọng bảo tàng và phải được kiểm soát tới từng
+  /// glyph (nên nó nhúng thật); sans là giọng của cái máy, và giọng của máy nên
+  /// là giọng mà máy vốn nói.
+  ///
+  /// Nếu sau này thật sự muốn nhúng Inter: thêm file vào `assets/fonts/`, khai
+  /// báo trong `pubspec.yaml`, rồi mới đổi hằng này. Đổi hằng trước là quay lại
+  /// đúng trạng thái vừa được gỡ.
+  static const String? sans = null;
 }
 
 abstract final class AppText {
@@ -273,7 +292,25 @@ abstract final class AppText {
   );
 
 
-  // ── sans body (Inter) ────────────────────────────────────────────────────
+  // ── sans body (font hệ thống — xem [AppFonts.sans]) ──────────────────────
+  //
+  // ═════════════════════════════════════════════════════════════════════════
+  // SÀN TRỌNG LƯỢNG: DƯỚI 15px KHÔNG DÙNG w300
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Luật của thiết kế beacon-v6, và nó vừa được thi hành ở đây: sans hệ thống ở
+  // w300, cỡ 12–13px, dưới ánh sáng phòng trưng bày thì NÉT GÃY MẤT — chữ
+  // không mờ đi đều mà đứt quãng, và đó là cách khó đọc nhất.
+  //
+  // SÁU STYLE VỪA ĐỔI w300 -> w400: [meta], [sheetSub], [guidance], [body],
+  // [stopMeta], [artist]. Tất cả đều ở 12–13px, tức tất cả đều vi phạm.
+  //
+  // Đây KHÔNG phải làm chữ đậm lên cho dễ nhìn. w300 và w400 của một sans hệ
+  // thống cách nhau đúng một nấc, và ở cỡ nhỏ thì nấc đó là ranh giới giữa
+  // "nét mảnh" và "nét đứt". Nhân khẩu học bảo tàng lệch về người lớn tuổi,
+  // đúng nhóm chịu thiệt nhất.
+  //
+  // w300 CÒN ĐƯỢC DÙNG ở đúng một chỗ: [readingBody] (15px) — trên sàn.
 
   /// Nhãn mục / nhãn trạng thái. VAI TRÒ CHỮ HOA — widget sở hữu tự gọi
   /// `.toUpperCase()`, call site truyền chuỗi thường (xem luật ở đầu file).
@@ -309,7 +346,7 @@ abstract final class AppText {
   /// Meta line trên card/hero. 11 -> 12.
   static const TextStyle meta = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontSize: 12,
     height: 1.3,
   );
@@ -317,7 +354,7 @@ abstract final class AppText {
   /// Mô tả phụ dưới tiêu đề màn hình. Gom từ 3 TextStyle inline giống nhau.
   static const TextStyle sheetSub = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontSize: 12,
     height: 1.4,
   );
@@ -325,7 +362,7 @@ abstract final class AppText {
   /// Đoạn hướng dẫn / trạng thái nhiều dòng (empty state, sync notice).
   static const TextStyle guidance = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontSize: 12,
     height: 1.5,
   );
@@ -343,7 +380,7 @@ abstract final class AppText {
   /// Thân bài các mục dưới fold. Gom từ _bodyStyle private ở màn 4.
   static const TextStyle body = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontSize: 13,
     height: 1.7,
   );
@@ -351,7 +388,7 @@ abstract final class AppText {
   /// Exhibit-list row sub. 9.5 -> 12.
   static const TextStyle stopMeta = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontSize: 12,
     height: 1.3,
   );
@@ -359,7 +396,7 @@ abstract final class AppText {
   /// Player artist line.  11 -> 12.
   static const TextStyle artist = TextStyle(
     fontFamily: AppFonts.sans,
-    fontWeight: FontWeight.w300,
+    fontWeight: FontWeight.w400,
     fontStyle: FontStyle.italic,
     fontSize: 12,
     height: 1.3,
@@ -381,5 +418,177 @@ abstract final class AppText {
     fontWeight: FontWeight.w400,
     fontSize: 12,
     fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // VAI CHỮ THÊM Ở THIẾT KẾ v6
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // BỐN VAI CHỮ CỦA BẢN VẼ ĐÃ BỊ GỘP VÀO STYLE CÓ SẴN, chứ không thêm mới.
+  // Đây là kỷ luật đã ghi ở doc [cardTitle] ("thang chữ đã có bảy style ở cỡ
+  // 12, thêm một nấc chỉ vì tên khác nhau là cách một thang chết"):
+  //
+  //     CSS `.gtitle`  serif 26/1.24  →  [sheetTitle]  serif 26/1.28
+  //     CSS `.opt-t`   serif 19/1.28  →  [listTitle]   (chung với `.tcard-t`)
+  //     CSS `.tcard-d` sans  13/1.50  →  [lede]        sans 13/1.55
+  //     CSS `.script`  sans  15/1.75  →  [readingBody] (chung với `.gbody`)
+  //
+  // Chênh lệch 1.24 vs 1.28 và 1.50 vs 1.55 không phải quyết định của ai cả —
+  // chúng là tác dụng phụ của việc gõ hai lần ở hai file CSS khác nhau.
+
+  /// `.tbig` — dòng lớn của cặp chữ ký 22/48. CHỈ hai call site trong cả app:
+  /// màn Poster và màn Cảm ơn, hai đầu của một chuyến đi. Khách phải nhận ra
+  /// mình quay về đúng nơi bắt đầu, nên cặp này không được mượn đi đâu khác.
+  ///
+  /// ⚠ height 1.02 lấy thẳng từ bản vẽ và nó CHẬT so với luật của file này
+  /// (mọi serif khác đã phải nới lên 1.28–1.32 vì extender của Cormorant + dấu
+  /// chồng dấu tiếng Việt). Ở 48px thì 1.02 cho 49dp line box — vẫn dư cho
+  /// "Ầ"/"Ộ" ở cỡ đó, nên giữ. Nhưng nếu ai hạ fontSize xuống dưới ~34 mà giữ
+  /// 1.02, dấu sẽ bắt đầu chọc ra khỏi line box và mọi khe đo quanh nó nói dối.
+  static const TextStyle posterTitle = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 48,
+    height: 1.02,
+    letterSpacing: -0.96, // -0.02em của cỡ 48
+  );
+
+  /// `.tsmall` — dòng nhỏ của cặp chữ ký 22/48 ("Bảo tàng" / "Cảm ơn").
+  ///
+  /// height 1.28 chứ KHÔNG phải mặc định của trình duyệt: bản vẽ không khai
+  /// báo line-height ở đây, và "không khai báo" trong CSS nghĩa là ~1.2 của
+  /// font đó, không phải một quyết định. Ở Dart ta phải viết ra một con số, và
+  /// con số đúng theo luật của file này là 1.28.
+  ///
+  /// ⚠ KHOÁ VỚI `AppSpace.gateTopRatio`: neo dọc của cả hai màn được đo từ mép
+  /// trên máy xuống ĐỈNH dòng này. Đổi height ở đây là dịch cả cụm chữ.
+  static const TextStyle posterKicker = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 22,
+    height: 1.28,
+  );
+
+  /// `.mhero-title` — tiêu đề trên hero của màn Menu.
+  ///
+  /// KHÔNG dùng [welcomeTitle] (34) dù cùng vai "tiêu đề một màn lớn": hero của
+  /// Menu cao ~69% màn và chỉ mang một khối chữ, nên nó chịu được 40. Cùng lý
+  /// lẽ đã tách [welcomeTitle] khỏi [heroTitle] ngày trước, chỉ ở nấc trên.
+  static const TextStyle menuHeroTitle = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 40,
+    height: 1.04,
+    letterSpacing: -0.8, // -0.02em của cỡ 40
+  );
+
+  /// Tiêu đề của một MỤC trong danh sách: thẻ chủ đề (màn Menu) và mục Hướng
+  /// dẫn. Hai chỗ, một style — bản vẽ ghi 1.25 ở chỗ này và 1.28 ở chỗ kia,
+  /// chênh lệch đó không do ai quyết.
+  ///
+  /// Nhỏ hơn [cardTitle] (20) một nấc, và đó là quan hệ phải giữ: [cardTitle]
+  /// dùng cho tên một NƠI CHỐN (thẻ khu), style này cho tên một MỤC ĐỌC.
+  static const TextStyle listTitle = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 19,
+    height: 1.28,
+  );
+
+  /// `.hero-sub` — câu mô tả đi ngay dưới một tiêu đề hero (màn Menu, màn Khu
+  /// vực). Nằm TRÊN ẢNH, nên nó w500 chứ không w400 như [lede]: chữ sáng trên
+  /// nền tối render mảnh hơn thực tế (halation), và ở đây không có mặt phẳng
+  /// `surface` nào đỡ phía sau.
+  static const TextStyle heroSub = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w500,
+    fontSize: 14,
+    height: 1.45,
+  );
+
+  /// Thân bài để ĐỌC KỸ: trang Hướng dẫn chi tiết và bản chép lời thuyết minh.
+  ///
+  /// 15/1.75 thay cho 13/1.7 của [body], và đây là chỗ DUY NHẤT trong app phá
+  /// cỡ chữ chuẩn. Lý do giống nhau ở cả hai call site: khách đang vừa đọc vừa
+  /// làm việc khác — loay hoay với dây tai nghe, hoặc vừa nghe vừa liếc — nên
+  /// mắt không ở yên trên màn.
+  ///
+  /// w300 được phép ở đây và CHỈ ở đây: sàn trọng lượng của v6 là "dưới 15px
+  /// không dùng w300", và style này đứng đúng ở 15.
+  static const TextStyle readingBody = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w300,
+    fontSize: 15,
+    height: 1.75,
+  );
+
+  /// Ba con số của màn Tổng kết (`9/26` · `21` · `74`).
+  ///
+  /// Cùng cỡ 28 với [heroTitle] nhưng height 1.0 và chữ số đều bề ngang: đây
+  /// là SỐ trong một bảng ba cột, không phải một tiêu đề. Không có tabular thì
+  /// ba cột lệch nhau khi số đổi.
+  static const TextStyle statNumber = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w600,
+    fontSize: 28,
+    height: 1.0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Mẫu số của `9/26` — nửa cỡ của [statNumber], cùng font.
+  ///
+  /// Nó nói được QUY MÔ mà không cần một câu nào: khách thấy ngay mình mới đi
+  /// một phần ba bảo tàng. Nhỏ hơn hẳn để tử số vẫn là thứ đọc trước.
+  static const TextStyle statNumberScale = TextStyle(
+    fontFamily: AppFonts.serif,
+    fontWeight: FontWeight.w400,
+    fontSize: 14,
+    height: 1.0,
+    fontFeatures: [FontFeature.tabularFigures()],
+  );
+
+  /// Nhãn của một HÀNG THAO TÁC (`.row`) — ngữ pháp dùng chung của Poster,
+  /// ngăn kéo, và màn Cảm ơn. Sans, vì đây là cái máy đang nói.
+  static const TextStyle rowLabel = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w500,
+    fontSize: 14,
+    letterSpacing: 0.2,
+  );
+
+  /// Nhãn của hàng DẪN ĐƯỜNG CHÍNH (`.row.lead`) — chỉ dùng khi một màn có
+  /// đúng MỘT đường đi tiếp: "THAM QUAN" ở Poster, "XONG" ở màn Cảm ơn.
+  ///
+  /// VAI TRÒ CHỮ HOA — widget sở hữu tự gọi `.toUpperCase()` (luật ở đầu file).
+  /// Nhẹ hơn [rowLabel] về trọng lượng nhưng lớn hơn về cỡ và giãn hơn về
+  /// tracking: nó nổi bằng KHÔNG GIAN chứ không bằng độ đậm — cùng luật với
+  /// mọi thứ bậc khác trong app.
+  static const TextStyle rowLead = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w400,
+    fontSize: 15,
+    letterSpacing: 1.0,
+  );
+
+  /// Nhãn dưới icon tab. Style NHỎ NHẤT của cả app, và nó được phép nhỏ hơn sàn
+  /// 12px mà mọi chữ khác phải theo — vì nó không bao giờ đứng một mình: icon
+  /// phía trên đã mang nghĩa, nhãn chỉ xác nhận.
+  ///
+  /// ⚠ `letterSpacing: 0`, KHÔNG phải một giá trị dương. Năm nhãn tiếng Việt có
+  /// dấu phải nằm trong ~78dp một ô, và nhãn dài nhất là "Trang chính". Giãn
+  /// thêm một chút là nó tràn.
+  ///
+  /// ⚠ 10px LÀ SÀN CỦA CHÍNH NÓ: dưới mức đó, ở mật độ 3x, dấu mũ và dấu nặng
+  /// của tiếng Việt bắt đầu dính vào nhau.
+  ///
+  /// ⚠ KHÔNG CO THEO textScaler — xem `MuseumTabBar`. Ở 1.6× nó thành 16px và
+  /// năm nhãn không còn chỗ. Nhãn tab là NHÃN HỆ THỐNG, không phải nội dung;
+  /// khoá cỡ ở đây là hợp lệ, còn khoá cỡ của một câu do bảo tàng viết thì không.
+  static const TextStyle tabLabel = TextStyle(
+    fontFamily: AppFonts.sans,
+    fontWeight: FontWeight.w500,
+    fontSize: 10,
+    letterSpacing: 0,
+    height: 1.0,
   );
 }

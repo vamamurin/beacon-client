@@ -164,6 +164,60 @@ abstract final class AppSpace {
   ///
   /// KHÔNG dùng [tap]: badge không phải vùng chạm (cả hàng mới là).
   static const double badge = 36;
+
+  /// Chiều cao của một HÀNG THAO TÁC (`.row`) — Poster, ngăn kéo, màn Cảm ơn.
+  static const double row = 58;
+
+  /// Hàng DẪN ĐƯỜNG CHÍNH (`.row.lead`). Cao hơn [row] 8dp, và đó là toàn bộ
+  /// cách nó được nhấn: không màu nền, không viền, chỉ nhiều không gian hơn.
+  static const double rowLead = 66;
+}
+
+/// ═══════════════════════════════════════════════════════════════════════════
+/// TỈ LỆ DỌC — hằng số hình học ĐO THEO CHIỀU CAO MÀN, không phải theo px
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Thiết kế beacon-v6 được vẽ trên khung 390×844 và ghi các con số bằng px:
+/// hero Menu 580, ảnh khu 480, khu bên cạnh 178, sân khấu 422, neo cặp chữ 200.
+/// **Không con số nào trong đó được phép vào code dưới dạng px.**
+///
+/// Máy Android thực địa là 360×800, 393×873, 412×915. Một hằng số hình học đo
+/// trong một ngữ cảnh rồi đem sang ngữ cảnh khác thì nó KHÔNG lệch đi một chút
+/// — nó chết. Dự án này đã dính đúng ba lần, và lần đầu tiên được ghi ngay ở
+/// đầu `museum_tokens.dart`: *"hero 250px→80% (veil đen đặc)"*.
+///
+/// ⚠ TỈ LỆ GIỮ ĐƯỢC Ý ĐỒ, NHƯNG KHÔNG GIỮ ĐƯỢC LÝ LẼ. Lý lẽ chọn 480 của thiết
+/// kế là một lý lẽ về CHỖ ĐƯỜNG CẮT RƠI VÀO: *"ở 580 thì khối khu bên cạnh đầu
+/// tiên bị cắt ngang đúng chỗ tiêu đề của nó; ở 480 thì khối thứ nhất lọt trọn
+/// và khối thứ hai ló ra 92px."* Tỉ lệ giữ cho tương quan đúng ở mọi màn, nhưng
+/// "ló ra bao nhiêu" thì phải NHÌN THẬT ở 800 và 915 trước khi chốt.
+abstract final class AppRatio {
+  /// Hero của màn Menu — 580/844.
+  static const double menuHero = 0.687;
+
+  /// Ảnh của khu đang đứng — 480/844.
+  static const double zoneHero = 0.569;
+
+  /// Khu BÊN CẠNH so với khu đang đứng — 178/480.
+  ///
+  /// Tỉ lệ này KHÔNG đo theo chiều cao màn mà theo chính khối ở trên nó: thiết
+  /// kế lấy nó từ màn Menu (hero 580 : ảnh thẻ chủ đề 215 = 0.371) chứ không
+  /// bịa mới. Một hình dáng lặp lại ở hai cỡ nói được "cùng loại, khác khoảng
+  /// cách" mà không cần thêm chữ nào.
+  static const double nearZoneOfHero = 0.371;
+
+  /// Sân khấu của màn Chi tiết hiện vật — chia đôi màn.
+  static const double exhibitStage = 0.50;
+
+  /// Neo dọc của cặp chữ ký 22/48 — 200/844, đo từ mép trên máy xuống ĐỈNH
+  /// dòng nhỏ.
+  ///
+  /// Màn Poster và màn Cảm ơn là một cặp đối xứng: khách phải nhận ra mình quay
+  /// về đúng nơi bắt đầu, mà nhận ra được thì cụm chữ phải rơi đúng một chỗ
+  /// trên cả hai màn. Để hai nơi cùng đọc một hằng thay vì cùng gõ một số.
+  ///
+  /// ⚠ KHOÁ VỚI `AppText.posterKicker.height`: neo đo tới đỉnh dòng đó.
+  static const double gateTop = 0.237;
 }
 
 /// ═══════════════════════════════════════════════════════════════════════════
