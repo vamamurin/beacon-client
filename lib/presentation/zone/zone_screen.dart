@@ -66,10 +66,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/presentation/app/app_router.dart';
-import 'package:beacon_client/presentation/app/museum_drawer.dart';
-import 'package:beacon_client/presentation/app/shell_controller.dart';
+import 'package:beacon_client/presentation/app/museum_top_bar.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
-import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
@@ -84,60 +82,58 @@ class ZoneScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final content = context.watch<ContentProvider>();
     final zp = context.watch<ZoneProvider>();
+
     return Scaffold(
       backgroundColor: t.surface,
-      body: SafeArea(
-        // Nút ☰ đặt ở ĐÂY chứ không trong hai view bên dưới: cả hai trạng thái
-        // (đang quét / đã xếp hạng) đều cần lối vào menu, và cả hai đều có bố
-        // cục được dựng rất kỹ mà một vật thể chồng lên sẽ phá.
-        //
-        // PHẠM VI CÓ CHỦ ĐÍCH: chỉ màn khu vực có nút này. Màn danh sách và màn
-        // hiện vật thì không — khách ở đó lùi một bước là tới đây. Đổi lại,
-        // chrome của hai màn đó giữ nguyên như đã dựng.
-        child: Column(
-          children: [
-            const _TourChrome(),
-            const _CompletionPrompt(),
-            Expanded(
-              child: zp.isStandby
-                  ? const _RadarStandby()
-                  : const _ZoneRankingView(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Hàng chrome của tour: hiện chỉ có nút mở menu, căn phải.
-///
-/// Một hàng riêng thay vì một vật nổi trong Stack — vật nổi sẽ chồng lên chữ
-/// tiêu đề khi nó xuống dòng ở textScaler 1.6×.
-class _TourChrome extends StatelessWidget {
-  const _TourChrome();
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    // ☰ nay mở NGĂN KÉO của shell, không mở bottom sheet nữa. Hàng chrome tạm
-    // này sẽ biến mất ở bước dựng lại màn khu vực, khi thanh trên `.mbar` của
-    // thiết kế thay chỗ nó — lúc đó ☰ về đúng góc trái cùng hàng với tên màn.
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpace.gutter, AppSpace.x2, AppSpace.gutter, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
+      // THANH TRÊN ĐÈ LÊN ẢNH KHU, KHÔNG ĐỨNG TRÊN NÓ — cùng luật với màn Menu:
+      // màn nào có ảnh hero thì ảnh chạm MÉP TRÊN của máy. Hàng chrome tạm thời
+      // trước đây (một nút ☰ trôi lẻ ở góc phải) đã biến mất cùng bước này, đúng
+      // như doc của nó tự hẹn.
+      body: Stack(
         children: [
-          MuseumMenuButton(
-            color: t.ink,
-            onTap: () => context.read<ShellController>().openDrawer(),
+          Positioned.fill(
+            child:
+                zp.isStandby ? const _StandbyView() : const _ZoneRankingView(),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            // ⚠ HAI BIẾN THỂ, VÀ ĐÂY LÀ RANH GIỚI CỦA CHÚNG: standby không có
+            // ảnh nào phía sau, nên thanh phải ĐỤC — để trong suốt thì chữ radar
+            // cuộn lộn thẳng qua nó. Có khu thì thanh trong suốt và dựa vào màn
+            // chắn của chính nó.
+            child: MuseumTopBar(
+              title: content.ui(UiKeys.zoneNearbyTitle),
+              solid: zp.isStandby,
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+/// Không nghe thấy beacon nào: radar toàn màn.
+///
+/// CHỪA CHỖ CHO THANH TRÊN, khác hẳn nhánh kia. Ở đây thanh đục và không đè lên
+/// ảnh nào, nên nội dung chui xuống dưới nó là bị che thật.
+class _StandbyView extends StatelessWidget {
+  const _StandbyView();
+
+  @override
+  Widget build(BuildContext context) => const SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            SizedBox(height: MuseumTopBar.height),
+            _CompletionPrompt(),
+            Expanded(child: _RadarStandby()),
+          ],
+        ),
+      );
 }
 
 /// "Bạn đã đi hết N khu trưng bày" — GỢI Ý, không phải chuyển màn.
@@ -273,10 +269,8 @@ class _ZoneRankingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = context.tokens;
     final content = context.watch<ContentProvider>();
     final rows = context.watch<ZoneProvider>().rankedZones;
-    final showDistance = context.watch<SettingsProvider>().showDistanceDebug;
 
     // Tách hai tầng. `isCurrent` CÓ THỂ KHÔNG TỒN TẠI — xem doc đầu file.
     final current = _firstCurrentOrNull(rows);
@@ -285,120 +279,136 @@ class _ZoneRankingView extends StatelessWidget {
         if (!r.isCurrent) r,
     ];
 
-    // CustomScrollView chứ không phải Column + Expanded(ListView): ở textScaler
-    // lớn, tiêu đề + hero + hàng đầu có thể vượt chiều cao màn, và Column sẽ
-    // TRÀN (sọc vàng-đen). Cùng bug đã sửa ở Gate — `Expanded` chống được va
-    // chạm, không chống được tràn. Cuộn là lời giải, và nó vốn đúng cho một
-    // danh sách dài tuỳ số khu nghe thấy.
+    // CustomScrollView chứ không phải Column + Expanded(ListView): số khu nghe
+    // thấy là dữ liệu, có lúc một có lúc năm, và ở textScaler lớn khối chữ trong
+    // hero cũng cao lên. Column sẽ TRÀN (sọc vàng-đen); cuộn là lời giải.
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpace.gutter, AppSpace.x4, AppSpace.gutter, 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(content.ui(UiKeys.zoneNearbyTitle),
-                    style: AppText.sheetTitle.copyWith(color: t.ink)),
-                const SizedBox(height: AppSpace.x2),
-                Text(
-                  content.ui(UiKeys.zoneNearbyGuidance),
-                  style: AppText.sheetSub.copyWith(color: t.inkMuted),
-                ),
-              ],
-            ),
+          child: _ZoneHero(
+            row: current,
+            content: content,
+            onTap: current == null
+                ? null
+                : () => _open(context, current.zone.major),
           ),
         ),
-        SliverToBoxAdapter(
-          child: Padding(
-            // x6 (24) trên và dưới hero: khe GIỮA CÁC KHỐI, cùng mức với Gate.
-            padding: const EdgeInsets.fromLTRB(
-                AppSpace.gutter, AppSpace.x6, AppSpace.gutter, AppSpace.x6),
-            child: _CurrentZoneHero(
-              row: current,
-              content: content,
-              showDistance: showDistance,
-              onTap: current == null
-                  ? null
-                  : () => Navigator.of(context).pushNamed(
-                        AppRouter.exhibitListRoute,
-                        arguments: current.zone.major,
-                      ),
-            ),
-          ),
-        ),
+
+        // Thẻ gợi ý kết thúc — KHÔNG có trong bản vẽ, và nó nằm ĐÂY chứ không
+        // đè lên ảnh: bản vẽ để cả khối ảnh cho bức ảnh, và một cái thẻ nổi trên
+        // đó sẽ là vật thể duy nhất trong app làm việc ấy. Rỗng thì nó tự co về
+        // 0 nên khe x4 bên dưới vẫn đúng.
+        const SliverToBoxAdapter(child: _CompletionPrompt()),
+
+        // `.nearset { margin-top: x4; gap: 8px; margin-bottom: x8 }`.
+        //
+        // Khe 16 với khối trên, 8 giữa hai khối — hai khu bên cạnh gần nhau hơn
+        // khoảng cách tới khu đang đứng, nên mắt tự gom chúng thành một nhóm mà
+        // không cần một dòng nhãn nào tuyên bố điều đó.
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSpace.gutter, 0, AppSpace.gutter, AppSpace.x6),
+          padding: const EdgeInsets.only(
+              top: AppSpace.x4, bottom: AppSpace.x8),
           sliver: SliverList.builder(
             itemCount: nearby.length,
-            itemBuilder: (context, i) {
-              final row = nearby[i];
-              // Thứ hạng đếm từ 2 KHI có khu ghim (khu ghim là 1, không hiện
-              // số vì nhãn của nó là "Đang ở đây"). Không có khu ghim thì đếm
-              // từ 1 — lúc đó không khu nào là "thứ nhất" theo nghĩa arbiter,
-              // nhưng chúng vẫn xếp theo khoảng cách và số phải phản ánh đúng
-              // thứ tự đang thấy.
-              final rank = current == null ? i + 1 : i + 2;
-              return _NearbyZoneRow(
-                key: ValueKey(row.zone.major),
-                row: row,
-                rank: rank,
+            itemBuilder: (context, i) => Padding(
+              padding: EdgeInsets.only(top: i == 0 ? 0 : 8),
+              child: _NearZoneBlock(
+                key: ValueKey(nearby[i].zone.major),
+                row: nearby[i],
                 content: content,
-                showDistance: showDistance,
-                onTap: () => Navigator.of(context).pushNamed(
-                    AppRouter.exhibitListRoute,
-                    arguments: row.zone.major),
-              );
-            },
+                onTap: () => _open(context, nearby[i].zone.major),
+              ),
+            ),
+          ),
+        ),
+
+        // `.screen.has-tabs` — vỏ đáy do shell bơm vào MediaQuery.padding; màn
+        // này không dùng SafeArea (ảnh phải chạm mép trên) nên phải tự chừa.
+        SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
           ),
         ),
       ],
     );
   }
+
+  void _open(BuildContext context, int major) => Navigator.of(context)
+      .pushNamed(AppRouter.exhibitListRoute, arguments: major);
 }
 
-/// Ô TRẠNG THÁI CỦA KHÁCH — luôn tồn tại, đổi mặt theo arbiter.
+/// `.zhero` — KHU ĐANG ĐỨNG. Ảnh 480 chạm cả hai mép máy và chạm mép trên.
 ///
-/// `row == null` ⇒ nghe thấy beacon nhưng arbiter chưa chốt khu (hành lang).
-/// Lúc đó KHÔNG có ảnh để hiện — không khu nào được chọn — nên ô thành một
-/// mảng [surfaceRaised] với chữ trên `surface`. Đó là lý do widget này không
-/// dùng [HeroImage] vô điều kiện: một ảnh ở đây buộc phải là ảnh của MỘT khu cụ
-/// thể, và chọn đại một khu là nói dối về thứ arbiter chưa quyết.
-class _CurrentZoneHero extends StatelessWidget {
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BA THỨ VỪA BỊ GỠ, VÀ CẢ BA ĐỀU LÀ QUYẾT ĐỊNH CỦA BẢN VẼ
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+///   vạch accent 88×2   ─┐ hai thứ này là tín hiệu "đây là khu CỦA BẠN".
+///   kicker "ĐANG Ở ĐÂY" ─┘ Bản vẽ chuyển tín hiệu ấy hết vào TÊN MÀN ở thanh
+///                          trên ("Khu vực quanh bạn").
+///   dòng "N hiện vật"     thay bằng câu mô tả — con số ấy nay chỉ còn ở khối
+///                          nhỏ bên dưới, nên hai cỡ không nói cùng một thứ.
+///
+/// ⚠ GHI CHÚ THIẾT KẾ TỰ NÊU RỦI RO CỦA CHÍNH NÓ, và nó chưa được kiểm trên máy
+/// thật: ảnh khu ở màn này và ảnh khu ở màn 4b nay cao bằng nhau, nên thứ duy
+/// nhất phân biệt *khu tôi đang đứng* với *khu tôi đang xem* là mấy chữ ở thanh
+/// trên. Nếu thực địa cho thấy khách nhầm hai màn, đây là chỗ để nhìn lại — và
+/// câu trả lời có thể là trả kicker về, không phải thêm một dòng chữ mới.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// ẢNH ĐỂ NGUYÊN — KHÔNG LỚP PHỦ, VÀ ĐÂY LÀ MỘT LẦN ĐI KHỎI BẢN VẼ
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Bản vẽ có `.zhero .veil` (0.94 ở 4% đáy → 0.30 giữa khối → 0.38 đỉnh) và
+/// `.zhero.near .veil`. CẢ HAI ĐÃ BỊ GỠ, theo quyết định sản phẩm sau khi nhìn
+/// trên máy thật.
+///
+/// Vì sao chúng hại ở đây: veil tan vào `surface`, mà preset mặc định của app là
+/// GIẤY (#EEEEE2). Nên lớp phủ ấy không dìm ảnh xuống — nó RÓT MÀU GIẤY LÊN ẢNH,
+/// 30–38% trên gần hết bề mặt. Bức ảnh tư liệu đọc ra như bị bạc màu. Luật veil
+/// của bản vẽ được cân khi app còn một preset tối duy nhất; nó không sống sót
+/// qua lần đảo preset, và đây là chỗ thứ hai nó lộ ra (chỗ thứ nhất là màn chắn
+/// riêng của thanh trên, xem `museum_top_bar.dart`).
+///
+/// HỆ QUẢ VỀ MÀU CHỮ, và nó đi kèm chứ không tách rời: chữ ở đây giữ họ
+/// `inkOnImage` / `mutedOnImage`. Với veil, chữ trắng nằm trên vùng ảnh vừa bị
+/// phủ trắng — đó chính là "chữ mờ" mà lần chạy thử bắt được. Không veil thì
+/// chữ trắng lại đúng, và đúng theo định nghĩa của token: `--on-img` sinh ra cho
+/// *chữ nằm trên ảnh CHƯA bị phủ*, cố định sáng ở cả hai preset vì thứ quyết
+/// định màu chữ ở đó là BỨC ẢNH, không phải cái theme.
+///
+/// ⚠ RỦI RO CÒN LẠI, phải canh bằng mắt khi bảo tàng thay ảnh: một bức ảnh khu
+/// SÁNG MÀU sẽ nuốt chữ trắng. Bản vẽ chống điều đó bằng veil; ta vừa bỏ veil,
+/// nên hàng phòng thủ duy nhất còn lại là kỷ luật chọn ảnh ở CMS. Nếu một ngày
+/// cần chống lại điều đó bằng code, cách rẻ nhất KHÔNG phải là trả veil toàn
+/// khối về — mà là một dải tối ngắn chỉ sau khối chữ, như màn chắn của thanh
+/// trên đang làm.
+///
+/// (Thanh trên vẫn có màn chắn riêng của nó và không phụ thuộc quyết định này —
+/// đó đúng là lý do màn chắn ấy tồn tại.)
+///
+/// `row == null` ⇒ nghe thấy beacon nhưng arbiter chưa chốt khu (hành lang giữa
+/// hai khu). Lúc đó KHÔNG có ảnh để hiện — chọn đại ảnh một khu là nói dối về
+/// thứ arbiter chưa quyết — nên khối giữ nguyên chiều cao và đổi thành một mảng
+/// [MuseumTokens.surfaceRaised]. Giữ nguyên chiều cao là cố ý: trạng thái này
+/// xảy ra ở MỖI lần chuyển khu, và một khối co giãn ở đó làm cả màn nhảy.
+class _ZoneHero extends StatelessWidget {
   final RankedZone? row;
   final ContentProvider content;
-  final bool showDistance;
   final VoidCallback? onTap;
 
-  const _CurrentZoneHero({
+  const _ZoneHero({
     required this.row,
     required this.content,
-    required this.showDistance,
     required this.onTap,
   });
-
-  /// 0.32 màn hình. Đây là KÍCH THƯỚC theo tỷ lệ màn — ngoại lệ hợp lệ duy
-  /// nhất với "không số thô cho khoảng cách" (AppSpace luật 7): nó là bố cục
-  /// compositional, không phải spacing.
-  ///
-  /// ⚠ Là chiều cao TỐI THIỂU, không phải cố định. Ở textScaler lớn khối chữ
-  /// có thể cao hơn nó, và lúc đó ô phải GIÃN chứ không được cắt. Xem [Stack]
-  /// trong [_zone]: khối chữ là con KHÔNG-positioned nên nó định cỡ Stack.
-  ///
-  /// Bản trước dùng `SizedBox(height: 150)` cứng với chữ trong `Positioned`: ở
-  /// 2.0× với tên hai dòng, khối chữ tràn LÊN TRÊN và bị `Stack` cắt IM LẶNG —
-  /// không sọc vàng-đen, không exception, chỉ mất chữ. Đó là kiểu lỗi tệ nhất:
-  /// nó không báo, và nó chỉ xảy ra với khách cần chữ to nhất.
-  static const double _minHeightFraction = 0.32;
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final media = MediaQuery.of(context);
     final r = row;
+    final media = MediaQuery.of(context);
+    final height = DesignSize.zoneHero * DesignSize.verticalScale(context);
 
     return Semantics(
       button: r != null,
@@ -410,44 +420,33 @@ class _CurrentZoneHero extends StatelessWidget {
             }),
       // excludeSemantics + onTap ĐI THÀNH CẶP: excludeSemantics gỡ cả cây con
       // khỏi semantics, kể cả action onTap mà InkWell tự khai. Thiếu vế thứ hai
-      // là ô thôi bấm được bằng TalkBack — hồi quy im lặng, không test nào bắt
-      // được. (Bản trước của màn này thiếu CẢ HAI: không exclude nên screen
-      // reader đọc nhãn rồi đọc lại từng dòng chữ bên trong.)
+      // là ô thôi bấm được bằng TalkBack — hồi quy im lặng, không test nào bắt.
       excludeSemantics: true,
       onTap: onTap,
-      child: Material(
-        color: r == null ? t.surfaceRaised : Colors.transparent,
-        borderRadius: t.sharpAll,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: t.sharpAll,
-          child: ClipRRect(
-            borderRadius: t.sharpAll,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minHeight: media.size.height * _minHeightFraction,
-              ),
-              child: r == null
-                  ? _searching(t)
-                  : _zone(t, r, media.devicePixelRatio, media.size.width),
-            ),
+      child: SizedBox(
+        height: height,
+        child: Material(
+          color: r == null ? t.surfaceRaised : Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            child: r == null
+                ? _searching(t)
+                : _zone(t, r, media.devicePixelRatio, media.size.width),
           ),
         ),
       ),
     );
   }
 
-  /// Mặt "chưa chốt": không ảnh, KHÔNG vạch accent. Vạch accent là dấu hiệu
-  /// "đây là khu của bạn" — dùng nó khi chưa có khu nào là nói dối bằng màu.
+  /// Mặt "chưa chốt": không ảnh, và vì không ảnh nên chữ về họ `surface`.
   Widget _searching(MuseumTokens t) => Padding(
-        padding: const EdgeInsets.all(AppSpace.x5),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpace.gutter, 0, AppSpace.gutter, AppSpace.x6),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.end,
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
           children: [
-            // Vai trò kicker tự viết hoa — call site truyền chuỗi thường (luật
-            // chữ hoa, xem app_text.dart).
+            // Vai trò kicker tự viết hoa — call site truyền chuỗi thường.
             Text(content.ui(UiKeys.zoneIdentifying).toUpperCase(),
                 style: AppText.kicker.copyWith(color: t.inkMuted)),
             const SizedBox(height: AppSpace.x2),
@@ -459,56 +458,43 @@ class _CurrentZoneHero extends StatelessWidget {
         ),
       );
 
-  /// Mặt "đang ở đây": ảnh + veil + vạch accent + tên khu.
+  /// Mặt "đang ở đây": ảnh tràn mép + veil + tên khu + câu mô tả.
   Widget _zone(MuseumTokens t, RankedZone r, double dpr, double screenWidth) {
-    final name = content.text(r.zone.name);
-    final count = r.zone.exhibits.length;
-    final dist = (showDistance && r.distanceMeters != null)
-        ? content.uif(UiKeys.zoneDistanceSuffix,
-            {'d': r.distanceMeters!.toStringAsFixed(1)})
-        : '';
+    final summary = content.textOrNull(r.zone.summary);
 
-    // Bề ngang hiển thị THẬT = màn trừ hai lề. Bản trước là hằng số 800: đúng
-    // trên một máy nào đó, upscale trên 430@3x (cần 1170), phí RAM trên máy 2x.
-    // Cùng LOẠI lỗi với `decodeWidth` ở Gate và `cacheWidth` ở màn 3 — ràng
-    // buộc "cùng một biến" là thứ ngăn nó tái diễn, không phải sự cẩn thận.
-    final decodeWidth = ((screenWidth - AppSpace.gutter * 2) * dpr).round();
+    // Bề ngang hiển thị THẬT = cả màn, vì ảnh nay tràn hai mép. Bản trước trừ
+    // hai lề 20 — đúng khi khối còn có lề, sai từ lúc nó hết lề.
+    final decodeWidth = (screenWidth * dpr).round();
 
     return Stack(
-      // Chữ căn đáy-trái: mỏ neo của cả ô, ngồi trên đường dọc của màn.
-      alignment: Alignment.bottomLeft,
+      fit: StackFit.expand,
       children: [
-        // Positioned.fill: ảnh KHÔNG định cỡ Stack — nó lấp đầy cỡ mà khối chữ
-        // (con không-positioned duy nhất) quyết định.
-        Positioned.fill(
-          child: HeroImage(
-            filePath: content.imagePath(r.zone.heroImagePath),
-            veil: t.tourCardVeil,
-            cacheWidth: decodeWidth,
-          ),
+        // KHÔNG LỚP PHỦ NÀO. Xem khối doc "ẢNH ĐỂ NGUYÊN" ở đầu class.
+        HeroImage(
+          filePath: content.imagePath(r.zone.heroImagePath),
+          // `.zhero .img { background-position: center }` — KHÁC hai màn khoảnh
+          // khắc (34%), vì ở đây không có lớp phủ nào dồn vùng nhìn được lên
+          // trên; cả bức ảnh đều được nhìn.
+          cacheWidth: decodeWidth,
         ),
-        Padding(
-          padding: const EdgeInsets.all(AppSpace.x5),
+        // `.zhero .txt { left/right: gutter; bottom: x6 }`
+        Positioned(
+          left: AppSpace.gutter,
+          right: AppSpace.gutter,
+          bottom: AppSpace.x6,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            // mainAxisSize.min + không-positioned ⇒ Stack cao bằng khối này khi
-            // nó vượt minHeight. Đây là bản sửa cho việc cắt im lặng.
             mainAxisSize: MainAxisSize.min,
             children: [
-              // accentOnImage, KHÔNG phải accent: vạch này nằm TRÊN ẢNH dưới
-              // veil — nền tối ở mọi theme. `accent` của preset giấy là #7E5620
-              // và sẽ biến mất ở đây. Cùng lý lẽ với inkOnImage.
-              Container(width: 88, height: 2, color: t.accentOnImage),
-              const SizedBox(height: AppSpace.x3),
-              Text(
-                  content.ui(UiKeys.zoneHereBadge).toUpperCase(),
-                  style: AppText.kicker.copyWith(color: t.accentOnImage)),
-              const SizedBox(height: AppSpace.x2),
-              Text(name, style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
-              const SizedBox(height: AppSpace.x2),
-              Text(
-                  content.uif(UiKeys.zoneExhibitCount, {'count': '$count'}) + dist,
-                  style: AppText.meta.copyWith(color: t.mutedOnImage)),
+              Text(content.text(r.zone.name),
+                  style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
+              // Thiếu `summary` thì KHÔNG có dòng nào, và cũng không có khe —
+              // bundle ngoài hiện trường chưa có khoá này. Xem [ZoneInfo.summary].
+              if (summary != null && summary.isNotEmpty) ...[
+                const SizedBox(height: AppSpace.x3),
+                Text(summary,
+                    style: AppText.heroSub.copyWith(color: t.mutedOnImage)),
+              ],
             ],
           ),
         ),
@@ -517,25 +503,41 @@ class _CurrentZoneHero extends StatelessWidget {
   }
 }
 
-/// Một khu lân cận — bản sao ngữ pháp `_StopRow` của màn 3.
+/// `.zhero.near` — KHU BÊN CẠNH. Cùng khối ảnh với khu đang đứng, chỉ nhỏ lại.
 ///
-/// Kệ [surfaceRaised] + thumb 56 + đĩa [badgeWell]. Đây KHÔNG phải trùng lặp
-/// cần khử: hai màn có hai lý do đổi khác nhau (màn 3 liệt kê hiện vật trong
-/// một khu; màn này liệt kê khu). Nhưng chúng phải TRÔNG như nhau, vì khách đọc
-/// chúng bằng cùng một thói quen.
-class _NearbyZoneRow extends StatelessWidget {
+/// ═══════════════════════════════════════════════════════════════════════════
+/// ĐÂY LÀ CHỖ DỄ HỎNG NHẤT CỦA MÀN NÀY, VÀ NÓ ĐÃ TỪNG HỎNG
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Bản trước vẽ khu bên cạnh thành một HÀNG: kệ `surfaceRaised`, ảnh vuông 56,
+/// chữ nằm bên cạnh ảnh, một đĩa số thứ hạng ở mép phải. Đó là hình dáng của một
+/// MỤC NỘI DUNG — và một danh sách mục nội dung nằm ngay dưới một tiêu đề lớn
+/// thì trong app nào cũng có nghĩa "những thứ THUỘC VỀ cái ở trên". Khách đọc ra
+/// *đây là các hiện vật trong khu này*, ngược hẳn sự thật.
+///
+/// Cách sửa không phải thêm một dòng chữ giải thích, mà trả cho chúng đúng hình
+/// dáng: ảnh tràn hai mép, chữ NẰM TRONG ảnh, cùng veil, chỉ khác chiều cao.
+/// Một hình dáng lặp lại ở hai cỡ đọc ra "cùng loại, khác khoảng cách"; hình
+/// dáng khác nhau mới đọc ra "cái này thuộc về cái kia".
+///
+/// KHÔNG DẤU ›, KHÔNG SỐ THỨ HẠNG. Cả khối đã bấm được và hình dáng của nó đã
+/// nói "đây là một nơi để đi tới" — thêm mũi tên là nói lại lần thứ hai. Số thứ
+/// hạng thì suy ra từ RSSI, một ước lượng nhiễu được trình bày như một sự thật;
+/// thứ tự trong danh sách đã nói điều đó, đủ mềm.
+///
+/// KHÔNG LỚP PHỦ, cùng lý do và cùng rủi ro với khối lớn — xem khối doc "ẢNH ĐỂ
+/// NGUYÊN" ở [_ZoneHero]. Hai khối phải cùng quyết định: chúng là MỘT hình dáng
+/// ở hai cỡ, và một cái bị phủ còn cái kia không thì lời tuyên bố "cùng loại,
+/// khác khoảng cách" gãy ngay.
+class _NearZoneBlock extends StatelessWidget {
   final RankedZone row;
-  final int rank;
   final ContentProvider content;
-  final bool showDistance;
   final VoidCallback onTap;
 
-  const _NearbyZoneRow({
+  const _NearZoneBlock({
     super.key,
     required this.row,
-    required this.rank,
     required this.content,
-    required this.showDistance,
     required this.onTap,
   });
 
@@ -544,101 +546,57 @@ class _NearbyZoneRow extends StatelessWidget {
     final t = context.tokens;
     final name = content.text(row.zone.name);
     final count = row.zone.exhibits.length;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-    final dist = (showDistance && row.distanceMeters != null)
-        ? content.uif(UiKeys.zoneDistanceSuffix,
-            {'d': row.distanceMeters!.toStringAsFixed(1)})
-        : '';
+    final media = MediaQuery.of(context);
+    final height = DesignSize.nearZone * DesignSize.verticalScale(context);
 
     return Semantics(
       button: true,
-      // Số thứ hạng KHÔNG đọc lên. Nó suy ra từ RSSI — chính lý do
-      // `showDistance` là cờ debug chỉ dành cho nhân viên: con số đó không đủ
-      // tin để đưa cho khách. "Gần bạn thứ 3" nghe như một sự thật; nó là một
-      // ước lượng nhiễu. Thứ tự trong danh sách đã nói điều đó, đủ mềm.
-      label: content.uif(UiKeys.zoneRowSemantics,
-          {'zone': name, 'count': '$count'}),
+      label: content.uif(
+          UiKeys.zoneRowSemantics, {'zone': name, 'count': '$count'}),
       excludeSemantics: true,
       onTap: onTap,
-      child: Padding(
-        // Khe giữa các hàng = x3, cùng mức với màn 3 — các hàng là MỘT khối
-        // danh sách, không phải nhiều khối rời.
-        padding: const EdgeInsets.only(bottom: AppSpace.x3),
+      child: SizedBox(
+        height: height,
         child: Material(
-          color: t.surfaceRaised,
-          borderRadius: t.sharpAll,
+          color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: t.sharpAll,
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpace.x3),
-              child: Row(
-                children: [
-                  ClipRRect(
-                    borderRadius: t.sharpAll,
-                    child: SizedBox(
-                      width: AppSpace.thumb,
-                      height: AppSpace.thumb,
-                      child: HeroImage(
-                        filePath: content.imagePath(row.zone.heroImagePath),
-                        cacheWidth: (AppSpace.thumb * dpr).round(),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                HeroImage(
+                  filePath: content.imagePath(row.zone.heroImagePath),
+                  cacheWidth: (media.size.width * media.devicePixelRatio).round(),
+                ),
+                // `.zhero.near .txt { bottom: x4 }` — thấp hơn bản lớn một nấc,
+                // vì khối thấp hơn.
+                Positioned(
+                  left: AppSpace.gutter,
+                  right: AppSpace.gutter,
+                  bottom: AppSpace.x4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(name,
+                          style:
+                              AppText.cardTitle.copyWith(color: t.inkOnImage)),
+                      // `margin-top: 2px` — bù trừ quang học, không phải khe bố
+                      // cục; xem luật (2b) ở app_space.dart.
+                      const SizedBox(height: 2),
+                      Text(
+                        content.uif(
+                            UiKeys.zoneExhibitCount, {'count': '$count'}),
+                        style: AppText.meta.copyWith(color: t.mutedOnImage),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: AppSpace.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(name,
-                            style: AppText.cardTitle.copyWith(color: t.ink)),
-                        const SizedBox(height: AppSpace.x1),
-                        Text(content.uif(UiKeys.zoneExhibitCount, {'count': '$count'}) + dist,
-                            style: AppText.meta.copyWith(color: t.inkMuted)),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.x3),
-                  _RankBadge(rank: rank),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Đĩa lõm mang số thứ hạng — cùng vật liệu với badge màn 3.
-///
-/// [MuseumTokens.badgeWell] + [MuseumTokens.inkFaint], KHÔNG phải
-/// `Colors.black.withValues(alpha: 0.55)` như bản trước. Đen thô đó nằm ngoài
-/// hệ token, và nó là một alpha THỨ HAI bên cạnh `scrimBack` (0x66) cho cùng
-/// một ý "đĩa tối dưới một glyph" — hai con số cho một quyết định, và không con
-/// số nào được đo.
-///
-/// Số ở đây KHÔNG chìm sâu như badge màn 3, và đó là chủ đích: ở màn 3 con số
-/// là `exhibit.minor` — minor ID beacon, vô nghĩa với khách, nên nó chìm gần
-/// hết. Ở đây nó là THỨ HẠNG, và thứ hạng là thông tin thật (dù mềm). Nên nó
-/// dùng `inkFaint` trên `badgeWell`: bậc thấp nhất của thang ink — đọc được khi
-/// nhìn, không tranh với tên khu.
-class _RankBadge extends StatelessWidget {
-  final int rank;
-  const _RankBadge({required this.rank});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    return Container(
-      // 36 = AppSpace.badge, cùng cỡ badge màn 3. Bản trước là 26 — không nằm
-      // trên lưới 4dp, và khác màn 3 mà không có lý do nào.
-      width: AppSpace.badge,
-      height: AppSpace.badge,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(color: t.badgeWell, shape: BoxShape.circle),
-      child: Text('$rank', style: AppText.meta.copyWith(color: t.inkFaint)),
     );
   }
 }

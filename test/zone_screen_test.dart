@@ -204,9 +204,17 @@ void main() {
       await tester.pump();
 
       expect(find.text('Khu Thử'), findsOneWidget);
-      expect(find.text('ĐANG Ở ĐÂY'), findsOneWidget);
-      expect(find.text('0 hiện vật'), findsOneWidget);
       expect(find.text('ĐANG QUÉT KHÔNG GIAN'), findsNothing);
+
+      // ⚠ HAI THỨ NÀY ĐÃ BỊ BẢN VẼ v6 GỠ, và test cũ canh sự có mặt của chúng:
+      //   • kicker "ĐANG Ở ĐÂY" — tín hiệu "khu của bạn" chuyển hết vào TÊN MÀN
+      //     ở thanh trên, xem doc [_ZoneHero];
+      //   • dòng "N hiện vật" — nay chỉ còn ở khối khu bên cạnh, để hai cỡ
+      //     không nói cùng một thứ. Khối lớn mang CÂU MÔ TẢ thay vào đó.
+      // Chúng được canh là VẮNG chứ không chỉ bị xoá khỏi test: nếu ai đó trả
+      // chúng về, đó phải là một quyết định, không phải một lần chép nhầm.
+      expect(find.text('ĐANG Ở ĐÂY'), findsNothing);
+      expect(find.text('0 hiện vật'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
     });
@@ -270,51 +278,57 @@ void main() {
       ));
       await tester.pump();
 
-      // A pinned with the "Đang ở đây" badge; B present as a numbered nearby
-      // row without that badge. Only the pinned card carries it.
-      expect(find.text('ĐANG Ở ĐÂY'), findsOneWidget);
+      // A là khối lớn `.zhero`, B là khối nhỏ `.zhero.near`. Bản vẽ phân biệt
+      // chúng bằng CHIỀU CAO, không bằng chữ — nên phép đo đúng là chiều cao,
+      // không phải sự có mặt của một cái nhãn.
       expect(find.text('Khu A'), findsOneWidget);
       expect(find.text('Khu B'), findsOneWidget);
-      // Both cards' meta is just the count (A pinned + B nearby, same text).
-      expect(find.text('0 hiện vật'), findsNWidgets(2));
-      // Rank badge "2" for the single nearby row.
-      expect(find.text('2'), findsOneWidget);
+
+      final big = tester.getSize(find.ancestor(
+          of: find.text('Khu A'), matching: find.byType(SizedBox)).first);
+      final small = tester.getSize(find.ancestor(
+          of: find.text('Khu B'), matching: find.byType(SizedBox)).first);
+      expect(small.height, lessThan(big.height),
+          reason: 'Khu bên cạnh phải NHỎ HƠN khu đang đứng. Tỉ lệ của bản vẽ là '
+              '178 : 480 — nếu hai khối bằng nhau thì không còn gì nói cái nào '
+              'là nơi khách đang đứng.');
+
+      // "N hiện vật" nay CHỈ ở khối nhỏ. Khối lớn mang câu mô tả.
+      expect(find.text('0 hiện vật'), findsOneWidget);
+      // KHÔNG còn đĩa số thứ hạng: thứ hạng suy ra từ RSSI, một ước lượng nhiễu
+      // được trình bày như một sự thật. Thứ tự trong danh sách đã nói điều đó.
+      expect(find.text('2'), findsNothing);
+      expect(find.text('ĐANG Ở ĐÂY'), findsNothing);
 
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('distance shown only when the debug toggle is on',
+    testWidgets('số mét debug KHÔNG còn xuất hiện, kể cả khi cờ đang bật',
         (tester) async {
+      // ĐÃ ĐỔI HÀNH VI, không phải test hỏng. Bản vẽ không có chỗ nào cho một
+      // con số mét, và cờ `showDistanceDebug` vẫn sống — nó chỉ thôi vẽ ra ở
+      // MÀN NÀY. Công cụ hiệu chỉnh beacon tại chỗ nay thuộc về màn debug radar.
+      //
+      // Canh cả nhánh BẬT: nếu ai đó nối lại số mét vào đây, bản vẽ bị phá mà
+      // không có gì kêu lên.
       final a = _zone(major: 1, name: 'Khu A');
       final repo = FakeZoneRepository(zones: [a]);
 
-      // Off -> no metres.
-      await tester.pumpWidget(_app(
-        repo: repo,
-        status: const Stream<ZoneStatus>.empty(),
-        initial: ZoneStatus(zone: a),
-        initialRanking: const [
-          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.3),
-        ],
-        showDistance: false,
-      ));
-      await tester.pump();
-      expect(find.textContaining('m', findRichText: false), findsNothing);
-      await tester.pumpWidget(const SizedBox());
-
-      // On -> metres appended.
-      await tester.pumpWidget(_app(
-        repo: repo,
-        status: const Stream<ZoneStatus>.empty(),
-        initial: ZoneStatus(zone: a),
-        initialRanking: const [
-          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.3),
-        ],
-        showDistance: true,
-      ));
-      await tester.pump();
-      expect(find.textContaining('2.3 m'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox());
+      for (final on in [false, true]) {
+        await tester.pumpWidget(_app(
+          repo: repo,
+          status: const Stream<ZoneStatus>.empty(),
+          initial: ZoneStatus(zone: a),
+          initialRanking: const [
+            NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.3),
+          ],
+          showDistance: on,
+        ));
+        await tester.pump();
+        expect(find.textContaining('2.3'), findsNothing,
+            reason: 'showDistanceDebug=$on vẫn vẽ ra số mét ở màn Khu vực.');
+        await tester.pumpWidget(const SizedBox());
+      }
     });
   });
 
@@ -396,13 +410,24 @@ void main() {
     });
 
     testWidgets('card meta uses mutedOnImage in LIGHT theme', (tester) async {
-      final zone = _zone();
-      final repo = FakeZoneRepository(zones: [zone]);
+      // ⚠ CẦN HAI KHU. Dòng "N hiện vật" nay CHỈ nằm trên khối khu bên cạnh —
+      // khối lớn mang câu mô tả thay cho nó. Với một khu duy nhất thì không có
+      // khối nhỏ nào, và không có dòng meta nào để đo.
+      //
+      // Nó vẫn thuộc họ on-image dù khối nhỏ đi: chữ nằm TRONG ảnh, dưới veil.
+      // Đó là toàn bộ điều test này canh, và nó không đổi theo cỡ khối.
+      final a = _zone(major: 1, name: 'Khu A');
+      final b = _zone(major: 2, name: 'Khu B');
+      final repo = FakeZoneRepository(zones: [a, b]);
 
       await tester.pumpWidget(_app(
         repo: repo,
         status: const Stream<ZoneStatus>.empty(),
-        initial: ZoneStatus(zone: zone),
+        initial: ZoneStatus(zone: a),
+        initialRanking: const [
+          NearbyZone(major: 1, rssiDb: -55, distanceMeters: 2.0),
+          NearbyZone(major: 2, rssiDb: -72, distanceMeters: 7.0),
+        ],
         themeId: MuseumThemeId.light,
       ));
       await tester.pump();
