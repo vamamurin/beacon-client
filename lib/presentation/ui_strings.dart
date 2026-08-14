@@ -87,14 +87,11 @@ abstract final class UiKeys {
 
   // ── zone (màn 2) ──
   static const zoneNearbyTitle = 'zone.nearbyTitle';
-  static const zoneNearbyGuidance = 'zone.nearbyGuidance';
   static const zoneIdentifying = 'zone.identifying';
   static const zoneScanning = 'zone.scanning';
   static const zoneEnterPromptA = 'zone.enterPromptA';
   static const zoneEnterPromptB = 'zone.enterPromptB';
-  static const zoneHereBadge = 'zone.hereBadge';
   static const zoneExhibitCount = 'zone.exhibitCount'; // {count}
-  static const zoneDistanceSuffix = 'zone.distanceSuffix'; // {d}
   static const zoneRowSemantics = 'zone.rowSemantics'; // {zone} {count}
   static const zoneCurrentSemantics = 'zone.currentSemantics'; // {zone} {count}
   static const zoneIdentifyingSemantics = 'zone.identifyingSemantics';
@@ -123,12 +120,16 @@ abstract final class UiKeys {
   static const exhibitListEmptyTitle = 'exhibitList.emptyTitle';
   static const exhibitListEmptyBody = 'exhibitList.emptyBody';
   static const exhibitListZoneNotFound = 'exhibitList.zoneNotFound';
-  static const exhibitListHeroKicker = 'exhibitList.heroKicker';
-  static const exhibitListHeroSubtitle = 'exhibitList.heroSubtitle';
+  /// Nhãn screen reader của một ô ĐÃ NGHE.
+  ///
+  /// Bảng ảnh không mang chữ nào, nên "đã nghe" ở đây được nói bằng ĐỘ MỜ của
+  /// ảnh — một tín hiệu thuần thị giác mà screen reader không thấy. Nhãn này là
+  /// vế còn lại của quyết định ấy: bỏ nó đi thì người dùng TalkBack gặp sáu ô
+  /// giống hệt nhau và mất hẳn thông tin mà người nhìn được thấy.
+  static const exhibitListHeardSemantics = 'exhibitList.heardSemantics';
+
   static const exhibitListIntroPlay = 'exhibitList.introPlay';
   static const exhibitListIntroPause = 'exhibitList.introPause';
-  static const exhibitListNowPlayingSuffix = 'exhibitList.nowPlayingSuffix';
-  static const exhibitListNowPlayingMeta = 'exhibitList.nowPlayingMeta';
 
   // ── banner đổi khu ──
   static const bannerTitle = 'banner.title';
@@ -405,17 +406,13 @@ const Map<String, String> kUiDefaults = <String, String>{
           'Vui lòng mang máy tới quầy để nhân viên hỗ trợ.',
 
   UiKeys.zoneNearbyTitle: 'Khu vực quanh bạn',
-  UiKeys.zoneNearbyGuidance:
-      'Ứng dụng nhận diện các khu trưng bày gần bạn qua sóng beacon.',
   UiKeys.zoneIdentifying: 'Đang xác định',
   UiKeys.zoneScanning: 'Đang quét không gian',
   UiKeys.zoneEnterPromptA:
       'Hãy tiến vào một khu trưng bày để bắt đầu nghe thuyết minh.',
   UiKeys.zoneEnterPromptB:
       'Hãy tiến vào khu trưng bày để bắt đầu nghe thuyết minh.',
-  UiKeys.zoneHereBadge: 'Đang ở đây',
   UiKeys.zoneExhibitCount: '{count} hiện vật',
-  UiKeys.zoneDistanceSuffix: ' · ~{d} m',
   UiKeys.zoneRowSemantics: 'Khu {zone}, {count} hiện vật',
   UiKeys.zoneCurrentSemantics: 'Bạn đang ở khu {zone}, {count} hiện vật',
   UiKeys.zoneIdentifyingSemantics: 'Đang xác định khu trưng bày quanh bạn',
@@ -442,12 +439,9 @@ const Map<String, String> kUiDefaults = <String, String>{
       'Khu trưng bày này hiện chưa có hiện vật nào trong nội dung. '
           'Vui lòng quay lại sau khi nội dung được cập nhật.',
   UiKeys.exhibitListZoneNotFound: 'Không tìm thấy khu trưng bày',
-  UiKeys.exhibitListHeroKicker: 'Khu trưng bày',
-  UiKeys.exhibitListHeroSubtitle: 'Chọn một hiện vật để nghe thuyết minh',
+  UiKeys.exhibitListHeardSemantics: '{name}. Đã nghe',
   UiKeys.exhibitListIntroPlay: 'Nghe giới thiệu khu trưng bày',
   UiKeys.exhibitListIntroPause: 'Tạm dừng giới thiệu khu trưng bày',
-  UiKeys.exhibitListNowPlayingSuffix: ', đang phát',
-  UiKeys.exhibitListNowPlayingMeta: 'Đang phát thuyết minh',
 
   UiKeys.bannerTitle: 'Bạn đã sang khu vực mới',
   UiKeys.bannerStay: 'Ở lại',
