@@ -180,13 +180,28 @@ abstract final class UiKeys {
   /// quan của mình ("Chứng tích của một thời").
   static const menuBarTitle = 'menu.bar.title';
 
-  /// Tiêu đề khối thứ hai của màn Menu.
+  /// Tiêu đề khối thứ hai của màn Menu — nguyên văn bản vẽ.
+  static const menuTopicsTitle = 'menu.topics.title';
+
+  /// Dòng meta của một thẻ tuyến: `"{count} hiện vật · {floor} · {minutes} phút"`.
   ///
-  /// Bản vẽ ghi "Tham quan theo chủ đề" và bày các TUYẾN tham quan ở đó. App
-  /// không có khái niệm tuyến — chỉ có một kiểu tham quan duy nhất: đi tới đâu
-  /// máy kể tới đó, và đó chính là thứ nút trên hero mở ra. Nên chỗ này đổi
-  /// NỘI DUNG chứ không đổi hình dáng: cùng khối, cùng lưới ảnh, bày TIN TỨC.
-  static const menuNewsTitle = 'menu.news.title';
+  /// ═════════════════════════════════════════════════════════════════════════
+  /// LÀ MỘT KHUÔN, KHÔNG PHẢI MỘT TRƯỜNG DỮ LIỆU — và đó là cả vấn đề
+  /// ═════════════════════════════════════════════════════════════════════════
+  ///
+  /// Cách rẻ hơn là để CMS gõ thẳng "6 hiện vật · tầng 1 · 25 phút" bằng ba thứ
+  /// tiếng. Cách đó SAI: con số 6 sẽ trôi khỏi `topic.exhibits` ngay lần đầu ai
+  /// đó thêm một hiện vật, và màn hình nói dối mà không có gì kêu lên.
+  ///
+  /// Nên bảo tàng khai dữ liệu, app dựng câu. Đúng ranh giới D9. Hệ quả tiện
+  /// kèm theo: đổi dấu phân cách hay đảo thứ tự ba mảnh là sửa MỘT khoá ui,
+  /// không phải sửa lại từng bản ghi trong CMS.
+  ///
+  /// ⚠ BA THAM SỐ ĐỀU CÓ THỂ VẮNG. `floor` và `minutes` là tuỳ chọn ở manifest,
+  /// và widget CẮT mảnh thiếu cùng dấu phân cách của nó thay vì để lại một dấu
+  /// `·` mồ côi — xem `_metaLine` trong `menu_topics.dart`. Nếu sau này ai đổi
+  /// khuôn này, phải đổi cả hàm cắt đó.
+  static const menuTopicMeta = 'menu.topic.meta';
 
   // ── màn "sắp có" ─────────────────────────────────────────────────────────
   //
@@ -481,7 +496,8 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.settingsLastSync: 'Lần đồng bộ gần nhất: {time}',
 
   UiKeys.menuBarTitle: 'Tham quan',
-  UiKeys.menuNewsTitle: 'Tin tức',
+  UiKeys.menuTopicsTitle: 'Tham quan theo chủ đề',
+  UiKeys.menuTopicMeta: '{count} hiện vật · {floor} · {minutes} phút',
   UiKeys.comingSoonTitle: 'Sắp có',
   UiKeys.comingSoonBody:
       'Phần này đang được bảo tàng chuẩn bị. Bạn có thể quay lại sau.',

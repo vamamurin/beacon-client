@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import 'feedback_config.dart';
 import 'guide_content.dart';
-import 'news_item.dart';
+import 'tour_topic.dart';
 import 'localized_text.dart';
 import 'menu_config.dart';
 import 'summary_config.dart';
@@ -270,12 +270,12 @@ class MuseumConfig {
   /// là hai khối chứ không phải hai mục của một khối.
   final GuideContent faq;
 
-  /// Khối `news` — tin tức của bảo tàng, bày ở nửa dưới màn Menu.
+  /// Khối `topics` — các tuyến tham quan theo chủ đề, nửa dưới màn Menu.
   ///
-  /// Chỗ đó trong bản vẽ dành cho các TUYẾN tham quan. App không có khái niệm
-  /// tuyến (chỉ có một kiểu tham quan: đi tới đâu máy kể tới đó), nên chỗ ấy đổi
-  /// nội dung mà giữ nguyên hình dáng. Xem doc [NewsItem].
-  final NewsFeed news;
+  /// Đây là thứ BẢN VẼ dành cho chỗ đó. Có một thời chỗ này nhận tin tức (D17)
+  /// với lý lẽ app không có khái niệm tuyến; quyết định ấy đã bị đảo và khối
+  /// `news` đã bị gỡ khỏi cả app lẫn manifest. Xem doc [TourTopic].
+  final TopicSet topics;
 
   /// Màn tổng kết + màn cảm ơn.
   final SummaryConfig summary;
@@ -303,7 +303,7 @@ class MuseumConfig {
     this.guide = GuideContent.empty,
     this.about = GuideContent.empty,
     this.faq = GuideContent.empty,
-    this.news = NewsFeed.empty,
+    this.topics = TopicSet.empty,
     this.summary = SummaryConfig.defaults,
     this.feedback = FeedbackConfig.defaults,
   });
@@ -329,7 +329,7 @@ class MuseumConfig {
         other.guide == guide &&
         other.about == about &&
         other.faq == faq &&
-        other.news == news &&
+        other.topics == topics &&
         other.summary == summary &&
         other.feedback == feedback &&
         mapEquals(other.languageNames, languageNames);
@@ -338,7 +338,7 @@ class MuseumConfig {
   /// ⚠ `Object.hashAll([...])`, KHÔNG PHẢI `Object.hash(...)`.
   ///
   /// `Object.hash` nhận TỐI ĐA 20 tham số vị trí, và class này vừa vượt qua
-  /// mốc đó khi thêm `museumShortName`, `about`, `faq`, `news`. Lỗi đó là lỗi
+  /// mốc đó khi thêm `museumShortName`, `about`, `faq`, `topics`. Lỗi đó là lỗi
   /// biên dịch nên nó lộ ra ngay — nhưng cái bẫy thật nằm ở lần sau: người tiếp
   /// theo thêm một field sẽ gặp đúng bức tường ấy và dễ "sửa" bằng cách BỎ BỚT
   /// một field khỏi hash, tức lặng lẽ làm hai config khác nhau băm ra cùng một
@@ -364,7 +364,7 @@ class MuseumConfig {
         guide,
         about,
         faq,
-        news,
+        topics,
         summary,
         feedback,
         Object.hashAllUnordered(

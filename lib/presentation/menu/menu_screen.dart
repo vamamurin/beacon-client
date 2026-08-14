@@ -33,13 +33,12 @@
 //   trên   hero + nút — LỐI THAM QUAN DUY NHẤT của app: khách đi tới đâu, máy
 //          kể tới đó. Bản vẽ gọi nửa dưới là "tuyến chính" và không cần nhãn
 //          nào cho điều đó, vì CỠ đã nói.
-//   dưới   TIN TỨC. Bản vẽ dành chỗ này cho các tuyến tham quan theo chủ đề;
-//          app không có khái niệm tuyến, nên chỗ ấy đổi NỘI DUNG mà giữ nguyên
-//          HÌNH DÁNG (lưới mosaic, tiêu đề, mô tả, dòng meta).
+//   dưới   CÁC TUYẾN THAM QUAN THEO CHỦ ĐỀ — đúng thứ bản vẽ bày ở đó, đọc từ
+//          khối `topics` của manifest.
 //
-// KHÔNG KHỐI NÀO BIẾN MẤT KHI CHƯA CÓ DỮ LIỆU. Tin tức rỗng thì hiện "Sắp có",
-// không phải một khoảng trống. Một lối đi có trong bản vẽ mà bị ẩn vì CMS chưa
-// theo kịp là một quyết định kỹ thuật đang âm thầm sửa bản thiết kế.
+// Khối dưới rỗng thì BIẾN MẤT, không để lại tiêu đề treo trên khoảng trống —
+// một bảo tàng chưa soạn tuyến nào là trạng thái hợp lệ, khác hẳn một màn chưa
+// dựng xong. Ranh giới đó là D18; xem doc [MenuTopics] cho lập luận đầy đủ.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -48,7 +47,7 @@ import 'package:beacon_client/domain/models/startup_status.dart';
 import 'package:beacon_client/presentation/app/museum_top_bar.dart';
 import 'package:beacon_client/presentation/app/shell_controller.dart';
 import 'package:beacon_client/presentation/menu/menu_hero.dart';
-import 'package:beacon_client/presentation/menu/menu_news.dart';
+import 'package:beacon_client/presentation/menu/menu_topics.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
@@ -172,7 +171,7 @@ class _MenuBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // HAI KHỐI, KHÔNG LỀ NGANG NÀO Ở TẦNG NÀY. Cả hero lẫn khối tin tức đều
+    // HAI KHỐI, KHÔNG LỀ NGANG NÀO Ở TẦNG NÀY. Cả hero lẫn khối tuyến đều
     // TRÀN HẾT bề ngang — ảnh chạm hai mép máy, chữ tự giữ lề bên trong. Bọc
     // màn này trong một `SliverPadding` ngang là cắt ảnh khỏi hai mép, tức làm
     // chúng thôi đọc ra là những nơi chốn.
@@ -181,10 +180,23 @@ class _MenuBody extends StatelessWidget {
         SliverToBoxAdapter(
           child: MenuHero(onPrimary: () => _onPrimary(context)),
         ),
-        // KHỐI THỨ HAI CỦA BẢN VẼ, và là khối DUY NHẤT dưới hero. Chỗ này vốn
-        // dành cho các tuyến tham quan; app chỉ có một kiểu tham quan nên nó
-        // nhận tin tức, giữ nguyên hình dáng. Xem doc [MenuNews].
-        const SliverToBoxAdapter(child: MenuNews()),
+        // KHỐI THỨ HAI CỦA BẢN VẼ, và là khối DUY NHẤT dưới hero: các tuyến
+        // tham quan theo chủ đề. Xem doc [MenuTopics] cho lý do thẻ chưa bấm
+        // được và cho trạng thái rỗng.
+        const SliverToBoxAdapter(child: MenuTopics()),
+
+        // `.screen.has-tabs { padding-bottom: var(--tabbar-h) }`.
+        //
+        // Khung máy bơm chiều cao vỏ đáy vào `MediaQuery.padding` (xem
+        // `tour_shell.dart`) để mọi màn dùng `SafeArea` tự tránh tab bar. Màn
+        // này KHÔNG dùng SafeArea — nó không được phép, vì ảnh hero phải chạm
+        // mép trên — nên `CustomScrollView` không tiêu thụ khoản đó và thẻ cuối
+        // cùng chui xuống dưới tab bar. Chừa lại đúng bằng khoản đã bơm.
+        SliverPadding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
+        ),
       ],
     );
   }

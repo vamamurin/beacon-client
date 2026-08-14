@@ -18,7 +18,7 @@ import 'package:beacon_client/domain/interfaces/i_zone_repository.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/feedback_config.dart';
 import 'package:beacon_client/domain/models/guide_content.dart';
-import 'package:beacon_client/domain/models/news_item.dart';
+import 'package:beacon_client/domain/models/tour_topic.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/summary_config.dart';
@@ -129,8 +129,8 @@ class ContentProvider extends ChangeNotifier {
   GuideContent get about => _repo.config?.about ?? GuideContent.empty;
   GuideContent get faq => _repo.config?.faq ?? GuideContent.empty;
 
-  /// Tin tức của bảo tàng — nửa dưới màn Menu.
-  NewsFeed get news => _repo.config?.news ?? NewsFeed.empty;
+  /// Các tuyến tham quan theo chủ đề — nửa dưới màn Menu.
+  TopicSet get topics => _repo.config?.topics ?? TopicSet.empty;
 
   SummaryConfig get summary => _repo.config?.summary ?? SummaryConfig.defaults;
 

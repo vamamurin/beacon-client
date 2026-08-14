@@ -361,4 +361,156 @@ void main() {
       expect(parsed.warnings, hasWarning('cắt phần thừa'));
     });
   });
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // TOPICS — hợp đồng với đội CMS, nên nó được canh kỹ hơn ba khối kia
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Khối này là thứ ĐỘI KHÁC sẽ sinh ra, không phải thứ ta tự viết rồi tự đọc.
+  // Nên điều đáng canh không phải "đọc đúng khi dữ liệu đúng" mà là: một bản
+  // ghi hỏng ở CMS thì hỏng tới đâu, và có im lặng không.
+  group('topics', () {
+    Map<String, dynamic> topic({
+      Object? title = const {'vi': 'Vũ khí tự tạo'},
+      Object? summary = const {'vi': 'Từ mảnh bom và sắt vụn.'},
+      Object? floor,
+      Object? durationMinutes,
+      Object? images,
+      Object? exhibits,
+    }) =>
+        {
+          'id': 'vu-khi-tu-tao',
+          if (title != null) 'title': title,
+          if (summary != null) 'summary': summary,
+          if (floor != null) 'floor': floor,
+          if (durationMinutes != null) 'durationMinutes': durationMinutes,
+          if (images != null) 'images': images,
+          if (exhibits != null) 'exhibits': exhibits,
+        };
+
+    test('đọc đủ sáu trường, giữ nguyên thứ tự chặng', () {
+      final m = baseManifest();
+      m['topics'] = {
+        'items': [
+          topic(
+            floor: {'vi': 'tầng 1'},
+            durationMinutes: 25,
+            images: ['a.jpg', 'b.jpg', 'c.jpg'],
+            exhibits: [
+              {'major': 1, 'minor': 2},
+              {'major': 1, 'minor': 1},
+            ],
+          ),
+        ],
+      };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, isEmpty);
+
+      final t = parsed.config.topics.items.single;
+      expect(t.id, 'vu-khi-tu-tao');
+      expect(t.title.resolve('vi', 'vi'), 'Vũ khí tự tạo');
+      expect(t.floor!.resolve('vi', 'vi'), 'tầng 1');
+      expect(t.durationMinutes, 25);
+      expect(t.imagePaths, ['a.jpg', 'b.jpg', 'c.jpg']);
+      // THỨ TỰ MẢNG LÀ THỨ TỰ CỦA BẢO TÀNG — app không sắp xếp lại, kể cả khi
+      // minor giảm dần. Xem doc [TopicSet].
+      expect(t.exhibits.map((e) => e.minor), [2, 1]);
+    });
+
+    test('thiếu khối ⇒ rỗng và IM LẶNG', () {
+      // Mọi bundle đang chạy ngoài hiện trường hôm nay đều chưa có `topics`.
+      // Một warning ở đây sẽ kêu trên từng máy, mỗi lần đồng bộ.
+      final parsed = ManifestParser.parse(baseManifest());
+      expect(parsed.warnings, isEmpty);
+      expect(parsed.config.topics.isEmpty, isTrue);
+    });
+
+    test('bốn trường tuỳ chọn vắng mặt vẫn ra một tuyến hợp lệ', () {
+      final m = baseManifest()..['topics'] = {
+          'items': [topic()]
+        };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, isEmpty);
+
+      final t = parsed.config.topics.items.single;
+      expect(t.floor, isNull);
+      expect(t.durationMinutes, isNull);
+      expect(t.imagePaths, isEmpty);
+      expect(t.exhibits, isEmpty);
+    });
+
+    test('tuyến thiếu title bị bỏ RIÊNG LẺ, tuyến còn lại sống', () {
+      final m = baseManifest();
+      m['topics'] = {
+        'items': [
+          topic(title: null),
+          {
+            'id': 'con-song',
+            'title': {'vi': 'Còn sống'},
+            'summary': {'vi': 'Tuyến này vẫn phải hiện ra.'},
+          },
+        ],
+      };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, hasWarning('topics.items[0]'));
+      expect(parsed.config.topics.items.map((t) => t.id), ['con-song']);
+    });
+
+    test('ảnh hỏng chỉ mất ảnh — tuyến vẫn còn', () {
+      final m = baseManifest();
+      m['topics'] = {
+        'items': [
+          topic(images: ['ok.jpg', 42, '', 'ok2.jpg'])
+        ],
+      };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, hasWarning('images[1]'));
+      expect(parsed.config.topics.items.single.imagePaths, ['ok.jpg', 'ok2.jpg']);
+    });
+
+    test('chặng hỏng bị bỏ KÈM WARNING — vì nó đổi số đếm trên màn hình', () {
+      // Đây là chỗ nguy hiểm nhất của khối này: dòng meta ghi "N hiện vật" và
+      // N đến từ mảng này. Bỏ im lặng một chặng là để màn hình nói một con số
+      // khác với ý bảo tàng, mà không ai biết.
+      final m = baseManifest();
+      m['topics'] = {
+        'items': [
+          topic(exhibits: [
+            {'major': 1, 'minor': 1},
+            {'major': 1}, // thiếu minor
+            {'major': '1', 'minor': 2}, // major là chuỗi
+          ])
+        ],
+      };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, hasWarning('exhibits[1]'));
+      expect(parsed.warnings, hasWarning('exhibits[2]'));
+      expect(parsed.config.topics.items.single.exhibits, hasLength(1));
+    });
+
+    test('durationMinutes sai kiểu ⇒ bỏ qua kèm warning, tuyến vẫn sống', () {
+      final m = baseManifest()..['topics'] = {
+          'items': [topic(durationMinutes: '25 phút')]
+        };
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.warnings, hasWarning('durationMinutes'));
+      expect(parsed.config.topics.items.single.durationMinutes, isNull);
+    });
+
+    test('khối sai kiểu ⇒ rỗng kèm warning, KHÔNG làm hỏng bundle', () {
+      final m = baseManifest()..['topics'] = 'chưa soạn';
+      final parsed = ManifestParser.parse(m);
+
+      expect(parsed.warnings, hasWarning('topics'));
+      expect(parsed.config.topics.isEmpty, isTrue);
+      // Bất biến của cả file: không khối phụ trợ nào được quyền làm bundle hỏng.
+      expect(parsed.config.menu.entries, isNotEmpty);
+    });
+  });
 }

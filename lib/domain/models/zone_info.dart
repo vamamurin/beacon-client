@@ -36,6 +36,16 @@ class ZoneInfo {
   /// Shown on the big Zone Card; doubles as the zone description.
   final LocalizedText welcomeText;
 
+  /// MỘT CÂU dưới tên khu trên `.zhero` — `hero-sub` của bản vẽ.
+  ///
+  /// ⚠ KHÔNG PHẢI [welcomeText] RÚT GỌN, và đó là lý do nó là một trường riêng.
+  /// `welcomeText` là bài thuyết minh chào khu: trong bundle thật nó dài ~700 ký
+  /// tự. Cắt hai dòng rồi chấm lửng cho ra một câu đứt giữa chừng ngồi ngay dưới
+  /// tên khu — chỗ dễ đọc nhất của màn.
+  ///
+  /// Null ⇒ dòng đó không hiện. Khối chữ tự co lại, KHÔNG để một khoảng trống.
+  final LocalizedText? summary;
+
   /// Bundle-relative paths. [heroImageBlurredPath] is pre-blurred server-side
   /// — the app must never run a runtime BackdropFilter over the full card.
   final String heroImagePath;
@@ -52,6 +62,7 @@ class ZoneInfo {
     required this.id,
     required this.name,
     required this.welcomeText,
+    this.summary,
     required this.heroImagePath,
     required this.heroImageBlurredPath,
     required this.introAudio,
@@ -81,6 +92,7 @@ class ZoneInfo {
         other.id == id &&
         other.name == name &&
         other.welcomeText == welcomeText &&
+        other.summary == summary &&
         other.heroImagePath == heroImagePath &&
         other.heroImageBlurredPath == heroImageBlurredPath &&
         other.introAudio == introAudio &&
@@ -93,6 +105,7 @@ class ZoneInfo {
         id,
         name,
         welcomeText,
+        summary,
         heroImagePath,
         heroImageBlurredPath,
         introAudio,

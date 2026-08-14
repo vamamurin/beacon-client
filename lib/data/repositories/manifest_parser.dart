@@ -4,7 +4,7 @@ import 'package:beacon_client/domain/models/audio_clip_info.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/feedback_config.dart';
 import 'package:beacon_client/domain/models/guide_content.dart';
-import 'package:beacon_client/domain/models/news_item.dart';
+import 'package:beacon_client/domain/models/tour_topic.dart';
 import 'package:beacon_client/domain/models/localized_text.dart';
 import 'package:beacon_client/domain/models/menu_config.dart';
 import 'package:beacon_client/domain/models/museum_config.dart';
@@ -128,7 +128,7 @@ abstract final class ManifestParser {
     final guide = _optArticle(root, 'guide', fallbackLanguage, warnings);
     final about = _optArticle(root, 'about', fallbackLanguage, warnings);
     final faq = _optArticle(root, 'faq', fallbackLanguage, warnings);
-    final news = _optNews(root, fallbackLanguage, warnings);
+    final topics = _optTopics(root, fallbackLanguage, warnings);
     final summary = _optSummary(root, fallbackLanguage, warnings);
     final feedback = _optFeedback(root, fallbackLanguage, warnings);
 
@@ -184,7 +184,7 @@ abstract final class ManifestParser {
         guide: guide,
         about: about,
         faq: faq,
-        news: news,
+        topics: topics,
         summary: summary,
         feedback: feedback,
       ),
@@ -242,6 +242,10 @@ abstract final class ManifestParser {
       id: id,
       name: _reqLocalized(z, 'name', ctx, fallbackLang),
       welcomeText: _reqLocalized(z, 'welcomeText', ctx, fallbackLang),
+      // TUỲ CHỌN: bundle ngoài hiện trường chưa có khoá này, và thiếu nó
+      // chỉ mất một dòng chữ chứ không mất khu — nên nó không được phép
+      // làm hỏng bundle. Xem doc [ZoneInfo.summary].
+      summary: _optLocalized(z, 'summary', ctx, fallbackLang),
       heroImagePath: _reqPath(z, 'heroImage', ctx),
       heroImageBlurredPath: _reqPath(z, 'heroImageBlurred', ctx),
       introAudio: introAudio,
@@ -828,38 +832,50 @@ abstract final class ManifestParser {
     return _localized(_reqMap(m, key, ctx), '$ctx.$key', fallbackLang);
   }
 
-  /// Khối `news`. Mẩu tin hỏng bị bỏ RIÊNG LẺ — cùng luật với `guide` và
-  /// `exhibit`: một bản ghi sai chính tả trong CMS không được làm cả khối biến
-  /// mất khỏi màn hình.
-  static NewsFeed _optNews(
+  /// Khối `topics` — các tuyến tham quan theo chủ đề.
+  ///
+  /// Tuyến hỏng bị bỏ RIÊNG LẺ — cùng luật với `guide` và `exhibit`: một bản
+  /// ghi sai chính tả trong CMS không được làm cả khối biến mất khỏi màn hình.
+  ///
+  /// ═══════════════════════════════════════════════════════════════════════
+  /// HAI TRƯỜNG BẮT BUỘC, BỐN TRƯỜNG TUỲ CHỌN — và ranh giới đó có lý do
+  /// ═══════════════════════════════════════════════════════════════════════
+  ///
+  ///   title, summary   BẮT BUỘC. Thiếu một trong hai thì cái thẻ không còn
+  ///                    nói được nó là tuyến gì, và một thẻ như vậy tệ hơn
+  ///                    việc không có thẻ.
+  ///   floor, duration  tuỳ chọn — dòng meta bỏ mảnh thiếu, xem widget.
+  ///   images, exhibits tuỳ chọn — lưới rơi về nền dự phòng, dòng meta ghi 0
+  ///                    hiện vật. Cả hai đều đọc ra "tuyến này chưa soạn xong",
+  ///                    mà đó đúng là sự thật lúc ấy.
+  static TopicSet _optTopics(
     Map<String, dynamic> root,
     String fallbackLang,
     List<String> warnings,
   ) {
-    final raw = root['news'];
-    if (raw == null) return NewsFeed.empty;
+    final raw = root['topics'];
+    if (raw == null) return TopicSet.empty;
     if (raw is! Map<String, dynamic>) {
-      warnings.add('news: không phải object — bỏ khối');
-      return NewsFeed.empty;
+      warnings.add('topics: không phải object — bỏ khối');
+      return TopicSet.empty;
     }
     final list = raw['items'];
     if (list is! List) {
-      warnings.add('news: "items" không phải mảng — bỏ khối');
-      return NewsFeed.empty;
+      warnings.add('topics: "items" không phải mảng — bỏ khối');
+      return TopicSet.empty;
     }
 
-    final out = <NewsItem>[];
+    final out = <TourTopic>[];
     for (var i = 0; i < list.length; i++) {
       final item = list[i];
-      final ctx = 'news.items[$i]';
+      final ctx = 'topics.items[$i]';
       if (item is! Map<String, dynamic>) {
         warnings.add('$ctx: không phải object — bỏ');
         continue;
       }
 
-      // Ảnh hỏng KHÔNG làm mất mẩu tin — cùng lý do với ảnh minh hoạ của
-      // `guide`: chữ mới là nội dung, ảnh là trang trí. Lọc từng ảnh một, giữ
-      // những ảnh còn dùng được.
+      // Ảnh hỏng KHÔNG làm mất tuyến — cùng lý do với ảnh minh hoạ của `guide`:
+      // chữ mới là nội dung. Lọc từng ảnh một, giữ những ảnh còn dùng được.
       final images = <String>[];
       final rawImages = item['images'];
       if (rawImages is List) {
@@ -873,20 +889,52 @@ abstract final class ManifestParser {
         }
       }
 
+      // CHẶNG HỎNG BỊ BỎ RIÊNG LẺ, KHÔNG KÉO CẢ TUYẾN THEO. Nhưng nó ĐỔI dòng
+      // meta ("N hiện vật") — nên mỗi chặng bị bỏ phải để lại một warning, khác
+      // hẳn một cái ảnh hỏng. Đây là chỗ số đếm có thể lệch khỏi ý bảo tàng mà
+      // màn hình vẫn trông bình thường.
+      final stops = <TopicStop>[];
+      final rawStops = item['exhibits'];
+      if (rawStops is List) {
+        for (var k = 0; k < rawStops.length; k++) {
+          final v = rawStops[k];
+          final major = v is Map<String, dynamic> ? v['major'] : null;
+          final minor = v is Map<String, dynamic> ? v['minor'] : null;
+          if (major is int && minor is int) {
+            stops.add(TopicStop(major: major, minor: minor));
+          } else {
+            warnings.add(
+                '$ctx.exhibits[$k]: cần {major:int, minor:int} — bỏ chặng');
+          }
+        }
+      } else if (rawStops != null) {
+        warnings.add('$ctx.exhibits: không phải mảng — bỏ toàn bộ chặng');
+      }
+
+      // KHÔNG ĐỐI CHIẾU CHÉO với `zones` ở đây, dù chỗ này có cả hai bảng trong
+      // tay. Một cặp major/minor trỏ vào hư vô là lỗi ĐÓNG BUNDLE, và nơi bắt
+      // nó là server — nơi có thể từ chối xuất bản. App im lặng bỏ qua một
+      // chặng không tồn tại sẽ giấu đúng cái lỗi cần lộ ra ở CMS.
+      final duration = item['durationMinutes'];
+      if (duration != null && duration is! int) {
+        warnings.add('$ctx.durationMinutes: không phải số nguyên — bỏ qua');
+      }
+
       try {
         final id = item['id'];
-        out.add(NewsItem(
+        out.add(TourTopic(
           id: id is String && id.isNotEmpty ? id : null,
           title: _reqLocalized(item, 'title', ctx, fallbackLang),
           summary: _reqLocalized(item, 'summary', ctx, fallbackLang),
-          meta: _optLocalized(item, 'meta', ctx, fallbackLang),
-          body: _optLocalized(item, 'body', ctx, fallbackLang),
+          floor: _optLocalized(item, 'floor', ctx, fallbackLang),
+          durationMinutes: duration is int ? duration : null,
           imagePaths: List.unmodifiable(images),
+          exhibits: List.unmodifiable(stops),
         ));
       } on BundleValidationException catch (err) {
         warnings.add('$ctx: bỏ — ${err.message}');
       }
     }
-    return out.isEmpty ? NewsFeed.empty : NewsFeed(items: List.unmodifiable(out));
+    return out.isEmpty ? TopicSet.empty : TopicSet(items: List.unmodifiable(out));
   }
 }
