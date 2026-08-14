@@ -1,45 +1,60 @@
 // Destination: lib/presentation/guide/guide_screen.dart
 //
-// Màn HƯỚNG DẪN SỬ DỤNG.
+// MÀN 03 · HƯỚNG DẪN — mục lục ba lựa chọn.
 //
-// Nội dung đến từ bundle (`guide.steps`) vì đây là màn thay đổi nhiều nhất
-// theo thực địa: sau vài tuần đứng quầy, nhân viên biết chính xác ba câu hỏi
-// khách hay hỏi nhất, và nó khác nhau giữa các bảo tàng.
+// ═══════════════════════════════════════════════════════════════════════════
+// MỘT MÀN TÁCH THÀNH HAI
+// ═══════════════════════════════════════════════════════════════════════════
 //
-// KHI BUNDLE CHƯA KHAI BÁO GÌ, màn này vẫn phải đầy đủ — nó là thứ nhân viên
-// chỉ vào khi khách hỏi, và một máy vừa cài xong chưa đồng bộ lần nào chính là
-// lúc cần nó nhất. Bộ ba bước mặc định ([_defaultSteps]) đọc từ [kUiDefaults],
-// nên vẫn dịch được qua khối `ui` mà không cần khai báo `guide`.
+// Bản trước bày cả ba bước ĐÃ MỞ SẴN trên một trang: tiêu đề, thân bài, icon,
+// ảnh minh hoạ, rồi một nút "Xong". Bản vẽ v6 tách làm hai màn:
 //
-// CUỘN DỌC, KHÔNG PHẢI CAROUSEL từng bước: số bước do server quyết (có thể là
-// 2, có thể là 7), và một carousel bắt người đọc phải vuốt hết mới biết còn
-// gì phía sau. Danh sách cuộn hiện toàn bộ chiều dài ngay từ đầu.
+//   03   mục lục — mỗi mục là tiêu đề + MỘT CÂU, cả hàng bấm được
+//   03b  một mục một trang — tiêu đề 26 + thân bài 15/1.75
+//
+// Vì sao tách: ba bài đọc mở sẵn nối đuôi nhau thì khách phải cuộn qua thứ mình
+// KHÔNG hỏi để tới thứ mình hỏi. Một mục lục trả lời được câu "tôi cần cái nào"
+// trong một cái liếc, và đó là câu duy nhất khách có ở màn này.
+//
+// ═══════════════════════════════════════════════════════════════════════════
+// ☰ CHỨ KHÔNG PHẢI ‹
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Màn này là GỐC của một tab, tức một đích cấp một. Một màn vừa để tab của
+// chính nó sáng vừa đeo nút lùi thì đang nói hai điều ngược nhau. Trang chi
+// tiết mới là trang con, và nó giữ ‹.
+//
+// Thanh ĐỤC (`solid`), khác ba màn có ảnh hero: ở đây phía sau thanh là nền
+// trang, và một thanh trong suốt sẽ để chữ cuộn lộn thẳng qua nó.
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/guide_content.dart';
+import 'package:beacon_client/presentation/app/museum_top_bar.dart';
+import 'package:beacon_client/presentation/guide/guide_detail_screen.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/theme/app_row.dart';
+import 'package:beacon_client/presentation/theme/app_rule.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
-import 'package:beacon_client/presentation/theme/hero_image.dart';
-import 'package:beacon_client/presentation/theme/museum_icons.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 
-/// Một bước ĐÃ RESOLVE sang chuỗi hiển thị — gộp hai nguồn (bundle và bộ mặc
-/// định) về một hình dạng để phần vẽ chỉ có một nhánh.
-class _Step {
-  final String? iconName;
-  final String? imagePath; // đã resolve sang đường dẫn tuyệt đối
+/// Một mục của mục lục, đã giải sẵn sang chuỗi của ngôn ngữ đang chọn.
+///
+/// Tồn tại vì mục lục phục vụ HAI nguồn: khối `guide` của manifest, và bộ mục
+/// nhúng sẵn khi bảo tàng chưa viết gì. Không có lớp này thì mỗi widget bên
+/// dưới phải tự biết mình đang đọc nguồn nào.
+class GuideEntry {
   final String title;
+  final String? summary;
   final String body;
 
-  const _Step({
+  const GuideEntry({
     required this.title,
+    required this.summary,
     required this.body,
-    this.iconName,
-    this.imagePath,
   });
 }
 
@@ -50,188 +65,150 @@ class GuideScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
     final content = context.watch<ContentProvider>();
-    final steps = _resolveSteps(content);
+    final entries = resolveGuideEntries(content);
 
     return Scaffold(
       backgroundColor: t.surface,
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.gutter,
-                AppSpace.x6,
-                AppSpace.gutter,
-                AppSpace.x8,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  Text(content.ui(UiKeys.guideTitle),
-                      style: AppText.heroTitle.copyWith(color: t.ink)),
-                  const SizedBox(height: AppSpace.x3),
-                  Text(content.ui(UiKeys.guideSubtitle),
-                      style: AppText.lede.copyWith(color: t.inkMuted)),
-                  const SizedBox(height: AppSpace.x6),
-                  for (var i = 0; i < steps.length; i++)
-                    _StepCard(
-                      step: steps[i],
-                      position: content.uif(UiKeys.guideStepSemantics,
-                          {'i': '${i + 1}', 'n': '${steps.length}'}),
-                    ),
-                  const SizedBox(height: AppSpace.x6),
-                  _DoneButton(label: content.ui(UiKeys.guideClose)),
-                ]),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  List<_Step> _resolveSteps(ContentProvider content) {
-    final GuideContent g = content.guide;
-    if (g.isEmpty) return _defaultSteps(content);
-    return [
-      for (final s in g.steps)
-        _Step(
-          iconName: s.iconId,
-          imagePath:
-              s.imagePath == null ? null : content.imagePath(s.imagePath!),
-          title: content.text(s.title),
-          body: content.text(s.body),
-        ),
-    ];
-  }
-
-  /// Bộ bước nhúng sẵn. Ba điều, theo thứ tự khách gặp chúng: đeo tai nghe →
-  /// cứ đi → khi hỏng thì làm gì.
-  List<_Step> _defaultSteps(ContentProvider content) => [
-        _Step(
-          iconName: 'headphones',
-          title: content.ui(UiKeys.guideDefaultHeadphonesTitle),
-          body: content.ui(UiKeys.guideDefaultHeadphonesBody),
-        ),
-        _Step(
-          iconName: 'walk',
-          title: content.ui(UiKeys.guideDefaultWalkTitle),
-          body: content.ui(UiKeys.guideDefaultWalkBody),
-        ),
-        _Step(
-          iconName: 'help',
-          title: content.ui(UiKeys.guideDefaultHelpTitle),
-          body: content.ui(UiKeys.guideDefaultHelpBody),
-        ),
-      ];
-}
-
-class _StepCard extends StatelessWidget {
-  final _Step step;
-
-  /// "Bước 2 trên 3" — chỉ đọc lên cho screen reader. Trên màn hình, vị trí đã
-  /// hiện ra bằng chính thứ tự dọc; in thêm số vào là nói hai lần.
-  final String position;
-
-  const _StepCard({required this.step, required this.position});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    final dpr = MediaQuery.devicePixelRatioOf(context);
-
-    return Semantics(
-      label: '$position. ${step.title}. ${step.body}',
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.x3),
-        child: Container(
-          decoration: BoxDecoration(
-            color: t.surfaceRaised,
-            borderRadius: t.sharpAll,
-          ),
-          padding: const EdgeInsets.all(AppSpace.x4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: AppSpace.badge,
-                    height: AppSpace.badge,
-                    decoration: BoxDecoration(
-                      color: t.badgeWell,
-                      borderRadius: t.sharpAll,
-                    ),
-                    alignment: Alignment.center,
-                    child: Icon(MuseumIcons.byName(step.iconName),
-                        size: 18, color: t.ink),
+      body: Column(
+        children: [
+          MuseumTopBar(title: content.ui(UiKeys.guideTitle)),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                // `.olist { margin-top: x8; border-top: 1px solid line }` —
+                // vạch tóc mở đầu danh sách. Đây là vạch DUY NHẤT của màn: các
+                // mục không có vạch xen giữa, vì chiều cao hàng đã đủ tách
+                // chúng ra (cùng luật với hàng ở Poster).
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: AppSpace.x8),
+                    child: AppHairline(),
                   ),
-                  const SizedBox(width: AppSpace.x3),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(step.title,
-                            style: AppText.cardTitle.copyWith(color: t.ink)),
-                        const SizedBox(height: AppSpace.x2),
-                        Text(step.body,
-                            style: AppText.body.copyWith(color: t.inkMuted)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              if (step.imagePath != null) ...[
-                const SizedBox(height: AppSpace.x3),
-                ClipRRect(
-                  borderRadius: t.sharpAll,
-                  child: AspectRatio(
-                    // 16:9 cho mọi ảnh hướng dẫn, bất kể server gửi tỉ lệ nào:
-                    // các thẻ xếp dọc mà cao thấp lô nhô thì danh sách mất nhịp.
-                    aspectRatio: 16 / 9,
-                    child: HeroImage(
-                      filePath: step.imagePath,
-                      cacheWidth:
-                          (MediaQuery.sizeOf(context).width * dpr).round(),
+                ),
+                SliverList.builder(
+                  itemCount: entries.length,
+                  itemBuilder: (context, i) => _Option(
+                    entry: entries[i],
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => GuideDetailScreen(entry: entries[i]),
+                      ),
                     ),
                   ),
                 ),
+                SliverPadding(
+                  padding: EdgeInsets.only(
+                    bottom: MediaQuery.paddingOf(context).bottom,
+                  ),
+                ),
               ],
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-class _DoneButton extends StatelessWidget {
-  final String label;
-  const _DoneButton({required this.label});
+/// Mục lục đọc từ manifest, lùi về bộ nhúng sẵn khi bảo tàng chưa viết gì.
+///
+/// Bộ nhúng sẵn KHÔNG có câu tóm tắt riêng — chúng là ba chuỗi ui, và thêm ba
+/// chuỗi nữa chỉ để lấp một dòng là bịa nội dung của bảo tàng. Mục lục tự co
+/// lại còn tiêu đề, và đó là trạng thái đúng.
+List<GuideEntry> resolveGuideEntries(ContentProvider content) {
+  final GuideContent g = content.guide;
+  if (g.isEmpty) {
+    return [
+      GuideEntry(
+        title: content.ui(UiKeys.guideDefaultHeadphonesTitle),
+        summary: null,
+        body: content.ui(UiKeys.guideDefaultHeadphonesBody),
+      ),
+      GuideEntry(
+        title: content.ui(UiKeys.guideDefaultWalkTitle),
+        summary: null,
+        body: content.ui(UiKeys.guideDefaultWalkBody),
+      ),
+      GuideEntry(
+        title: content.ui(UiKeys.guideDefaultHelpTitle),
+        summary: null,
+        body: content.ui(UiKeys.guideDefaultHelpBody),
+      ),
+    ];
+  }
+  return [
+    for (final s in g.steps)
+      GuideEntry(
+        title: content.text(s.title),
+        summary: content.textOrNull(s.summary),
+        body: content.text(s.body),
+      ),
+  ];
+}
+
+/// `.opt` — một hàng của mục lục.
+///
+/// Cùng ngữ pháp với hàng 58 của Poster: tràn hết bề ngang, nền trong suốt, dấu
+/// › ở mép phải, không hairline xen giữa. Chỉ khác là CAO HƠN vì mang thêm một
+/// dòng tóm tắt, nên nó không dùng lại [AppRow] — hàng ở đó cao cố định và chỉ
+/// chứa một dòng.
+class _Option extends StatelessWidget {
+  final GuideEntry entry;
+  final VoidCallback onTap;
+
+  const _Option({required this.entry, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    void done() => Navigator.of(context).maybePop();
+    final summary = entry.summary;
 
     return Semantics(
       button: true,
-      label: label,
+      label: summary == null ? entry.title : '${entry.title}. $summary',
       excludeSemantics: true,
-      onTap: done,
+      onTap: onTap,
       child: Material(
-        color: t.ctaFill,
-        borderRadius: t.sharpAll,
+        type: MaterialType.transparency,
         child: InkWell(
-          onTap: done,
-          borderRadius: t.sharpAll,
-          child: Container(
-            height: AppSpace.ctaHeight,
-            alignment: Alignment.center,
-            child: Text(label.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ctaLabel)),
+          onTap: onTap,
+          // Cùng phản hồi chạm với AppRow: đổi nền, không gợn sóng.
+          splashFactory: NoSplash.splashFactory,
+          splashColor: Colors.transparent,
+          highlightColor: t.ink.withValues(alpha: 0.10),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.gutter, vertical: AppSpace.x6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(entry.title,
+                          style: AppText.listTitle.copyWith(color: t.ink)),
+                      if (summary != null && summary.isNotEmpty) ...[
+                        // `.opt-d { margin-top: 5px }` — bù trừ quang học, cùng
+                        // con số với thẻ tuyến ở màn Menu.
+                        const SizedBox(height: 5),
+                        Text(summary,
+                            style: AppText.lede.copyWith(color: t.inkMuted)),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpace.x6),
+                // Dấu › căn GIỮA theo chiều dọc của cả hàng, không theo dòng
+                // đầu: bản vẽ neo nó ở `top: 50%`. Với một hàng hai dòng, căn
+                // theo dòng đầu sẽ đẩy nó lên lệch hẳn khỏi tâm thị giác.
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: AppChevron(color: t.inkFaint),
+                ),
+              ],
+            ),
           ),
         ),
       ),

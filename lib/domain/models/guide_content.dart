@@ -29,9 +29,21 @@ class GuideStep {
   final LocalizedText title;
   final LocalizedText body;
 
+  /// MỘT CÂU dưới tiêu đề ở MỤC LỤC — `opt-d` của bản vẽ.
+  ///
+  /// ⚠ KHÔNG PHẢI [body] rút gọn. Câu đầu của một bài đọc được viết để MỞ ĐẦU
+  /// nó, không phải để tóm tắt nó — hai vai khác nhau, và lấy nhầm cho ra một
+  /// mục lục đọc như ba câu bỏ lửng. Cùng lý lẽ đã tách `zone.summary` khỏi
+  /// `zone.welcomeText`.
+  ///
+  /// Null ⇒ mục lục chỉ hiện tiêu đề. Hàng vẫn có mặt và vẫn bấm được.
+  final LocalizedText? summary;
+
+
   const GuideStep({
     required this.title,
     required this.body,
+    this.summary,
     this.iconId,
     this.imagePath,
   });

@@ -265,9 +265,6 @@ abstract final class UiKeys {
 
   // ── hướng dẫn sử dụng ──
   static const guideTitle = 'guide.title';
-  static const guideSubtitle = 'guide.subtitle';
-  static const guideClose = 'guide.close';
-  static const guideStepSemantics = 'guide.stepSemantics'; // {i} {n}
   // Bộ bước MẶC ĐỊNH khi bundle chưa khai báo `guide.steps`. Màn hướng dẫn
   // không bao giờ được để trống — đây là thứ nhân viên chỉ vào khi khách hỏi.
   static const guideDefaultHeadphonesTitle = 'guide.default.headphones.title';
@@ -528,9 +525,6 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.menuItemToursDesc: 'Các tuyến gợi ý theo thời gian bạn có.',
 
   UiKeys.guideTitle: 'Hướng dẫn sử dụng',
-  UiKeys.guideSubtitle: 'Ba điều cần biết trước khi bắt đầu.',
-  UiKeys.guideClose: 'Đã hiểu',
-  UiKeys.guideStepSemantics: 'Bước {i} trên {n}',
   UiKeys.guideDefaultHeadphonesTitle: 'Đeo tai nghe',
   UiKeys.guideDefaultHeadphonesBody:
       'Thuyết minh chỉ phát khi có tai nghe, để không làm phiền khách bên cạnh. '

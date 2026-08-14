@@ -515,6 +515,17 @@ abstract final class ManifestParser {
         out.add(GuideStep(
           title: _reqLocalized(item, 'title', ctx, fallbackLang),
           body: _reqLocalized(item, 'body', ctx, fallbackLang),
+          // Tuỳ chọn: thiếu thì mục lục chỉ hiện tiêu đề — mất một dòng chữ,
+          // không mất lối đi. Xem doc [GuideStep.summary].
+          //
+          // ⚠ KHOÁ `audio` CỦA MỘT BƯỚC LÀ CHỖ ĐÃ GIỮ, CHƯA ĐỌC. Bản vẽ có nút
+          // "Nghe thử" ở trang chi tiết; chưa bảo tàng nào thu tiếng cho mục
+          // hướng dẫn, nên nút chưa dựng và khoá chưa parse. Nó được nêu ở đây
+          // để không ai dùng lại cái tên ấy cho việc khác — và để ngày có dữ
+          // liệu thì chỉ phải nối dây, không phải sửa schema lần hai.
+          // KHÔNG thêm một field luôn null vào model chỉ để giữ chỗ: một
+          // trường không ai đọc thì sớm muộn có người tin là nó đang chạy.
+          summary: _optLocalized(item, 'summary', ctx, fallbackLang),
           iconId: icon is String && icon.isNotEmpty ? icon : null,
           imagePath: imagePath,
         ));
