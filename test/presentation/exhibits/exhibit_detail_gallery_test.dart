@@ -52,13 +52,21 @@ Widget _app({required int major, required int minor}) {
     onChime: () {},
   );
 
+  // MỘT instance duy nhất, cấp cho CẢ HAI chỗ. Màn 4c có dải ngôn ngữ đọc
+  // thẳng `LanguageController` (danh sách tiếng + chọn tiếng), trong khi
+  // ContentProvider cũng cần đúng controller đó để giải chuỗi. Dựng hai bản
+  // riêng là tạo hai nguồn sự thật: chạm vào dải tiếng sẽ đổi một bản mà chữ
+  // trên màn đọc bản kia.
+  final language = LanguageController(available: const ['vi'], fallback: 'vi');
+
   return MultiProvider(
     providers: [
+      ChangeNotifierProvider<LanguageController>.value(value: language),
       ChangeNotifierProvider<ContentProvider>(
         create: (_) => ContentProvider(
           repository: repo,
           imagePathResolver: (_) => null,
-          language: LanguageController(available: const ['vi'], fallback: 'vi'),
+          language: language,
         ),
       ),
       ChangeNotifierProvider<AudioProvider>(
@@ -92,6 +100,15 @@ String? _galleryValue(WidgetTester tester) {
   return (finder.evaluate().single.widget as Semantics).properties.value;
 }
 
+/// Số vạch chỉ số (`.sdots`) đang hiện — 18x2 mỗi vạch.
+int _dashes(WidgetTester tester) => find
+    .byWidgetPredicate((w) =>
+        w is Container &&
+        w.constraints?.maxWidth == 18 &&
+        w.constraints?.maxHeight == 2)
+    .evaluate()
+    .length;
+
 void main() {
   setUp(() async {
     _repo = MockZoneRepository(simulatedLatency: Duration.zero);
@@ -116,6 +133,10 @@ void main() {
       await tester.drag(find.byType(PageView), Offset(pages * w, 0));
       await tester.pumpAndSettle();
     }
+
+    // Vạch chỉ số: mấy vạch là mấy tư liệu. Đây là thứ THAY CHỖ bộ đếm "1/3"
+    // của bản trước, nên nó phải được canh ở đúng chỗ bộ đếm từng được canh.
+    expect(_dashes(tester), 3);
 
     await swipe(-0.6);
     expect(_galleryValue(tester), 'Ảnh 2 trên 3');
@@ -144,7 +165,10 @@ void main() {
     await tester.tap(_semantics('Xem ảnh lớn'));
     await tester.pumpAndSettle();
     expect(find.byType(InteractiveViewer), findsWidgets);
-    expect(find.text('1/3'), findsOneWidget);
+    // BỘ ĐẾM "1/3" ĐÃ BỊ GỠ, và test này đổi theo chứ không phải hỏng: bản vẽ
+    // v6 nói vị trí bằng HÌNH — mấy vạch là mấy tư liệu, vạch sáng là cái đang
+    // xem. Một bộ đếm bằng chữ nói lại đúng điều đó lần thứ hai.
+    expect(find.text('1/3'), findsNothing);
 
     // Lật sang ảnh 2 TRONG màn xem lớn. Cú kéo này cũng khoá luôn hợp đồng
     // `panEnabled: _zoomed`: nếu InteractiveViewer giành mất cú kéo ngang khi
@@ -152,7 +176,6 @@ void main() {
     final viewer = find.byType(InteractiveViewer).first;
     await tester.drag(viewer, Offset(-tester.getSize(viewer).width * 0.6, 0));
     await tester.pumpAndSettle();
-    expect(find.text('2/3'), findsOneWidget);
 
     await tester.tap(_semantics('Đóng ảnh'));
     await tester.pumpAndSettle();
@@ -199,6 +222,9 @@ void main() {
 
     expect(find.byType(PageView), findsNothing);
     expect(_semantics('Dải ảnh hiện vật'), findsNothing);
+    // Một tư liệu thì KHÔNG có vạch chỉ số nào. Một vạch đơn độc không nói
+    // "còn nữa" — nó chỉ là một dấu gạch không ai giải thích.
+    expect(_dashes(tester), 0);
 
     handle.dispose();
     await tester.pumpWidget(const SizedBox());

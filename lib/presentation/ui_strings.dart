@@ -98,21 +98,16 @@ abstract final class UiKeys {
 
   // ── exhibit detail (màn 4) ──
   static const exhibitNotFound = 'exhibit.notFound';
-  static const exhibitBack = 'exhibit.back';
   static const exhibitRestart = 'exhibit.restart';
   static const exhibitNext = 'exhibit.next';
   static const exhibitPlay = 'exhibit.play';
   static const exhibitPause = 'exhibit.pause';
   static const exhibitSectionIntro = 'exhibit.section.intro';
   static const exhibitSectionMeaning = 'exhibit.section.meaning';
-  static const exhibitSectionSpecs = 'exhibit.section.specs';
   // dải ảnh (vuốt ngang trên thẻ ảnh) + xem ảnh lớn
-  static const exhibitGalleryCounter = 'exhibit.gallery.counter'; // {i} {n}
   static const exhibitImageOpen = 'exhibit.image.open';
   static const exhibitImageClose = 'exhibit.image.close';
   // accessibility (screen reader)
-  static const exhibitProgressLabel = 'exhibit.progress.label';
-  static const exhibitDurationSpoken = 'exhibit.duration.spoken'; // {m} {s}
   static const exhibitGalleryLabel = 'exhibit.gallery.label';
   static const exhibitGalleryPosition = 'exhibit.gallery.position'; // {i} {n}
 
@@ -418,19 +413,14 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.zoneIdentifyingSemantics: 'Đang xác định khu trưng bày quanh bạn',
 
   UiKeys.exhibitNotFound: 'Không tìm thấy hiện vật',
-  UiKeys.exhibitBack: 'Quay lại',
   UiKeys.exhibitRestart: 'Về đầu',
   UiKeys.exhibitNext: 'Tiếp',
   UiKeys.exhibitPlay: 'Phát',
   UiKeys.exhibitPause: 'Tạm dừng',
   UiKeys.exhibitSectionIntro: 'Giới thiệu',
   UiKeys.exhibitSectionMeaning: 'Ý nghĩa',
-  UiKeys.exhibitSectionSpecs: 'Thông số',
-  UiKeys.exhibitGalleryCounter: '{i}/{n}',
   UiKeys.exhibitImageOpen: 'Xem ảnh lớn',
   UiKeys.exhibitImageClose: 'Đóng ảnh',
-  UiKeys.exhibitProgressLabel: 'Tiến trình thuyết minh',
-  UiKeys.exhibitDurationSpoken: '{m} phút {s} giây',
   UiKeys.exhibitGalleryLabel: 'Dải ảnh hiện vật',
   UiKeys.exhibitGalleryPosition: 'Ảnh {i} trên {n}',
 

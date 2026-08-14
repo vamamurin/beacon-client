@@ -53,7 +53,16 @@ import 'package:flutter/material.dart';
 import 'museum_tokens.dart';
 
 /// Hình của dấu — tam giác phát hay hai gạch tạm dừng.
-enum PlayGlyph { play, pause }
+/// Bốn hình của cùng MỘT dấu. Chúng ở chung một enum vì chúng ở chung một ngữ
+/// pháp nét: khung 24, path chép thẳng từ bản vẽ, không hộp, không viền, không
+/// nền, bóng đổ thay cho màn chắn.
+///
+/// [skipPrev] và [skipNext] gia nhập ở màn Chi tiết hiện vật. Trước đó hai nút
+/// ấy dùng `Icons.first_page` / `Icons.last_page` của Material — đúng nghĩa
+/// nhưng SAI TỪ VỰNG: độ dày nét, bán kính bo và cách căn trong khung của
+/// Material không khớp với nét vẽ tay mà cả app đang dùng, và ba nút của trình
+/// phát đứng CẠNH NHAU nên sự lệch ấy lộ ra rõ nhất đúng ở chỗ nó có hại nhất.
+enum PlayGlyph { play, pause, skipPrev, skipNext }
 
 /// Dấu phát/tạm dừng. Một nét trần, không hộp, không viền, không nền.
 ///
@@ -156,6 +165,24 @@ class _PlayMarkPainter extends CustomPainter {
               5.4 * k, 3.8 * k, 10.2 * k, 20.2 * k, r))
           ..addRRect(RRect.fromLTRBR(
               13.8 * k, 3.8 * k, 18.6 * k, 20.2 * k, r));
+      case PlayGlyph.skipPrev:
+        // Tam giác quay trái + vạch chặn bên trái. Path của bản vẽ, giữ nguyên
+        // toạ độ để so được với ba hình kia.
+        path
+          ..moveTo(18.6 * k, 5.4 * k)
+          ..lineTo(18.6 * k, 18.6 * k)
+          ..lineTo(9.4 * k, 12 * k)
+          ..close()
+          ..addRRect(RRect.fromLTRBR(4.6 * k, 5.4 * k, 6.8 * k, 18.6 * k,
+              Radius.circular(1 * k)));
+      case PlayGlyph.skipNext:
+        path
+          ..moveTo(5.4 * k, 5.4 * k)
+          ..lineTo(5.4 * k, 18.6 * k)
+          ..lineTo(14.6 * k, 12 * k)
+          ..close()
+          ..addRRect(RRect.fromLTRBR(17.2 * k, 5.4 * k, 19.4 * k, 18.6 * k,
+              Radius.circular(1 * k)));
     }
 
     // Bóng TRƯỚC, nét SAU — xem khối doc "tương phản lấy từ bóng đổ" ở đầu
