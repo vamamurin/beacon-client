@@ -42,6 +42,24 @@ class HeroImage extends StatelessWidget {
   /// sai. Xem doc [MuseumTokens.imageFallback].
   final Gradient? fallback;
 
+  /// Phần nào của ảnh được giữ lại khi [fit] cắt bớt — bản Dart của
+  /// `background-position` trong bản vẽ.
+  ///
+  /// Quy đổi: CSS `center P%` ⇒ `Alignment(0, 2·P − 1)`. Bản vẽ dùng hai giá
+  /// trị, và cả hai đều KHÔNG phải mặc định:
+  ///
+  ///     `.gate .img`   center 34%  ⇒  Alignment(0, -0.32)
+  ///     `.mhero .img`  center 30%  ⇒  Alignment(0, -0.40)
+  ///
+  /// Cả hai kéo khung nhìn LÊN TRÊN tâm ảnh, và đó không phải khẩu vị: đáy của
+  /// hai khối này bị veil đóng gần kín để đỡ cụm chữ, nên phần ảnh CÒN ĐƯỢC
+  /// NHÌN nằm ở nửa trên. Căn giữa (mặc định của Flutter) đẩy chủ thể xuống
+  /// đúng vùng đã bị phủ.
+  ///
+  /// Mặc định [Alignment.center] cho mọi call site còn lại — ảnh thẻ và
+  /// thumbnail không có luật nào khác.
+  final Alignment alignment;
+
   const HeroImage({
     super.key,
     required this.filePath,
@@ -49,6 +67,7 @@ class HeroImage extends StatelessWidget {
     this.cacheWidth,
     this.fallback,
     this.fit = BoxFit.cover,
+    this.alignment = Alignment.center,
   });
 
   /// Cách ảnh lấp khung.
@@ -85,6 +104,7 @@ class HeroImage extends StatelessWidget {
     return Image.file(
       file,
       fit: fit,
+      alignment: alignment,
       cacheWidth: cacheWidth,
       // Any decode/IO error -> gradient, never a broken-image box.
       errorBuilder: (_, __, ___) => _fallbackBox(context),

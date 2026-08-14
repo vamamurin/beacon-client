@@ -198,8 +198,72 @@ abstract final class AppSpace {
 /// dự tính. Chỗ nguy hiểm nhất là màn Chi tiết hiện vật (sân khấu 422 + bản lý
 /// lịch) — nếu tràn thì cách sửa là cho khối đó cuộn, KHÔNG phải bóp con số.
 abstract final class DesignSize {
+  /// Chiều cao khung bản vẽ. Mọi con số trong lớp này được ĐO trong khung
+  /// 390×844, nên nó là mẫu số của [verticalScale].
+  static const double frameHeight = 844;
+
+  /// ═════════════════════════════════════════════════════════════════════════
+  /// NHỊP DỌC QUY VỀ CHIỀU CAO MÁY THẬT — và đây KHÔNG phải `AppRatio` sống lại
+  /// ═════════════════════════════════════════════════════════════════════════
+  ///
+  /// `AppRatio` bị gỡ vì nó quy MỌI chiều cao của bản vẽ thành tỉ lệ, kể cả
+  /// những con số mà bản vẽ đã cân bằng mắt trên một cỡ ảnh cụ thể (hero 580,
+  /// sân khấu 422). Doc phía trên giữ nguyên giá trị của bài học đó.
+  ///
+  /// Hàm này hẹp hơn hẳn. Nó chỉ áp cho những con số mà bản vẽ đã nói rõ là
+  /// **một PHẦN CỦA MÀN**, chứ không phải một vật có kích thước riêng:
+  ///
+  ///   [gateTop]   neo cụm chữ của hai màn khoảnh khắc (Poster, Cảm ơn)
+  ///   [menuHero]  hero màn Menu — bản vẽ tự lập luận bằng tỉ lệ: *"hero cao
+  ///               ~69% màn với một nút, so với thẻ chủ đề 215 bên dưới — CỠ đã
+  ///               nói cái nào là tuyến chính"*
+  ///   [cardGrid]  lưới ảnh thẻ, KHOÁ với [menuHero] ở tỉ lệ 215:580 = 0.371 —
+  ///               chính tỉ lệ mà `.zhero.near` mượn lại. Scale hero mà để lưới
+  ///               đứng yên là bẻ gãy quan hệ đó.
+  ///
+  /// Điểm chung của cả ba: **không có nội dung nào đẩy chúng**. Cả ba là chiều
+  /// cao KHAI BÁO, và trên máy khác 844 thì phần màn chúng chiếm trôi đi trong
+  /// khi con số dp đứng im — mà ở một tấm áp phích và ở một hero "cỡ nói lên
+  /// thứ bậc" thì phần màn chiếm được CHÍNH LÀ nội dung.
+  ///
+  /// ⚠ KHÔNG ÁP CHO: chiều cao của một VẬT (thumb, badge, vùng chạm), khoảng
+  /// cách trên lưới 4dp, và cỡ chữ. Ba thứ đó có luật riêng và luật đó không
+  /// phải "bao nhiêu phần trăm màn hình" — xem mục (5) và (6) ở đầu file. Muốn
+  /// thêm một call site mới, phải nêu được vì sao con số đó cũng không có nội
+  /// dung nào đẩy.
+  ///
+  /// Clamp `[0.92, 1.12]`: dưới sàn là máy quá thấp, ở đó co thêm sẽ dí cụm chữ
+  /// vào dòng "Powered by"; trên trần là máy bảng, ở đó phóng tiếp thì cụm chữ
+  /// rơi xuống quá nửa dưới và thôi đọc ra là một tấm áp phích.
+  static double verticalScale(BuildContext context) =>
+      (MediaQuery.sizeOf(context).height / frameHeight).clamp(0.92, 1.12);
+
+  /// ═════════════════════════════════════════════════════════════════════════
+  /// HỆ SỐ PHÓNG CỦA HÀNG THAO TÁC — một quyết định sản phẩm, KHÔNG phải bản vẽ
+  /// ═════════════════════════════════════════════════════════════════════════
+  ///
+  /// Bản vẽ ghi 66 và 58, và app đã dựng đúng hai con số đó. Hệ số này là một
+  /// lần CỐ Ý đi khỏi bản vẽ, chốt sau khi nhìn trên máy thật: ba hàng của
+  /// Poster là toàn bộ phần bấm được của màn, và ở cỡ của bản vẽ chúng đọc ra
+  /// nhẹ hơn vai trò của mình.
+  ///
+  /// ⚠ NÓ ĐỨNG RIÊNG, KHÔNG NƯỚNG VÀO [AppSpace.row] / [AppSpace.rowLead]. Hai
+  /// hằng đó là con số của bản vẽ và còn được ngăn kéo dùng — nướng hệ số vào
+  /// chúng là âm thầm phóng cả ngăn kéo, nơi hàng nằm trong một danh sách chứ
+  /// không phải là cả màn. Đây cũng là chỗ để xoay nếu sau này nhìn lại thấy
+  /// quá tay: đổi đúng một số ở đây, không đi tìm ở năm chỗ.
+  ///
+  /// 1.15 trên máy 360×800 cho 72 / 63 (đã nhân [verticalScale] 0.948), tức ba
+  /// hàng chiếm 24.8% chiều cao màn thay vì 22.8%.
+  static const double rowBoost = 1.15;
+
   /// `.mhero` — hero của màn Menu. Chui lên dưới thanh trên nên phần nhìn thấy
   /// dưới thanh còn 480.
+  ///
+  /// ⚠ ĐỌC QUA [verticalScale], đừng dùng thẳng: 580 là 68.7% của khung vẽ, và
+  /// chính tỉ lệ đó là lập luận "đây là tuyến chính". Trên máy 800dp mà giữ
+  /// nguyên 580 thì hero chiếm 72.5% — hero nuốt mất khối bên dưới, và khách
+  /// không còn thấy có gì để cuộn.
   static const double menuHero = 580;
 
   /// `.zhero` — ảnh của khu đang đứng.
@@ -219,6 +283,11 @@ abstract final class DesignSize {
   static const double exhibitStage = 422;
 
   /// `.tgrid` — lưới ảnh của một thẻ ở khối thứ hai màn Menu.
+  ///
+  /// ⚠ ĐỌC QUA [verticalScale] cùng với [menuHero]. 215 : 580 = 0.371 là một
+  /// quan hệ có thật, không phải hai con số tình cờ: `.zhero.near` mượn đúng tỉ
+  /// lệ này thay vì bịa một tỉ lệ mới. Scale một cái mà để cái kia đứng yên là
+  /// làm hỏng thứ mà cả hai đang cùng nói.
   static const double cardGrid = 215;
 
   /// `--gate-top` — neo dọc của cặp chữ ký 22/48, đo từ MÉP TRÊN MÁY xuống đỉnh

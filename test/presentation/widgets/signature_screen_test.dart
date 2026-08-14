@@ -28,12 +28,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_theme.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
 import 'package:beacon_client/presentation/widgets/signature_screen.dart';
 
+/// Khung của bản vẽ. Ở đúng cỡ này mọi hệ số quy đổi bằng 1, nên các phép so
+/// vị trí bên dưới đọc thẳng ra con số của bản vẽ.
 const Size _phone = Size(390, 844);
+
+/// Máy thực địa: THẤP HƠN khung bản vẽ. Đây là cỡ mà các con số tuyệt đối bắt
+/// đầu nói dối về bố cục, nên nó có mặt trong file này.
+const Size _shortPhone = Size(360, 800);
 
 Widget _host(Widget child, {MuseumThemeId theme = MuseumThemeId.light}) =>
     MaterialApp(theme: buildMuseumTheme(theme), home: child);
@@ -45,6 +52,11 @@ Widget _poster() => const SignatureScreen(
       kicker: 'Bảo tàng',
       title: 'Chứng tích Chiến tranh',
       poweredBy: true,
+      rows: [
+        AppRow(label: 'Tham quan', lead: true),
+        AppRow(label: 'Giới thiệu bảo tàng'),
+        AppRow(label: 'Câu hỏi thường gặp'),
+      ],
     );
 
 /// Cảm ơn: cụm chữ mang thêm câu dặn dò, và hàng thao tác ghim ở đáy.
@@ -55,19 +67,46 @@ Widget _farewell({String lede = 'Chuyến tham quan đã kết thúc.'}) =>
       kicker: 'Cảm ơn',
       title: 'quý khách',
       lede: lede,
-      bottom: const SizedBox(height: 66),
+      // Hàng THẬT, không phải một `SizedBox` giữ chỗ: hàng "XONG" phải phóng
+      // đúng bằng hàng "THAM QUAN" của màn kia, và một ô đệm cứng thì không
+      // canh được điều đó.
+      bottom: const AppRow(label: 'Xong', lead: true),
     );
 
 void main() {
   setUp(() {
-    // Khoá cỡ màn để phép so vị trí có nghĩa. 390×844 là khung bản vẽ được đo.
     TestWidgetsFlutterBinding.ensureInitialized();
   });
 
-  Future<double> topOf(WidgetTester tester, Widget screen, String text) async {
-    await tester.binding.setSurfaceSize(_phone);
-    addTearDown(() => tester.binding.setSurfaceSize(null));
+  /// Đặt cỡ màn mà CÂY WIDGET nhìn thấy — xem [pump].
+  void useScreen(WidgetTester tester, Size size) {
+    tester.view.devicePixelRatio = 3.0;
+    tester.view.physicalSize = size * 3.0;
+    addTearDown(tester.view.reset);
+  }
+
+  /// Dựng màn ở một cỡ máy cụ thể.
+  ///
+  /// ⚠ ĐÃ TỪNG DÙNG `tester.binding.setSurfaceSize`, VÀ NÓ KHÔNG LÀM GÌ CẢ.
+  /// Đo được: sau `setSurfaceSize(Size(390, 844))` thì `MediaQuery.sizeOf`
+  /// trong cây vẫn trả `Size(800, 600)` mặc định.
+  ///
+  /// Suốt thời gian đó file này xanh, vì mọi thứ nó kiểm đều là hằng số không
+  /// phụ thuộc cỡ màn — dòng chú thích "khoá cỡ màn 390×844" mô tả một điều
+  /// không xảy ra. Lỗi chỉ lộ ra khi [DesignSize.gateTop] bắt đầu quy theo
+  /// chiều cao máy thật.
+  ///
+  /// Bài học chung: một lệnh setup thất bại IM LẶNG thì test không bắt được nó
+  /// — chỉ có một phép đo mới bắt được.
+  Future<void> pump(WidgetTester tester, Widget screen,
+      {Size size = _phone}) async {
+    useScreen(tester, size);
     await tester.pumpWidget(_host(screen));
+  }
+
+  Future<double> topOf(WidgetTester tester, Widget screen, String text,
+      {Size size = _phone}) async {
+    await pump(tester, screen, size: size);
     return tester.getTopLeft(find.text(text)).dy;
   }
 
@@ -116,11 +155,84 @@ void main() {
     });
   });
 
+  group('nhịp dọc quy theo chiều cao máy', () {
+    // Bản vẽ đo trên 390×844. Máy thực địa là 360×800 — THẤP HƠN, nên dp tuyệt
+    // đối cho ra một cụm chữ đứng im trong khi khoảng thở dưới đáy tóp lại, và
+    // ba hàng thao tác chiếm một phần màn khác hẳn bản vẽ. Ở một tấm áp phích
+    // thì tỉ lệ LÀ nội dung; những con số dưới đây canh đúng chỗ đó.
+    //
+    // Số kỳ vọng viết thẳng, KHÔNG tính lại bằng chính công thức của code: một
+    // test gọi lại `DesignSize.verticalScale` sẽ xanh kể cả khi công thức sai.
+
+    testWidgets('máy thấp hơn khung vẽ ⇒ neo cụm chữ co theo', (tester) async {
+      final top = await topOf(tester, _poster(), 'Bảo tàng',
+          size: _shortPhone);
+
+      // 200 × (800 / 844) = 189.6
+      expect(top, moreOrLessEquals(189.6, epsilon: 1),
+          reason: 'Neo không co theo chiều cao máy. Trên máy 800dp mà vẫn giữ '
+              'đúng 200 thì cụm chữ tụt xuống thấp hơn bản vẽ về tỉ lệ, và '
+              'khoảng thở dưới đáy — thứ làm poster ra poster — bị ăn mất.');
+    });
+
+    testWidgets('ba hàng phóng theo rowBoost', (tester) async {
+      await pump(tester, _poster(), size: _shortPhone);
+
+      final rows = find.byType(AppRow);
+      expect(rows, findsNWidgets(3));
+
+      // 66 × (800/844) × 1.15 = 71.9  ·  58 × (800/844) × 1.15 = 63.2
+      expect(tester.getSize(rows.at(0)).height,
+          moreOrLessEquals(71.9, epsilon: 0.5),
+          reason: 'Hàng dẫn đường chính không còn phóng theo '
+              'DesignSize.rowBoost.');
+      expect(tester.getSize(rows.at(1)).height,
+          moreOrLessEquals(63.2, epsilon: 0.5));
+      expect(tester.getSize(rows.at(2)).height,
+          moreOrLessEquals(63.2, epsilon: 0.5));
+    });
+
+    testWidgets('hàng dẫn đường của hai màn phóng BẰNG NHAU', (tester) async {
+      await pump(tester, _poster(), size: _shortPhone);
+      final poster = tester.getSize(find.byType(AppRow).first).height;
+
+      await pump(tester, _farewell(), size: _shortPhone);
+      final farewell = tester.getSize(find.byType(AppRow).first).height;
+
+      expect(farewell, moreOrLessEquals(poster, epsilon: 0.1),
+          reason: 'Hàng "XONG" và hàng "THAM QUAN" lệch nhau '
+              '${(farewell - poster).abs()}dp. Hai màn là một cặp đối xứng — '
+              'hệ số phải đến từ RowScale của khuôn chung, không phải từ một '
+              'con số gõ lại ở từng màn.');
+    });
+
+    testWidgets('ở đúng khung bản vẽ thì neo trở lại tròn 200', (tester) async {
+      // Bất biến ngược: hệ số chỉ được phép ĐỔI bố cục khi máy khác 844. Nếu
+      // test này đỏ, nghĩa là rowBoost đã rò sang neo — xem doc `_buildBody`.
+      final top = await topOf(tester, _poster(), 'Bảo tàng');
+      expect(top, moreOrLessEquals(DesignSize.gateTop, epsilon: 0.5));
+    });
+
+    testWidgets('hàng NGOÀI hai màn khoảnh khắc giữ đúng số của bản vẽ',
+        (tester) async {
+      // Ngăn kéo không có RowScale nào phía trên ⇒ 58, y như bản vẽ. Đây là
+      // toàn bộ lý do hệ số không được nướng vào AppSpace.row.
+      useScreen(tester, _shortPhone);
+      await tester.pumpWidget(_host(
+        const Scaffold(body: AppRow(label: 'Cài đặt')),
+      ));
+
+      expect(tester.getSize(find.byType(AppRow)).height,
+          moreOrLessEquals(AppSpace.row, epsilon: 0.1),
+          reason: 'Hàng ngoài hai màn khoảnh khắc đã bị phóng theo. Hệ số phải '
+              'do RowScale phát tại chỗ, không nằm trong AppSpace.');
+    });
+  });
+
   group('hai hòn đảo luôn tối', () {
     testWidgets('giữ preset tối kể cả khi app đang ở theme sáng',
         (tester) async {
-      await tester.binding.setSurfaceSize(_phone);
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      useScreen(tester, _phone);
       await tester.pumpWidget(_host(_poster(), theme: MuseumThemeId.light));
 
       // Đọc token TỪ BÊN TRONG cây con — đó mới là thứ các widget con thấy.
@@ -133,8 +245,7 @@ void main() {
     });
 
     testWidgets('ở theme tối thì không có gì đổi', (tester) async {
-      await tester.binding.setSurfaceSize(_phone);
-      addTearDown(() => tester.binding.setSurfaceSize(null));
+      useScreen(tester, _phone);
       await tester.pumpWidget(_host(_poster(), theme: MuseumThemeId.dark));
 
       final inside = tester.element(find.text('Bảo tàng'));

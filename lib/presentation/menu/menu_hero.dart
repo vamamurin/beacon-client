@@ -39,6 +39,8 @@
 // Ranh giới nằm ở ĐỘ ĐÓNG CỦA VEIL, không ở "có ảnh hay không có ảnh". Cùng
 // luật đã áp cho cụm `.zplay` ở màn danh sách hiện vật.
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -68,15 +70,25 @@ class MenuHero extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
 
     return SizedBox(
-      // 580dp ĐÚNG NHƯ BẢN VẼ, không quy đổi theo chiều cao màn — xem doc
-      // [DesignSize] cho lý do bản tỉ lệ trước đó đã bị gỡ.
-      height: DesignSize.menuHero,
+      // 580 CỦA BẢN VẼ, QUY THEO CHIỀU CAO MÁY.
+      //
+      // Không phải `AppRatio` cũ sống lại — xem doc [DesignSize.verticalScale]
+      // cho ranh giới. Con số này nằm trong diện được quy đổi vì bản vẽ tự lập
+      // luận về nó BẰNG TỈ LỆ: hero cao ~69% màn với đúng một nút, so với thẻ
+      // 215 bên dưới, và "CỠ đã nói cái nào là tuyến chính". Trên máy 800dp mà
+      // giữ nguyên 580 thì nó thành 72.5% — hero nuốt mất khối bên dưới và
+      // khách không còn thấy có gì để cuộn, tức mất đúng cái mà tỉ lệ đang nói.
+      height: DesignSize.menuHero * DesignSize.verticalScale(context),
       child: Stack(
         fit: StackFit.expand,
         children: [
           HeroImage(
             filePath: content.welcomeImagePath,
             veil: _veil(t),
+            // `.mhero .img { background-position: center 30% }` — xem doc
+            // [HeroImage.alignment] cho phép quy đổi và cho lý do khung nhìn
+            // phải kéo lên trên tâm ảnh.
+            alignment: const Alignment(0, -0.40),
             cacheWidth:
                 (size.width * MediaQuery.devicePixelRatioOf(context)).round(),
           ),
@@ -187,7 +199,16 @@ class _Cta extends StatelessWidget {
           splashColor: Colors.transparent,
           highlightColor: t.surface.withValues(alpha: 0.35),
           child: Container(
-            height: AppSpace.tap,
+            // `.mcta { height: var(--tap) }` — quy theo màn NHƯNG CÓ SÀN.
+            //
+            // 48 là sàn a11y, không phải một con số thẩm mỹ, nên trên máy thấp
+            // hơn khung vẽ nó KHÔNG được co xuống 45.5. Sàn thắng tỉ lệ ở đây
+            // và chỉ ở đây: hero là một phần của màn, còn nút là một VẬT ngón
+            // tay phải trúng.
+            height: math.max(
+              AppSpace.tap,
+              AppSpace.tap * DesignSize.verticalScale(context),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.x5),
             decoration: BoxDecoration(
               border: Border.all(color: t.ink.withValues(alpha: 0.24)),

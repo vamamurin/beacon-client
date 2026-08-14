@@ -15,6 +15,22 @@
 // [DesignSize.gateTop], nên sự đối xứng là một TÍNH CHẤT chứ không phải một thoả
 // thuận miệng.
 //
+// ═══════════════════════════════════════════════════════════════════════════
+// HAI MÀN NÀY — VÀ CHỈ HAI MÀN NÀY — QUY NHỊP DỌC THEO CHIỀU CAO MÁY
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Mọi màn khác của app dùng dp tuyệt đối của bản vẽ; doc [DesignSize] kể vì sao
+// và bài học đó vẫn nguyên giá trị. Cặp này là ngoại lệ vì ở đây KHÔNG CÓ NỘI
+// DUNG NÀO ĐẨY BỐ CỤC — không danh sách, không khối cuộn — nên cả màn chỉ là
+// một cụm chữ neo cứng cộng một khoảng thở, và trên máy khác 844 thì khoảng thở
+// đó phình/tóp trong khi cụm chữ đứng im. Ở một tấm áp phích thì TỈ LỆ là nội
+// dung, nên nó phải là thứ được giữ.
+//
+// Ba hàng thao tác còn ăn thêm [DesignSize.rowBoost] — một lần cố ý đi khỏi con
+// số 66/58 của bản vẽ, chốt sau khi nhìn trên máy thật. Khuôn này phát hệ số đó
+// xuống bằng [RowScale] để cả hàng của Poster lẫn hàng "XONG" của màn Cảm ơn
+// phóng BẰNG NHAU mà không call site nào phải nhớ.
+//
 // Cặp chữ 22/48 ([AppText.posterKicker] / [AppText.posterTitle]) chỉ được dùng
 // ở đúng hai chỗ này. Mọi màn ở giữa là trang CÓ NỘI DUNG, không phải khoảnh
 // khắc.
@@ -36,6 +52,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/theme/app_rule.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
@@ -130,65 +147,94 @@ class SignatureScreen extends StatelessWidget {
   Widget _buildBody(BuildContext context) {
     final t = context.tokens;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // HAI HỆ SỐ, VÀ CHÚNG CỐ Ý KHÔNG BẰNG NHAU
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    //   neo cụm chữ  = 200 × verticalScale
+    //   chiều cao hàng = 66/58 × verticalScale × rowBoost
+    //
+    // Neo KHÔNG ăn `rowBoost`, và đó là phần dễ làm sai nhất. Đẩy neo xuống là
+    // ăn vào khoảng thở dưới đáy — thứ duy nhất phân biệt một tấm áp phích với
+    // một danh sách có ảnh nền. Cụm chữ giữ đúng chỗ của bản vẽ (quy theo cỡ
+    // máy), ba hàng dày lên TẠI CHỖ, và khoảng trống còn lại co đúng bằng phần
+    // các hàng vừa lấy.
+    //
+    // Trên máy 360×800: neo 190, hàng 72 / 63 / 63 — cụm kết thúc ở ~71% chiều
+    // cao màn, còn lại ~29% cho khoảng thở và dòng "Powered by".
+    final vScale = DesignSize.verticalScale(context);
+
     return Scaffold(
       backgroundColor: t.surface,
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ẢNH CHẠM CẢ BỐN MÉP MÁY, kể cả sau thanh trạng thái. Đây là luật
-          // chung của app: màn nào có ảnh nền thì ảnh chạm mép trên — nếu để nó
-          // rơi xuống dưới vùng an toàn, ảnh thành một dải kẹp giữa hai vùng
-          // đen và cả màn thôi là một tấm áp phích.
-          HeroImage(
-            filePath: imagePath,
-            veil: _gradient(t),
-            cacheWidth: (MediaQuery.sizeOf(context).width *
-                    MediaQuery.devicePixelRatioOf(context))
-                .round(),
-          ),
-
-          // CỤM CHỮ NEO TUYỆT ĐỐI, không căn giữa bằng flex.
-          //
-          // Bản trước của màn Cảm ơn dùng hai ô đệm `Spacer()`, tức vị trí cụm
-          // chữ do ĐỘ DÀI CÂU DẶN DÒ quyết định: câu một dòng thì nó tụt xuống,
-          // câu bốn dòng thì trồi lên. Không ai thiết kế như vậy — đó là tác
-          // dụng phụ. Neo tuyệt đối cho cụm chữ đứng im ở một chỗ với mọi độ
-          // dài nội dung, và đứng đúng chỗ của màn kia.
-          Positioned(
-            top: DesignSize.gateTop,
-            left: 0,
-            right: 0,
-            child: _Titles(
-              kind: kind,
-              kicker: kicker,
-              title: title,
-              lede: lede,
-              rows: rows,
+      body: RowScale(
+        scale: vScale * DesignSize.rowBoost,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ẢNH CHẠM CẢ BỐN MÉP MÁY, kể cả sau thanh trạng thái. Đây là luật
+            // chung của app: màn nào có ảnh nền thì ảnh chạm mép trên — nếu để
+            // nó rơi xuống dưới vùng an toàn, ảnh thành một dải kẹp giữa hai
+            // vùng đen và cả màn thôi là một tấm áp phích.
+            HeroImage(
+              filePath: imagePath,
+              veil: _gradient(t),
+              // `background-position: center 34%` — và nó là HẰNG CỦA KHUÔN,
+              // không phải một nhánh của [SignatureKind]: bản vẽ ghi đúng con
+              // số ấy ở CẢ `.gate .img` LẪN `.backdrop .img`. Đưa nó vào enum
+              // sẽ gợi ý rằng hai màn khác nhau ở điểm này, mà chúng không.
+              //
+              // Khung nhìn kéo LÊN TRÊN tâm ảnh vì đáy hai màn này bị veil đóng
+              // gần kín để đỡ cụm chữ — chủ thể mà rơi xuống đó là mất. Xem doc
+              // [HeroImage.alignment] cho phép quy đổi từ CSS.
+              alignment: const Alignment(0, -0.32),
+              cacheWidth: (MediaQuery.sizeOf(context).width *
+                      MediaQuery.devicePixelRatioOf(context))
+                  .round(),
             ),
-          ),
 
-          if (bottom != null)
+            // CỤM CHỮ NEO TUYỆT ĐỐI, không căn giữa bằng flex.
+            //
+            // Bản trước của màn Cảm ơn dùng hai ô đệm `Spacer()`, tức vị trí
+            // cụm chữ do ĐỘ DÀI CÂU DẶN DÒ quyết định: câu một dòng thì nó tụt
+            // xuống, câu bốn dòng thì trồi lên. Không ai thiết kế như vậy — đó
+            // là tác dụng phụ. Neo tuyệt đối cho cụm chữ đứng im ở một chỗ với
+            // mọi độ dài nội dung, và đứng đúng chỗ của màn kia.
             Positioned(
+              top: DesignSize.gateTop * vScale,
               left: 0,
               right: 0,
-              bottom: 0,
-              child: SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpace.x12),
-                  child: bottom,
-                ),
+              child: _Titles(
+                kind: kind,
+                kicker: kicker,
+                title: title,
+                lede: lede,
+                rows: rows,
               ),
             ),
 
-          if (poweredBy)
-            const Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SafeArea(top: false, child: _PoweredBy()),
-            ),
-        ],
+            if (bottom != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.x12),
+                    child: bottom,
+                  ),
+                ),
+              ),
+
+            if (poweredBy)
+              const Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(top: false, child: _PoweredBy()),
+              ),
+          ],
+        ),
       ),
     );
   }

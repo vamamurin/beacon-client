@@ -54,6 +54,34 @@ import 'app_space.dart';
 import 'app_text.dart';
 import 'museum_tokens.dart';
 
+/// Hệ số phóng chiều cao hàng, do MÀN CHA đặt cho cả một cây con.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// VÌ SAO LÀ INHERITED WIDGET, KHÔNG PHẢI MỘT THAM SỐ CỦA [AppRow]
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Các hàng của Poster do `gate_screen.dart` dựng, còn thứ BIẾT về hệ số lại là
+/// [SignatureScreen] — cái khuôn bọc ngoài. Truyền bằng tham số thì mọi call
+/// site phải tự nhớ đọc [DesignSize.verticalScale] rồi nhân đúng thứ tự, và
+/// hàng "XONG" của màn Cảm ơn sẽ quên trong lần sửa đầu tiên. Hai màn khoảnh
+/// khắc phải phóng BẰNG NHAU, cùng lý do đã đưa `gateTop` thành một hằng chung:
+/// sự đối xứng phải là một tính chất, không phải một thoả thuận miệng.
+///
+/// KHÔNG CÓ TỔ TIÊN NÀO ⇒ 1.0. Đó là đường mặc định và là đường ĐÚNG cho ngăn
+/// kéo: ở đó hàng nằm trong một danh sách cuộn, không phải là cả màn, nên nó
+/// giữ đúng 58 của bản vẽ.
+class RowScale extends InheritedWidget {
+  final double scale;
+
+  const RowScale({super.key, required this.scale, required super.child});
+
+  static double of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<RowScale>()?.scale ?? 1.0;
+
+  @override
+  bool updateShouldNotify(RowScale oldWidget) => oldWidget.scale != scale;
+}
+
 class AppRow extends StatelessWidget {
   /// Nhãn. Truyền chuỗi THƯỜNG — khi [lead] bật, widget tự viết hoa (luật
   /// "chữ hoa là thuộc tính của vai trò" ở đầu app_text.dart).
@@ -120,7 +148,11 @@ class AppRow extends StatelessWidget {
           // ở mọi preset theo định nghĩa. Một token ít đi.
           highlightColor: t.ink.withValues(alpha: lead ? 0.22 : 0.12),
           child: SizedBox(
-            height: lead ? AppSpace.rowLead : AppSpace.row,
+            // CHIỀU CAO HÀNG = VÙNG BẤM. Không có padding nào bên trong nới
+            // thêm vùng chạm, nên phóng con số này là phóng đúng thứ ngón tay
+            // gặp — xem [RowScale] cho ai đặt hệ số và vì sao ngăn kéo không có.
+            height: (lead ? AppSpace.rowLead : AppSpace.row) *
+                RowScale.of(context),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpace.gutter),
               child: Row(
