@@ -34,13 +34,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/tour_progress.dart';
-import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/tour_progress_provider.dart';
 import 'package:beacon_client/presentation/summary/feedback_panel.dart';
 import 'package:beacon_client/presentation/summary/tour_qr.dart';
+import 'package:beacon_client/presentation/app/museum_top_bar.dart';
+import 'package:beacon_client/presentation/theme/app_row.dart';
+import 'package:beacon_client/presentation/theme/app_motion.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
@@ -118,65 +120,85 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
     return Scaffold(
       backgroundColor: t.surface,
-      body: SafeArea(
-        child: CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpace.gutter,
-                AppSpace.x6,
-                AppSpace.gutter,
-                AppSpace.x8,
-              ),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  Text(content.ui(UiKeys.summaryTitle),
-                      style: AppText.heroTitle.copyWith(color: t.ink)),
-                  const SizedBox(height: AppSpace.x3),
-                  Text(content.ui(UiKeys.summarySubtitle),
-                      style: AppText.lede.copyWith(color: t.inkMuted)),
-                  const SizedBox(height: AppSpace.x6),
+      body: Column(
+        children: [
+          // Thanh ĐỤC: phía sau là nền trang, không có ảnh hero nào. Nút ‹ là
+          // đường lui về tour — bản vẽ không còn nút "Quay lại tham quan" riêng
+          // ở chân trang, vì hai đường lui cho cùng một việc là thừa một.
+          MuseumTopBar(
+            title: content.ui(UiKeys.summaryTitle),
+            leading: TopBarLeading.back,
+          ),
+          Expanded(
+            child: CustomScrollView(
+              slivers: [
+                SliverList(
+                  delegate: SliverChildListDelegate([
+                    if (progress.isUntouched)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(AppSpace.gutter,
+                            AppSpace.x6, AppSpace.gutter, 0),
+                        child: _EmptyState(),
+                      )
+                    else ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(AppSpace.gutter,
+                            AppSpace.x5, AppSpace.gutter, 0),
+                        child: _Stats(progress: progress, elapsed: elapsed),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(AppSpace.gutter,
+                            AppSpace.x5, AppSpace.gutter, 0),
+                        child: _ZoneLedger(progress: progress),
+                      ),
+                    ],
 
-                  if (progress.isUntouched)
-                    const _EmptyState()
-                  else ...[
-                    _Stats(progress: progress, elapsed: elapsed),
-                    const SizedBox(height: AppSpace.x6),
-                    _ZoneChecklist(progress: progress),
-                  ],
+                    if (cfg.showFeedback)
+                      const Padding(
+                        padding: EdgeInsets.fromLTRB(
+                            AppSpace.gutter, AppSpace.x8, AppSpace.gutter, 0),
+                        child: FeedbackPanel(),
+                      ),
 
-                  if (cfg.showFeedback) ...[
-                    const SizedBox(height: AppSpace.x6),
-                    const FeedbackPanel(),
-                  ],
+                    if (cfg.showQr)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(AppSpace.gutter,
+                            AppSpace.x8, AppSpace.gutter, 0),
+                        child: TourQrCard(progress: progress, elapsed: elapsed),
+                      ),
 
-                  if (cfg.showQr) ...[
-                    const SizedBox(height: AppSpace.x6),
-                    TourQrCard(progress: progress, elapsed: elapsed),
-                  ],
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpace.gutter, AppSpace.x8, AppSpace.gutter, 0),
+                      child: Text(
+                        content.textOrNull(cfg.closing) ??
+                            content.ui(UiKeys.summaryClosingFallback),
+                        style: AppText.lede.copyWith(color: t.inkMuted),
+                      ),
+                    ),
 
-                  const SizedBox(height: AppSpace.x6),
-                  Text(
-                    content.textOrNull(cfg.closing) ??
-                        content.ui(UiKeys.summaryClosingFallback),
-                    style: AppText.lede.copyWith(color: t.inkMuted),
-                  ),
-
-                  const SizedBox(height: AppSpace.x8),
-                  _SecondaryButton(
-                    label: content.ui(UiKeys.summaryContinueCta),
-                    onPressed: () => Navigator.of(context).maybePop(),
-                  ),
-                  const SizedBox(height: AppSpace.x3),
-                  _PrimaryButton(
-                    label: content.ui(UiKeys.summaryEndCta),
-                    onPressed: _endTour,
-                  ),
-                ]),
-              ),
+                    // `.cta` — KHỐI ĐẶC DUY NHẤT CÒN LẠI TRONG CẢ APP, và nó
+                    // xuất hiện đúng một lần: ở hành động không quay lui được.
+                    // Vì không có gì khác cạnh tranh, sức nặng của nó CHÍNH LÀ
+                    // ý nghĩa — đây là dấu chấm hết.
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        AppSpace.gutter,
+                        AppSpace.x10,
+                        AppSpace.gutter,
+                        AppSpace.x12 + MediaQuery.paddingOf(context).bottom,
+                      ),
+                      child: _PrimaryButton(
+                        label: content.ui(UiKeys.summaryEndCta),
+                        onPressed: _endTour,
+                      ),
+                    ),
+                  ]),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -209,6 +231,10 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
+/// `.stats` — BA CON SỐ, không phải ba ô dashboard.
+///
+/// Không nền, không bo góc: chỉ hai vạch dọc chia cột và một vạch tóc dưới
+/// chân. Không cần vạch trên, vì phía trên đã là thanh điều hướng.
 class _Stats extends StatelessWidget {
   final TourProgress progress;
   final Duration elapsed;
@@ -217,37 +243,40 @@ class _Stats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.tokens;
     final content = context.watch<ContentProvider>();
 
-    String fraction(int a, int b) =>
-        content.uif(UiKeys.summaryStatFraction, {'a': '$a', 'b': '$b'});
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _StatTile(
-            label: content.ui(UiKeys.summaryStatZones),
-            value: fraction(progress.visitedMajors.length, progress.totalZones),
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: t.line)),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _StatTile(
+                label: content.ui(UiKeys.summaryStatZones),
+                value: '${progress.visitedMajors.length}',
+                // MẪU SỐ NÓI QUY MÔ mà không cần một câu nào: khách thấy ngay
+                // mình mới đi một phần ba bảo tàng. Nửa cỡ tử số để tử số vẫn
+                // là thứ đọc trước.
+                scale: '/${progress.totalZones}',
+              ),
+            ),
+            _StatTile(
+              label: content.ui(UiKeys.summaryStatExhibits),
+              value: '${progress.heardExhibits.length}',
+              divider: true,
+            ),
+            _StatTile(
+              label: content.ui(UiKeys.summaryStatDuration),
+              value: '${elapsed.inMinutes}',
+              divider: true,
+            ),
+          ].map((w) => w is Expanded ? w : Expanded(child: w)).toList(),
         ),
-        const SizedBox(width: AppSpace.x3),
-        Expanded(
-          child: _StatTile(
-            label: content.ui(UiKeys.summaryStatExhibits),
-            value: fraction(
-                progress.heardExhibits.length, progress.totalExhibits),
-          ),
-        ),
-        const SizedBox(width: AppSpace.x3),
-        Expanded(
-          child: _StatTile(
-            label: content.ui(UiKeys.summaryStatDuration),
-            value: content.uif(
-                UiKeys.summaryStatMinutes, {'m': '${elapsed.inMinutes}'}),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -255,30 +284,59 @@ class _Stats extends StatelessWidget {
 class _StatTile extends StatelessWidget {
   final String label;
   final String value;
+  final String? scale;
+  final bool divider;
 
-  const _StatTile({required this.label, required this.value});
+  const _StatTile({
+    required this.label,
+    required this.value,
+    this.scale,
+    this.divider = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
     final content = context.watch<ContentProvider>();
-    return Semantics(
-      // Con số và nhãn của nó là MỘT phát biểu. Để screen reader đọc rời ra
-      // thì người dùng nghe "4 trên 6" mà không biết 4 cái gì.
-      label: content
-          .uif(UiKeys.summaryStatSemantics, {'label': label, 'value': value}),
-      excludeSemantics: true,
-      child: Container(
-        decoration:
-            BoxDecoration(color: t.surfaceRaised, borderRadius: t.sharpAll),
-        padding: const EdgeInsets.all(AppSpace.x3),
+    final spoken = scale == null ? value : '$value$scale';
+
+    return Container(
+      decoration: divider
+          ? BoxDecoration(border: Border(left: BorderSide(color: t.line)))
+          : null,
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.x3, AppSpace.x2, AppSpace.x3, AppSpace.x6),
+      child: Semantics(
+        // Con số và nhãn của nó là MỘT phát biểu. Để screen reader đọc rời ra
+        // thì người dùng nghe "9/26" mà không biết 9 cái gì.
+        label: content.uif(
+            UiKeys.summaryStatSemantics, {'label': label, 'value': spoken}),
+        excludeSemantics: true,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(value, style: AppText.cardTitle.copyWith(color: t.ink)),
-            const SizedBox(height: AppSpace.x1),
-            Text(label, style: AppText.meta.copyWith(color: t.inkMuted)),
+            Text.rich(
+              TextSpan(
+                text: value,
+                style: AppText.statNumber.copyWith(color: t.ink),
+                children: [
+                  if (scale != null)
+                    TextSpan(
+                      text: scale,
+                      style: AppText.statNumberScale
+                          .copyWith(color: t.inkFaint),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpace.x2),
+            // Bản vẽ ghi 9px cho nhãn này. GIỮ 11 của [AppText.kicker]: cỡ chữ
+            // phụ đã được nâng một lần vì lý do a11y (khách bảo tàng lệch về
+            // người lớn tuổi), và hạ riêng một chỗ xuống dưới sàn ấy là mở lại
+            // đúng cái đã đóng.
+            Text(label.toUpperCase(),
+                style: AppText.kicker.copyWith(color: t.inkFaint)),
           ],
         ),
       ),
@@ -286,16 +344,42 @@ class _StatTile extends StatelessWidget {
   }
 }
 
-/// Danh sách khu kèm dấu đã ghé / chưa ghé.
+/// `.zline` + `.zrest` — SỔ HÀNH TRÌNH.
 ///
-/// CÓ HIỆN CẢ KHU CHƯA GHÉ, và đó là quyết định có cân nhắc: nó vừa là bản đồ
-/// của những gì còn bỏ lỡ (lý do thật để bấm "Quay lại tham quan"), vừa là câu
-/// trả lời cho "tôi đã xem hết chưa". Một danh sách chỉ có khu đã đi thì không
-/// trả lời được câu nào trong hai câu đó.
-class _ZoneChecklist extends StatelessWidget {
+/// Khu ĐÃ GHÉ bày thẳng, không tiêu đề, không đường kẻ giữa các dòng: tên bên
+/// trái và cột phải đã đủ dựng nên hai cột cho mắt bám, đúng cách một mục lục
+/// sách hoạt động. Có mặt ở đây nghĩa là đã đi qua.
+///
+/// Khu CHƯA GHÉ nằm trong một khối xổ, ĐÓNG SẴN: bản ghi của một chuyến đi
+/// không nên mở đầu bằng thứ chưa làm — nhưng ai muốn xem thì chỉ cách một cú
+/// chạm. Nó vừa là bản đồ của những gì còn bỏ lỡ (lý do thật để quay lại), vừa
+/// là câu trả lời cho "tôi đã xem hết chưa".
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// KHU CHƯA GHÉ KHÔNG BỊ LÀM MỜ, VÀ ĐÓ LÀ MỘT LẦN ĐI KHỎI BẢN VẼ
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Bản vẽ ghi `.zline.off .nm { color: ink-faint }` — tên khu chưa ghé thì mờ
+/// đi. Ở app này quy ước đã chốt theo hướng NGƯỢC LẠI: **mờ = ĐÃ NGHE**, dùng ở
+/// bảng ảnh màn danh sách hiện vật. Giữ cả hai là để một sắc độ mang hai nghĩa
+/// trái nhau trong cùng một chuyến đi, và khách không có cách nào biết mình
+/// đang đọc nghĩa nào.
+///
+/// Nên ở đây tên giữ nguyên mực `ink`, và NGHĨA DO NHÃN GÁNH: dòng "N khu chưa
+/// ghé" trên nắp khối xổ đã nói ra điều đó bằng chữ, rõ hơn bất kỳ sắc độ nào.
+/// Bản vẽ vốn cũng đã đặt cái nhãn ấy ở đó — lớp mờ chỉ nói lại cùng một điều
+/// lần thứ hai, và nó là lớp phải bỏ.
+class _ZoneLedger extends StatefulWidget {
   final TourProgress progress;
 
-  const _ZoneChecklist({required this.progress});
+  const _ZoneLedger({required this.progress});
+
+  @override
+  State<_ZoneLedger> createState() => _ZoneLedgerState();
+}
+
+class _ZoneLedgerState extends State<_ZoneLedger> {
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
@@ -304,59 +388,100 @@ class _ZoneChecklist extends StatelessWidget {
     final zones = content.allZones;
     if (zones.isEmpty) return const SizedBox.shrink();
 
+    final visited = [
+      for (final z in zones)
+        if (widget.progress.visitedMajors.contains(z.major)) z,
+    ];
+    final missed = [
+      for (final z in zones)
+        if (!widget.progress.visitedMajors.contains(z.major)) z,
+    ];
+
+    final missedLabel =
+        content.uif(UiKeys.summaryZonesMissed, {'n': '${missed.length}'});
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(content.ui(UiKeys.summaryZonesHeader).toUpperCase(),
-            style: AppText.kicker.copyWith(color: t.inkFaint)),
-        const SizedBox(height: AppSpace.x3),
-        for (final z in zones)
-          _ZoneRow(
-            zone: z,
-            visited: progress.visitedMajors.contains(z.major),
+        for (final z in visited) _ZoneLine(name: content.text(z.name)),
+        if (missed.isNotEmpty) ...[
+          Container(
+            margin: const EdgeInsets.only(top: AppSpace.x4),
+            decoration:
+                BoxDecoration(border: Border(top: BorderSide(color: t.line))),
+            child: Semantics(
+              button: true,
+              expanded: _open,
+              label: missedLabel,
+              excludeSemantics: true,
+              onTap: _toggle,
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  onTap: _toggle,
+                  splashFactory: NoSplash.splashFactory,
+                  splashColor: Colors.transparent,
+                  highlightColor: t.ink.withValues(alpha: 0.06),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: AppSpace.x5),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(missedLabel,
+                              style: AppText.lede.copyWith(color: t.inkFaint)),
+                        ),
+                        // Dấu › QUAY 90° khi mở — cùng một dấu, cùng một nghĩa
+                        // "còn nữa ở phía kia", chỉ đổi hướng. Không sinh một
+                        // glyph thứ hai chỉ để nói trạng thái mở.
+                        AnimatedRotation(
+                          turns: _open ? 0.25 : 0,
+                          duration: AppMotion.base,
+                          curve: AppMotion.enter,
+                          child: AppChevron(color: t.inkFaint, size: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
+          if (_open)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.x5),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final z in missed) _ZoneLine(name: content.text(z.name)),
+                ],
+              ),
+            ),
+        ],
       ],
     );
   }
+
+  void _toggle() => setState(() => _open = !_open);
 }
 
-class _ZoneRow extends StatelessWidget {
-  final ZoneInfo zone;
-  final bool visited;
+/// Một dòng của sổ hành trình.
+///
+/// ⚠ CỘT PHÚT CỦA BẢN VẼ CHƯA CÓ DỮ LIỆU, và cột này CỐ Ý để trống. `.zline
+/// .zt` in số phút ở mỗi khu ("12′"), nhưng `TourProgress` chỉ ghi tổng thời
+/// gian chuyến đi chứ không ghi thời gian TỪNG KHU — đó là hạng mục B7 ở tầng
+/// service. Điền một con số ước lượng vào đây thì tệ hơn hẳn để trống: một sổ
+/// hành trình nói sai số phút là một bản ghi sai, không phải một bản ghi thiếu.
+class _ZoneLine extends StatelessWidget {
+  final String name;
 
-  const _ZoneRow({required this.zone, required this.visited});
+  const _ZoneLine({required this.name});
 
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
-    final content = context.watch<ContentProvider>();
-    final name = content.text(zone.name);
-    final badge = content
-        .ui(visited ? UiKeys.summaryZoneVisited : UiKeys.summaryZoneMissed);
-
-    return Semantics(
-      label: '$name. $badge',
-      excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: AppSpace.x3),
-        child: Row(
-          children: [
-            Icon(
-              visited ? Icons.check_circle : Icons.circle_outlined,
-              size: 18,
-              color: visited ? t.accent : t.inkFaint,
-            ),
-            const SizedBox(width: AppSpace.x3),
-            Expanded(
-              child: Text(name,
-                  style: AppText.body
-                      .copyWith(color: visited ? t.ink : t.inkMuted)),
-            ),
-            const SizedBox(width: AppSpace.x3),
-            Text(badge, style: AppText.meta.copyWith(color: t.inkFaint)),
-          ],
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
+      child: Text(name, style: AppText.cardTitle.copyWith(color: t.ink)),
     );
   }
 }
@@ -386,47 +511,6 @@ class _PrimaryButton extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(label.toUpperCase(),
                 style: AppText.button.copyWith(color: t.ctaLabel)),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Nút viền — "Quay lại tham quan".
-///
-/// Đứng TRÊN nút kết thúc và nhẹ hơn về trọng lượng thị giác, nhưng vẫn là một
-/// nút đầy đủ chiều cao chứ không phải một dòng chữ: đây là đường lui khỏi một
-/// thao tác không hoàn tác được, nó phải dễ bấm ít nhất bằng thao tác kia.
-class _SecondaryButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-
-  const _SecondaryButton({required this.label, required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = context.tokens;
-    return Semantics(
-      button: true,
-      label: label,
-      excludeSemantics: true,
-      onTap: onPressed,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: t.sharpAll,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: t.sharpAll,
-          child: Container(
-            height: AppSpace.ctaHeight,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              border: Border.all(color: t.outline),
-              borderRadius: t.sharpAll,
-            ),
-            child: Text(label.toUpperCase(),
-                style: AppText.button.copyWith(color: t.ink)),
           ),
         ),
       ),

@@ -23,6 +23,7 @@ import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/feedback_config.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/theme/app_rule.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
@@ -72,21 +73,28 @@ class _FeedbackPanelState extends State<FeedbackPanel> {
     // lại một lời từ chối là một cách hỏi lại.
     if (_skipped) return const SizedBox.shrink();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: t.surfaceRaised,
-        borderRadius: t.sharpAll,
-      ),
-      padding: const EdgeInsets.all(AppSpace.x4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    // KHÔNG HỘP, KHÔNG NỀN NỔI, KHÔNG BO GÓC — bản vẽ v6 gỡ cái kệ
+    // `surfaceRaised` mà khối này từng đứng trên. Một mặt nổi ở đây đọc ra là
+    // "một biểu mẫu chen vào bản ghi chuyến đi"; không có nó thì phần đánh giá
+    // là câu cuối của chính bản ghi ấy. Vạch tóc phía trên đã đủ tách nó ra.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppHairline(),
+        Padding(
+          padding: const EdgeInsets.only(top: AppSpace.x6),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
               Expanded(
-                child:
-                    Text(question, style: AppText.cardTitle.copyWith(color: t.ink)),
+                // Câu hỏi là một NHÃN của khối, không phải một tiêu đề: bản vẽ
+                // đặt nó ở vai kicker mờ, cùng bậc với nhãn của ba con số ngay
+                // phía trên. `cardTitle` 20 ở đây sẽ tranh vai với chúng.
+                child: Text(question.toUpperCase(),
+                    style: AppText.kicker.copyWith(color: t.inkFaint)),
               ),
               // Chỉ hiện khi CHƯA chấm điểm: đã góp ý rồi thì không còn gì để
               // bỏ qua, và một nút "Bỏ qua" cạnh lời cảm ơn đọc như đang mời
@@ -132,13 +140,15 @@ class _FeedbackPanelState extends State<FeedbackPanel> {
               ],
             ),
           ],
-          if (_sent) ...[
-            const SizedBox(height: AppSpace.x3),
-            Text(content.ui(UiKeys.feedbackThanks),
-                style: AppText.meta.copyWith(color: t.accentInk)),
-          ],
-        ],
-      ),
+              if (_sent) ...[
+                const SizedBox(height: AppSpace.x3),
+                Text(content.ui(UiKeys.feedbackThanks),
+                    style: AppText.meta.copyWith(color: t.accentInk)),
+              ],
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

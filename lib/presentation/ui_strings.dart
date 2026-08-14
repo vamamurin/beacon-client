@@ -286,20 +286,19 @@ abstract final class UiKeys {
 
   // ── tổng kết chuyến đi (VẪN trong phiên — có đường lui) ──
   static const summaryTitle = 'summary.title';
-  static const summarySubtitle = 'summary.subtitle';
   static const summaryStatZones = 'summary.stat.zones';
   static const summaryStatExhibits = 'summary.stat.exhibits';
   static const summaryStatDuration = 'summary.stat.duration';
-  static const summaryStatFraction = 'summary.stat.fraction'; // {a} {b}
-  static const summaryStatMinutes = 'summary.stat.minutes'; // {m}
   static const summaryStatSemantics = 'summary.stat.semantics'; // {label} {value}
-  static const summaryZonesHeader = 'summary.zonesHeader';
-  static const summaryZoneVisited = 'summary.zoneVisited';
-  static const summaryZoneMissed = 'summary.zoneMissed';
+  /// Nắp khối xổ: "{n} khu chưa ghé".
+  ///
+  /// Đây là chỗ DUY NHẤT nói ra nghĩa "chưa ghé" trên màn này. Bản vẽ nói nó
+  /// hai lần — một lần bằng nhãn này, một lần bằng chữ mờ — và lớp mờ đã bị bỏ
+  /// vì trong app này mờ ĐÃ mang nghĩa khác (đã nghe). Xem doc `_ZoneLedger`.
+  static const summaryZonesMissed = 'summary.zonesMissed'; // {n}
   static const summaryEmptyTitle = 'summary.emptyTitle';
   static const summaryEmptyBody = 'summary.emptyBody';
   static const summaryClosingFallback = 'summary.closingFallback';
-  static const summaryContinueCta = 'summary.continueCta';
   static const summaryEndCta = 'summary.endCta';
   static const summaryQrTitle = 'summary.qrTitle';
   static const summaryQrBody = 'summary.qrBody';
@@ -548,22 +547,16 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.tourCompleteDismiss: 'Để sau',
 
   UiKeys.summaryTitle: 'Chuyến tham quan của bạn',
-  UiKeys.summarySubtitle: 'Đây là những gì bạn đã đi qua hôm nay.',
   UiKeys.summaryStatZones: 'Khu đã ghé',
   UiKeys.summaryStatExhibits: 'Hiện vật đã nghe',
   UiKeys.summaryStatDuration: 'Thời gian tham quan',
-  UiKeys.summaryStatFraction: '{a}/{b}',
-  UiKeys.summaryStatMinutes: '{m} phút',
   UiKeys.summaryStatSemantics: '{label}: {value}',
-  UiKeys.summaryZonesHeader: 'Các khu trưng bày',
-  UiKeys.summaryZoneVisited: 'Đã ghé',
-  UiKeys.summaryZoneMissed: 'Chưa ghé',
+  UiKeys.summaryZonesMissed: '{n} khu chưa ghé',
   UiKeys.summaryEmptyTitle: 'Chuyến đi vừa mới bắt đầu',
   UiKeys.summaryEmptyBody:
       'Bạn chưa ghé khu trưng bày nào. Quay lại tham quan để bắt đầu, '
           'hoặc kết thúc nếu bạn cần rời đi.',
   UiKeys.summaryClosingFallback: 'Cảm ơn quý khách đã dành thời gian cho chúng tôi.',
-  UiKeys.summaryContinueCta: 'Quay lại tham quan',
   UiKeys.summaryEndCta: 'Kết thúc chuyến đi',
   UiKeys.summaryQrTitle: 'Mang chuyến đi về nhà',
   UiKeys.summaryQrBody:
