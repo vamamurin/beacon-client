@@ -76,6 +76,7 @@ import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/on_image_text.dart';
 import 'package:beacon_client/presentation/theme/player_marks.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 
@@ -260,11 +261,11 @@ class _ZoneHero extends StatelessWidget {
                 // thấy nó thật, còn một khu trưng bày không có "vật" nào để đối
                 // chiếu — tên và câu mô tả là thứ duy nhất nói cho khách biết
                 // họ sắp bước vào cái gì.
-                Text(content.text(zone.name),
+                OnImageText(content.text(zone.name),
                     style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
                 if (summary != null && summary.isNotEmpty) ...[
                   const SizedBox(height: AppSpace.x3),
-                  Text(summary,
+                  OnImageText(summary,
                       style: AppText.heroSub.copyWith(color: t.mutedOnImage)),
                 ],
                 const SizedBox(height: AppSpace.x4),
@@ -425,9 +426,11 @@ class _IntroTrack extends StatelessWidget {
 ///   ĐANG PHÁT   dấu phát đổi sang màu nhấn. Cả bảng chỉ có MỘT ô như vậy, nên
 ///               một nét vàng ấm giữa những nét trắng mờ là đủ để mắt bắt —
 ///               không cần viền quanh ảnh, không cần đổi cả ô.
-///   ĐÃ NGHE     ẢNH mờ đi. Quyết định sản phẩm (14/08/2026) cho một câu hỏi
-///               mà bản thiết kế tự để ngỏ: "mờ" nên nghĩa là *đã nghe* hay
-///               *chưa ghé*.
+///   ĐÃ NGHE     ẢNH TỐI ĐI. Quyết định sản phẩm (14/08/2026) cho một câu hỏi
+///               mà bản thiết kế tự để ngỏ — "mờ" nên nghĩa là *đã nghe* hay
+///               *chưa ghé* — rồi chỉnh lại cách thể hiện (16/08/2026): làm mờ
+///               trên nền giấy là kéo ảnh về phía trắng, cùng một lỗi với lớp
+///               veil đã bị gỡ. Phủ đen thì giữ nguyên tương phản bên trong.
 ///
 /// ⚠ MÓN NỢ ĐI KÈM QUYẾT ĐỊNH ĐÓ: màn Tổng kết dùng `ink-faint` cho khu CHƯA
 /// ghé (`.zline.off .nm`). Sau quyết định này, hai màn dùng cùng một sắc độ cho
@@ -436,13 +439,7 @@ class _IntroTrack extends StatelessWidget {
 /// ghé" nên nghĩa do NHÃN gánh chứ không do sắc độ; và hai bên khác vật liệu
 /// (ở kia là chữ, ở đây là ảnh). Vẫn phải chốt lại khi dựng màn Tổng kết.
 ///
-/// ⚠ RỦI RO PHẢI NHÌN BẰNG MẮT: giảm độ đục trên nền GIẤY là ngả về màu giấy,
-/// tức đúng cái "bạc màu" vừa bị bác ở màn Khu vực. Khác biệt là ở đây nó MANG
-/// TIN, và tin nằm ở sự tương phản giữa ô thường và ô mờ chứ không ở bản thân
-/// độ mờ. Nếu trên máy nó đọc ra "ảnh hỏng" thay vì "đã xong", phương án hai là
-/// chuyển tín hiệu sang DẤU PHÁT (đã nghe ⇒ nét chìm hẳn) — đúng ngữ pháp mà
-/// bản vẽ đã dùng cho *đang phát*, và không đụng vào bức ảnh.
-///
+
 /// Dấu phát KHÔNG mờ theo ảnh: nó là thứ nói "ô này còn bấm được", và một ô đã
 /// nghe vẫn phải nghe lại được.
 class _ExhibitTile extends StatelessWidget {
@@ -461,9 +458,8 @@ class _ExhibitTile extends StatelessWidget {
     required this.onTap,
   });
 
-  /// Độ đục của ảnh khi đã nghe. Xem khối doc ở trên cho lý do và cho phương án
-  /// thay thế nếu con số này đọc sai trên máy.
-  static const double _heardOpacity = 0.55;
+  /// Độ đậm của lớp phủ đen khi đã nghe. Xem chú giải tại chỗ dùng.
+  static const double _heardDarken = 0.42;
 
   @override
   Widget build(BuildContext context) {
@@ -505,13 +501,34 @@ class _ExhibitTile extends StatelessWidget {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Opacity(
-                    opacity: heard ? _heardOpacity : 1.0,
-                    child: HeroImage(
-                      filePath: content.imagePath(exhibit.imagePath),
+                  // ĐÃ NGHE ⇒ TỐI ĐI, KHÔNG PHẢI MỜ ĐI.
+                  //
+                  // Bản trước dùng `Opacity` và nó sai cùng một lỗi với lớp
+                  // veil đã bị gỡ khắp app: hoà độ đục xuống nền GIẤY là kéo
+                  // ảnh về phía trắng, ảnh bạc màu và mất hết chi tiết ở vùng
+                  // sáng. Một lớp đen phủ lên thì GIỮ NGUYÊN tương phản bên
+                  // trong ảnh — vật vẫn nhìn ra hình dạng, nó chỉ lùi ra sau.
+                  //
+                  // `srcATop` chứ không phải `darken`: nó chỉ tô lên phần ảnh
+                  // ĐÃ CÓ, nên vùng trong suốt của một ảnh PNG không bị bôi đen
+                  // thành một khối vuông.
+                  if (heard)
+                    ColorFiltered(
+                      colorFilter: ColorFilter.mode(
+                        const Color(0xFF000000)
+                            .withValues(alpha: _heardDarken),
+                        BlendMode.srcATop,
+                      ),
+                      child: HeroImage(
+                        filePath: content.imagePath(exhibit.thumbnailPath),
+                        cacheWidth: decodeWidth,
+                      ),
+                    )
+                  else
+                    HeroImage(
+                      filePath: content.imagePath(exhibit.thumbnailPath),
                       cacheWidth: decodeWidth,
                     ),
-                  ),
                   // `.extile .ph .pmark { left: 0; bottom: 0 }` — vùng chạm 44
                   // là padding trong suốt của chính PlayMark, nên nét rơi đúng
                   // 12 cách mép mà mắt không thấy hộp nào.

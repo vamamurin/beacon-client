@@ -20,10 +20,10 @@
 // trạng thái khởi động. Cả hai đều biến mất: collage vì bản vẽ thay nó bằng một
 // tấm ảnh tràn màn, dây nối vì trách nhiệm đã đổi chủ.
 //
-// ⚠ MỘT ẢNH, KHÔNG PHẢI HAI. `content.welcomeAccentImagePath` (khung phụ của
-// collage) không còn call site nào. Chưa xoá khỏi manifest/model: bundle đang
-// chạy ngoài hiện trường vẫn khai báo nó, và một khoá thừa thì vô hại còn một
-// parser đột ngột từ chối nó thì không.
+// ⚠ MỘT ẢNH, KHÔNG PHẢI HAI. `museum.welcomeAccentImage` (khung phụ của collage
+// cũ) đã bị gỡ hẳn khỏi model, parser và manifest ngày 16/08/2026, sau khi rà
+// lại và thấy không màn nào đọc nó. Bundle cũ ngoài hiện trường vẫn khai báo
+// khoá ấy và vẫn parse được — parser bỏ qua khoá lạ, không từ chối chúng.
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // HAI HÀNG PHỤ — CÓ, VÀ CHỈ HIỆN KHI BẢO TÀNG ĐÃ VIẾT NỘI DUNG

@@ -74,6 +74,7 @@ import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
+import 'package:beacon_client/presentation/theme/on_image_text.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
 
 class ZoneScreen extends StatelessWidget {
@@ -486,13 +487,13 @@ class _ZoneHero extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(content.text(r.zone.name),
+              OnImageText(content.text(r.zone.name),
                   style: AppText.heroTitle.copyWith(color: t.inkOnImage)),
               // Thiếu `summary` thì KHÔNG có dòng nào, và cũng không có khe —
               // bundle ngoài hiện trường chưa có khoá này. Xem [ZoneInfo.summary].
               if (summary != null && summary.isNotEmpty) ...[
                 const SizedBox(height: AppSpace.x3),
-                Text(summary,
+                OnImageText(summary,
                     style: AppText.heroSub.copyWith(color: t.mutedOnImage)),
               ],
             ],
@@ -578,13 +579,13 @@ class _NearZoneBlock extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(name,
+                      OnImageText(name,
                           style:
                               AppText.cardTitle.copyWith(color: t.inkOnImage)),
                       // `margin-top: 2px` — bù trừ quang học, không phải khe bố
                       // cục; xem luật (2b) ở app_space.dart.
                       const SizedBox(height: 2),
-                      Text(
+                      OnImageText(
                         content.uif(
                             UiKeys.zoneExhibitCount, {'count': '$count'}),
                         style: AppText.meta.copyWith(color: t.mutedOnImage),

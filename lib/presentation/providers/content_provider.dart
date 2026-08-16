@@ -146,8 +146,4 @@ class ContentProvider extends ChangeNotifier {
     return rel == null ? null : _imagePath(rel);
   }
 
-  String? get welcomeAccentImagePath {
-    final rel = _repo.config?.welcomeAccentImagePath;
-    return rel == null ? null : _imagePath(rel);
-  }
 }

@@ -46,10 +46,13 @@ class ZoneInfo {
   /// Null ⇒ dòng đó không hiện. Khối chữ tự co lại, KHÔNG để một khoảng trống.
   final LocalizedText? summary;
 
-  /// Bundle-relative paths. [heroImageBlurredPath] is pre-blurred server-side
-  /// — the app must never run a runtime BackdropFilter over the full card.
+  /// Bundle-relative path của ảnh khu.
+  ///
+  /// ⚠ `heroImageBlurred` ĐÃ BỊ GỠ (16/08/2026). Nó là bản làm mờ sẵn ở server
+  /// cho một nền blur mà thiết kế v6 không còn dùng — blur nằm trong danh sách
+  /// hiệu ứng được phép bỏ (D2), và không màn nào đọc nó. Giữ lại thì mỗi bảo
+  /// tàng phải xuất bản thêm một file cho mỗi khu để không ai vẽ.
   final String heroImagePath;
-  final String heroImageBlurredPath;
 
   /// Zone welcome narration ("Bạn đang dừng chân tại cụm Vũ khí...").
   final AudioClipInfo introAudio;
@@ -64,7 +67,6 @@ class ZoneInfo {
     required this.welcomeText,
     this.summary,
     required this.heroImagePath,
-    required this.heroImageBlurredPath,
     required this.introAudio,
     required this.exhibits,
   });
@@ -94,7 +96,6 @@ class ZoneInfo {
         other.welcomeText == welcomeText &&
         other.summary == summary &&
         other.heroImagePath == heroImagePath &&
-        other.heroImageBlurredPath == heroImageBlurredPath &&
         other.introAudio == introAudio &&
         listEquals(other.exhibits, exhibits);
   }
@@ -107,7 +108,6 @@ class ZoneInfo {
         welcomeText,
         summary,
         heroImagePath,
-        heroImageBlurredPath,
         introAudio,
         Object.hashAll(exhibits),
       );

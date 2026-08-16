@@ -50,6 +50,7 @@ import 'package:beacon_client/presentation/providers/tour_progress_provider.dart
 import 'package:beacon_client/presentation/providers/zone_provider.dart';
 import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
+import 'package:beacon_client/presentation/theme/on_image_text.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/hero_image.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
@@ -84,7 +85,6 @@ class MenuHero extends StatelessWidget {
         children: [
           HeroImage(
             filePath: content.welcomeImagePath,
-            veil: _veil(t),
             // `.mhero .img { background-position: center 30% }` — xem doc
             // [HeroImage.alignment] cho phép quy đổi và cho lý do khung nhìn
             // phải kéo lên trên tâm ảnh.
@@ -102,12 +102,20 @@ class MenuHero extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(content.ui(UiKeys.menuTitle),
-                      style: AppText.menuHeroTitle.copyWith(color: t.ink)),
+                  // ⚠ HỌ ON-IMAGE, KHÔNG PHẢI HỌ SURFACE — và đây là hệ quả
+                  // trực tiếp của việc gỡ veil. Khi còn veil, khối chữ ngồi
+                  // trên một mặt đã gần như là `surface` đặc nên nó dùng mực
+                  // của trang. Không veil thì nó ngồi trên ẢNH TRẦN, và mực
+                  // trang (đen ở preset giấy) sẽ chìm mất trên ảnh tư liệu.
+                  OnImageText(content.ui(UiKeys.menuTitle),
+                      style: AppText.menuHeroTitle
+                          .copyWith(color: t.inkOnImage)),
                   const SizedBox(height: AppSpace.x4),
-                  Text(
-                    touring ? _progressLine(context) : content.ui(UiKeys.menuSubtitle),
-                    style: AppText.heroSub.copyWith(color: t.inkMuted),
+                  OnImageText(
+                    touring
+                        ? _progressLine(context)
+                        : content.ui(UiKeys.menuSubtitle),
+                    style: AppText.heroSub.copyWith(color: t.mutedOnImage),
                   ),
                   const SizedBox(height: AppSpace.x5),
                   _Cta(
@@ -148,21 +156,6 @@ class MenuHero extends StatelessWidget {
     });
   }
 
-  /// Veil của `.mhero`. Bốn chặng, và chặng thứ hai là chỗ bức ảnh được nhìn.
-  LinearGradient _veil(MuseumTokens t) {
-    final s = t.surface;
-    return LinearGradient(
-      begin: Alignment.bottomCenter,
-      end: Alignment.topCenter,
-      colors: [
-        s.withValues(alpha: 0.97),
-        s.withValues(alpha: 0.86),
-        s.withValues(alpha: 0.28),
-        s.withValues(alpha: 0.34),
-      ],
-      stops: const [0.02, 0.22, 0.62, 1.0],
-    );
-  }
 }
 
 /// `.mcta` — NGOẠI LỆ DUY NHẤT CÒN NÚT CÓ VIỀN trong cả app.
@@ -190,14 +183,22 @@ class _Cta extends StatelessWidget {
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
-        color: t.surface.withValues(alpha: 0.55),
+        // ⚠ TẤM NỀN NÀY TỪNG LÀ `surface` @55%, tức LỚP PHỦ SÁNG CUỐI CÙNG
+        // còn sót trong app. Bản vẽ ghi `rgba(var(--veil-rgb),0.55)`, và
+        // `--veil-rgb` bằng `surface` — đúng ở preset tối, thành một tấm trắng
+        // mờ ở preset giấy, tức đúng thứ sương mù đã bị gỡ khắp nơi.
+        //
+        // Nay là một tấm TỐI, cố định, không theo theme — cùng cách và cùng lý
+        // do với màn chắn của thanh trên. Nó vẫn làm đúng việc bản vẽ giao: nhấc
+        // cái nút ra khỏi bức ảnh, mà không bôi trắng bức ảnh.
+        color: const Color(0xFF12120A).withValues(alpha: 0.45),
         borderRadius: t.sharpAll,
         child: InkWell(
           onTap: onTap,
           borderRadius: t.sharpAll,
           splashFactory: NoSplash.splashFactory,
           splashColor: Colors.transparent,
-          highlightColor: t.surface.withValues(alpha: 0.35),
+          highlightColor: const Color(0xFF12120A).withValues(alpha: 0.72),
           child: Container(
             // `.mcta { height: var(--tap) }` — quy theo màn NHƯNG CÓ SÀN.
             //
@@ -211,16 +212,16 @@ class _Cta extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(horizontal: AppSpace.x5),
             decoration: BoxDecoration(
-              border: Border.all(color: t.ink.withValues(alpha: 0.24)),
+              border: Border.all(color: t.inkOnImage.withValues(alpha: 0.34)),
               borderRadius: t.sharpAll,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label.toUpperCase(),
-                    style: AppText.button.copyWith(color: t.ink)),
+                OnImageText(label.toUpperCase(),
+                    style: AppText.button.copyWith(color: t.inkOnImage)),
                 const SizedBox(width: AppSpace.x3),
-                AppChevron(color: t.ink.withValues(alpha: 0.6), size: 22),
+                AppChevron(color: t.inkOnImage.withValues(alpha: 0.7), size: 22),
               ],
             ),
           ),

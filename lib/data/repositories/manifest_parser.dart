@@ -91,9 +91,6 @@ abstract final class ManifestParser {
     final museumShortName =
         _optLocalized(museum, 'shortName', 'museum', fallbackLanguage);
     final welcomeImagePath = _optPath(museum, 'welcomeImage', 'museum');
-    // Vùng ảnh 2 của màn chào — optional, cùng _pathRule với mọi payload khác.
-    final welcomeAccentImagePath =
-        _optPath(museum, 'welcomeAccentImage', 'museum');
 
     final beacon = _reqMap(root, 'beacon', 'root');
     final beaconUuid = _reqString(beacon, 'uuid', 'beacon').toLowerCase();
@@ -170,7 +167,6 @@ abstract final class ManifestParser {
         museumName: museumName,
         museumShortName: museumShortName,
         welcomeImagePath: welcomeImagePath,
-        welcomeAccentImagePath: welcomeAccentImagePath,
         languages: List.unmodifiable(languages),
         fallbackLanguage: fallbackLanguage,
         languageNames: languageNames,
@@ -247,7 +243,6 @@ abstract final class ManifestParser {
       // làm hỏng bundle. Xem doc [ZoneInfo.summary].
       summary: _optLocalized(z, 'summary', ctx, fallbackLang),
       heroImagePath: _reqPath(z, 'heroImage', ctx),
-      heroImageBlurredPath: _reqPath(z, 'heroImageBlurred', ctx),
       introAudio: introAudio,
       exhibits: List.unmodifiable(exhibits),
     );

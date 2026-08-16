@@ -74,7 +74,7 @@ class MockZoneRepository implements IZoneRepository {
 }
 
 /// Verbatim-structure copy of manifest.example.json (transcripts shortened).
-/// Có thêm 2 key optional `welcomeImage`/`welcomeAccentImage` để đường parse
+/// Có thêm key optional `welcomeImage` để đường parse
 /// optional-path được tập luyện; file ảnh không tồn tại trên máy dev ⇒
 /// HeroImage tự rơi về gradient fallback (đúng hợp đồng của nó).
 /// AK-47 và lựu đạn có thêm key optional `images` (ảnh phụ) để đường parse dải
@@ -91,8 +91,7 @@ const String kMockManifestJson = r'''
   "fallbackLanguage": "vi",
   "museum": {
     "name": { "vi": "Bảo tàng Tôn Đức Thắng", "en": "Ton Duc Thang Museum" },
-    "welcomeImage": "images/welcome.jpg",
-    "welcomeAccentImage": "images/welcome_accent.jpg"
+    "welcomeImage": "images/welcome.jpg"
   },
   "beacon": {
     "uuid": "4d6fc88b-be75-6698-da48-6866a36ec78e",
@@ -121,7 +120,6 @@ const String kMockManifestJson = r'''
         "en": "Home to combat relics from the nation's two resistance wars."
       },
       "heroImage": "images/zones/vu-khi-khang-chien/hero.jpg",
-      "heroImageBlurred": "images/zones/vu-khi-khang-chien/hero_blur.jpg",
       "introAudio": {
         "tracks": {
           "vi": {
@@ -227,7 +225,6 @@ const String kMockManifestJson = r'''
         "en": "Everyday objects from President Ton's simple life."
       },
       "heroImage": "images/zones/ky-vat-sinh-hoat/hero.jpg",
-      "heroImageBlurred": "images/zones/ky-vat-sinh-hoat/hero_blur.jpg",
       "introAudio": {
         "tracks": {
           "vi": {

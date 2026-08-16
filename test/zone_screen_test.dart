@@ -125,7 +125,6 @@ ZoneInfo _zone({int major = 1, String name = 'Khu Thử'}) {
     name: LocalizedText({'vi': name}),
     welcomeText: LocalizedText({'vi': 'Chào mừng'}),
     heroImagePath: 'images/zones/khu-thu/hero.jpg',
-    heroImageBlurredPath: 'images/zones/khu-thu/hero_blur.jpg',
     introAudio: const AudioClipInfo(tracks: {}),
     exhibits: const [],
   );
