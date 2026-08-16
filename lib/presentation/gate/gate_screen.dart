@@ -52,6 +52,8 @@ import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/models/guide_content.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
+import 'package:beacon_client/domain/models/tour_session.dart';
+import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/theme/app_row.dart';
 import 'package:beacon_client/presentation/ui_strings.dart';
@@ -64,6 +66,23 @@ class GateScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = context.watch<ContentProvider>();
+    // ═══════════════════════════════════════════════════════════════════════
+    // CÒN CẮM SẠC ⇒ KHOÁ LỐI VÀO TOUR, VÀ KHOÁ Ở ĐÂY
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // `atDesk` nghĩa là máy vẫn nằm trên dock — phiên chỉ rời trạng thái đó khi
+    // có người RÚT máy ra. Đó là tín hiệu vật lý, không phải một cờ trong app.
+    //
+    // Trước đây chỗ khoá nằm mãi trong màn Menu: `startTour()` bị bỏ qua ở
+    // `atDesk`, nên khách đi Poster → Menu → bấm "Bắt đầu tham quan" và KHÔNG
+    // CÓ GÌ XẢY RA. Một nút chết không nói ra là chết, sau hai lần chạm.
+    //
+    // Nay lối đi bị chặn ngay ở cửa, và chặn một cách nhìn thấy được: hàng
+    // "Tham quan" mờ đi. Khách nhấc máy khỏi dock là nó sáng lại — đúng thứ tự
+    // mà một chiếc máy mượn ở quầy vốn phải đi qua.
+    final onDock = context.select<SessionProvider, bool>(
+      (s) => s.phase == SessionPhase.atDesk,
+    );
 
     return SignatureScreen(
       imagePath: content.welcomeImagePath,
@@ -89,21 +108,22 @@ class GateScreen extends StatelessWidget {
           // `lead` = đường đi tiếp DUY NHẤT của màn. Cao hơn, chữ hoa, tracking
           // giãn — nổi bằng KHÔNG GIAN, không bằng một khối màu.
           lead: true,
-          onTap: () {
-            // PUSH, không thay thế: poster ở lại dưới đáy ngăn xếp, nên nút lùi
-            // của Android rơi xuống một tấm áp phích thay vì rơi ra khỏi app.
-            // Khi phiên quay về trạng thái nghỉ, `MuseumApp._syncNavigation`
-            // vẫn dựng lại stack về đúng đây.
-            Navigator.of(context).pushNamed(AppRouter.shellRoute);
-          },
+          onTap: onDock
+              ? null
+              : () {
+                  // PUSH, không thay thế: poster ở lại dưới đáy ngăn xếp, nên nút lùi
+                  // của Android rơi xuống một tấm áp phích thay vì rơi ra khỏi app.
+                  // Khi phiên quay về trạng thái nghỉ, `MuseumApp._syncNavigation`
+                  // vẫn dựng lại stack về đúng đây.
+                  Navigator.of(context).pushNamed(AppRouter.shellRoute);
+                },
         ),
         // HAI HÀNG NÀY LUÔN CÓ MẶT. Bundle chưa có nội dung thì màn bài đọc
         // hiện trạng thái "Sắp có" — hàng KHÔNG biến mất. Xem chú giải ở đầu
         // file cho lý do.
         AppRow(
           label: content.ui(UiKeys.posterAbout),
-          onTap: () =>
-              _openArticle(context, UiKeys.posterAbout, content.about),
+          onTap: () => _openArticle(context, UiKeys.posterAbout, content.about),
         ),
         AppRow(
           label: content.ui(UiKeys.posterFaq),

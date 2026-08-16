@@ -126,8 +126,22 @@ class AppRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final t = context.tokens;
 
+    // `onTap == null` ⇒ HÀNG TẮT, VÀ PHẢI NHÌN RA ĐƯỢC.
+    //
+    // Trước đây một hàng không có `onTap` trông y hệt một hàng bấm được: chạm
+    // vào không xảy ra gì, và khách không có cách nào biết đó là chủ đích hay
+    // là máy hỏng. Một lối đi bị khoá mà không nói ra thì tệ hơn hẳn một lối đi
+    // bị ẩn.
+    //
+    // `ctaDisabled` chứ không phải `ink` pha alpha tự chế: token đó có sàn
+    // tương phản 3:1 với `inkMuted`, được test hợp đồng canh — tức nó vẫn ĐỌC
+    // ĐƯỢC, chỉ thôi mời gọi.
+    final enabled = onTap != null;
+    final ink = enabled ? t.ink : t.ctaDisabled;
+
     return Semantics(
       button: true,
+      enabled: enabled,
       label: semanticLabel ?? (status == null ? label : '$label. $status'),
       excludeSemantics: true,
       onTap: onTap,
@@ -146,7 +160,9 @@ class AppRow extends StatelessWidget {
           // riêng một token wash (đen trên nền sáng, trắng trên nền tối) vì nó
           // không pha alpha lên biến được. Dart pha được, và `ink` đã đúng dấu
           // ở mọi preset theo định nghĩa. Một token ít đi.
-          highlightColor: t.ink.withValues(alpha: lead ? 0.22 : 0.12),
+          highlightColor: enabled
+              ? t.ink.withValues(alpha: lead ? 0.22 : 0.12)
+              : Colors.transparent,
           child: SizedBox(
             // CHIỀU CAO HÀNG = VÙNG BẤM. Không có padding nào bên trong nới
             // thêm vùng chạm, nên phóng con số này là phóng đúng thứ ngón tay
@@ -161,7 +177,7 @@ class AppRow extends StatelessWidget {
                     child: Text(
                       lead ? label.toUpperCase() : label,
                       style: (lead ? AppText.rowLead : AppText.rowLabel)
-                          .copyWith(color: t.ink),
+                          .copyWith(color: ink),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -172,7 +188,10 @@ class AppRow extends StatelessWidget {
                         style: AppText.meta.copyWith(color: t.inkFaint)),
                   ],
                   const SizedBox(width: AppSpace.x4),
-                  AppChevron(color: t.ink.withValues(alpha: 0.35)),
+                  AppChevron(
+                      color: enabled
+                          ? t.ink.withValues(alpha: 0.35)
+                          : t.ctaDisabled),
                 ],
               ),
             ),
