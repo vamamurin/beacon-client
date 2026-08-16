@@ -669,8 +669,8 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     // 7.33:1 trên surfaceRaised, 8.23:1 trên surface — accent tự đủ ở preset
     // tối, nên hai họ tình cờ trùng giá trị. TÌNH CỜ, không phải luật: đó chính
     // là ngộ nhận đã sinh ra bản một-field.
-    accent: Color(0xFFF0B265), // hổ phách sáng — xem khối doc MÀU NHẤN
-    accentOnImage: Color(0xFFF5C07A),
+    accent: Color(0xFFFFB259), // hổ phách rực — xem khối doc MÀU NHẤN
+    accentOnImage: Color(0xFFFFC580),
     accentInk: Color(0xFF16130A), // 9.95:1 trên accent ✓
     // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 5.75:1 trên surface, 5.13 trên kệ · glyph 5.49:1
     error: Color(0xFFD9705C),
@@ -759,10 +759,10 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     // ĐÂY LÀ CHỖ BẢN MỘT-FIELD VỠ, và bảng v6 giữ nguyên đường cắt đó:
     //   #7F5714 trên surfaceRaised #DFDFD3 = 4.77:1 ✓  (ràng buộc chặt nhất)
     //   #7F5714 trên surface       #EEEEE2 = 5.48:1 ✓
-    accent: Color(0xFF9B470F), // đất nung — xem khối doc MÀU NHẤN
+    accent: Color(0xFFA84300), // cam nung, bão hoà tối đa — xem khối doc MÀU NHẤN
     // ĐÓNG BĂNG = giá trị của dark. Ảnh hiện vật không sáng lên theo theme,
     // nên kicker/vạch trên ảnh cũng không được tối đi. Xem doc của field.
-    accentOnImage: Color(0xFFF5C07A),
+    accentOnImage: Color(0xFFFFC580),
     // Màu giấy, không phải nâu-gần-đen: nền accent của preset này sẫm. 5.57:1 ✓
     accentInk: Color(0xFFF2EFE4),
     // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 6.53:1 trên surface, 5.68 trên kệ · glyph 6.53:1
