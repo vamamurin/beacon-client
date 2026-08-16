@@ -98,7 +98,13 @@ abstract final class UiKeys {
 
   // ── exhibit detail (màn 4) ──
   static const exhibitNotFound = 'exhibit.notFound';
-  static const exhibitRestart = 'exhibit.restart';
+  /// Nút TRÁI của trình phát — về hiện vật TRƯỚC trong thứ tự tour.
+  ///
+  /// ⚠ ĐỔI NGHĨA 16/08/2026. Trước đây nó là "Về đầu" và chỉ tua lại chính clip
+  /// đang nghe, trong khi nút phải đã nhảy sang hiện vật kế. Hai nút đối xứng
+  /// nhau về hình mà làm hai việc khác hẳn nhau về cấp — khách bấm trái mong
+  /// lùi một bước và nhận lại đúng thứ vừa nghe.
+  static const exhibitPrev = 'exhibit.prev';
   static const exhibitNext = 'exhibit.next';
   static const exhibitPlay = 'exhibit.play';
   static const exhibitPause = 'exhibit.pause';
@@ -108,6 +114,13 @@ abstract final class UiKeys {
   static const exhibitImageOpen = 'exhibit.image.open';
   static const exhibitImageClose = 'exhibit.image.close';
   // accessibility (screen reader)
+  /// Nhãn của thanh tiến trình, cho screen reader.
+  ///
+  /// ĐÃ TỪNG BỊ GỠ như một khoá mồ côi rồi ĐƯỢC TRẢ VỀ 16/08/2026: lúc đó vạch
+  /// chỉ để nhìn nên nó không cần tên. Nay vạch TUA ĐƯỢC — nó là một `slider`
+  /// thật, và một slider không tên thì TalkBack không có gì để đọc.
+  static const exhibitProgressLabel = 'exhibit.progress.label';
+
   static const exhibitGalleryLabel = 'exhibit.gallery.label';
   static const exhibitGalleryPosition = 'exhibit.gallery.position'; // {i} {n}
 
@@ -409,7 +422,7 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.zoneIdentifyingSemantics: 'Đang xác định khu trưng bày quanh bạn',
 
   UiKeys.exhibitNotFound: 'Không tìm thấy hiện vật',
-  UiKeys.exhibitRestart: 'Về đầu',
+  UiKeys.exhibitPrev: 'Hiện vật trước',
   UiKeys.exhibitNext: 'Tiếp',
   UiKeys.exhibitPlay: 'Phát',
   UiKeys.exhibitPause: 'Tạm dừng',
@@ -417,6 +430,7 @@ const Map<String, String> kUiDefaults = <String, String>{
   UiKeys.exhibitSectionMeaning: 'Ý nghĩa',
   UiKeys.exhibitImageOpen: 'Xem ảnh lớn',
   UiKeys.exhibitImageClose: 'Đóng ảnh',
+  UiKeys.exhibitProgressLabel: 'Tiến trình thuyết minh',
   UiKeys.exhibitGalleryLabel: 'Dải ảnh hiện vật',
   UiKeys.exhibitGalleryPosition: 'Ảnh {i} trên {n}',
 

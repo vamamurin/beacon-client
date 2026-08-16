@@ -234,13 +234,27 @@ class ProgressTrack extends StatelessWidget {
   /// Đầu đọc 2×14. Tắt ở những chỗ vạch chỉ báo cáo tiến độ mà không mời tua.
   final bool showHead;
 
+  /// Tua tới một vị trí 0..1. Null ⇒ vạch chỉ để NHÌN.
+  ///
+  /// ⚠ CÓ [onSeek] THÌ PHẢI CÓ [showHead]. Đầu đọc là thứ duy nhất nói rằng
+  /// vạch này kéo được — một vạch trơn mà tua được thì không ai biết để thử, và
+  /// một đầu đọc trên vạch không tua được là một lời mời gọi hụt.
+  final ValueChanged<double>? onSeek;
+
+  /// Nhãn screen reader. Bắt buộc khi [onSeek] khác null: một vạch kéo được mà
+  /// không có tên thì TalkBack không có gì để đọc.
+  final String? semanticLabel;
+
   const ProgressTrack({
     super.key,
     required this.value,
     this.trackColor,
     this.fillColor,
     this.showHead = true,
-  });
+    this.onSeek,
+    this.semanticLabel,
+  }) : assert(onSeek == null || showHead,
+            'Vạch tua được PHẢI có đầu đọc — xem doc onSeek.');
 
   /// Chiều cao của phần NHÌN THẤY. Đầu đọc cao 14 nên khối này cao 14 để nó
   /// không bị cắt; vạch nằm giữa.
@@ -255,7 +269,9 @@ class ProgressTrack extends StatelessWidget {
     final track = trackColor ?? t.line;
     final fill = fillColor ?? t.accent;
 
-    return SizedBox(
+    final seek = onSeek;
+
+    final bar = SizedBox(
       height: height,
       child: LayoutBuilder(
         builder: (context, c) {
@@ -281,6 +297,49 @@ class ProgressTrack extends StatelessWidget {
                   child: Container(width: 2, color: fill),
                 ),
             ],
+          );
+        },
+      ),
+    );
+
+    if (seek == null) return bar;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // VÙNG CHẠM CAO 44, VẠCH VẪN CAO 14
+    // ═══════════════════════════════════════════════════════════════════════
+    //
+    // Một vạch 2dp là thứ không ai chạm trúng. Nới VÙNG CHẠM lên sàn 44 bằng
+    // padding trong suốt, không nới cái vạch — cùng cách [PlayMark] đã làm.
+    // `behavior: opaque` để cú chạm rơi vào khoảng trống trên/dưới vạch vẫn
+    // tính, thay vì lọt xuống widget bên dưới.
+    return Semantics(
+      slider: true,
+      label: semanticLabel ?? '',
+      value: '${(v * 100).round()}%',
+      excludeSemantics: true,
+      // Screen reader tua bằng hai lệnh tăng/giảm, không kéo được. 5% mỗi lệnh:
+      // đủ thô để tới đích trong vài lệnh, đủ mịn để không nhảy qua một câu.
+      onIncrease: () => seek((v + 0.05).clamp(0.0, 1.0)),
+      onDecrease: () => seek((v - 0.05).clamp(0.0, 1.0)),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final w = c.maxWidth;
+          void at(Offset local) {
+            if (w <= 0) return;
+            seek((local.dx / w).clamp(0.0, 1.0));
+          }
+
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            // CHẠM một phát để nhảy tới, KÉO để rà. Cả hai đi qua cùng một hàm
+            // nên không có đường nào tính toạ độ khác đường kia.
+            onTapDown: (d) => at(d.localPosition),
+            onHorizontalDragStart: (d) => at(d.localPosition),
+            onHorizontalDragUpdate: (d) => at(d.localPosition),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: (44 - height) / 2),
+              child: bar,
+            ),
           );
         },
       ),

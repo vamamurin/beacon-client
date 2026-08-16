@@ -669,9 +669,9 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     // 7.33:1 trên surfaceRaised, 8.23:1 trên surface — accent tự đủ ở preset
     // tối, nên hai họ tình cờ trùng giá trị. TÌNH CỜ, không phải luật: đó chính
     // là ngộ nhận đã sinh ra bản một-field.
-    accent: Color(0xFFD3A362), // L .720 C .095 H 74
-    accentOnImage: Color(0xFFD3A362),
-    accentInk: Color(0xFF16130A), // 8.12:1 trên accent ✓
+    accent: Color(0xFFF0B265), // hổ phách sáng — xem khối doc MÀU NHẤN
+    accentOnImage: Color(0xFFF5C07A),
+    accentInk: Color(0xFF16130A), // 9.95:1 trên accent ✓
     // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 5.75:1 trên surface, 5.13 trên kệ · glyph 5.49:1
     error: Color(0xFFD9705C),
     errorInk: Color(0xFF2A0F09),
@@ -759,10 +759,10 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     // ĐÂY LÀ CHỖ BẢN MỘT-FIELD VỠ, và bảng v6 giữ nguyên đường cắt đó:
     //   #7F5714 trên surfaceRaised #DFDFD3 = 4.77:1 ✓  (ràng buộc chặt nhất)
     //   #7F5714 trên surface       #EEEEE2 = 5.48:1 ✓
-    accent: Color(0xFF7F5714), // L .488 C .095 H 74 — cùng hue với dark
+    accent: Color(0xFF9B470F), // đất nung — xem khối doc MÀU NHẤN
     // ĐÓNG BĂNG = giá trị của dark. Ảnh hiện vật không sáng lên theo theme,
     // nên kicker/vạch trên ảnh cũng không được tối đi. Xem doc của field.
-    accentOnImage: Color(0xFFD3A362),
+    accentOnImage: Color(0xFFF5C07A),
     // Màu giấy, không phải nâu-gần-đen: nền accent của preset này sẫm. 5.57:1 ✓
     accentInk: Color(0xFFF2EFE4),
     // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 6.53:1 trên surface, 5.68 trên kệ · glyph 6.53:1
@@ -813,7 +813,7 @@ class MuseumTokens extends ThemeExtension<MuseumTokens> {
     heroVeil: _heroVeilStrong,
 
     // 9.27:1 trên surfaceRaised #1C1C1C — hai họ trùng giá trị, như ở dark.
-    accent: Color(0xFFE3B87E),
+    accent: Color(0xFFFFB55C),
     accentOnImage: Color(0xFFE3B87E),
     accentInk: Color(0xFF000000), // 11.4:1 trên accent — tương phản trước, sắc thái sau
     // Đỏ ĐẤT NUNG hue ~10° — cùng gia đình ấm với accent. 9.86:1 trên surface, 8.00 trên kệ · glyph 9.86:1

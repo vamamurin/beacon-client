@@ -56,6 +56,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:beacon_client/domain/models/audio_queue_state.dart';
 import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/domain/models/zone_info.dart';
 import 'package:beacon_client/presentation/app/app_router.dart';
@@ -100,7 +101,10 @@ class ExhibitDetailScreen extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: t.surface,
-      body: Stack(
+      body: _FollowAudio(
+        major: major,
+        minor: minor,
+        child: Stack(
         children: [
           Positioned.fill(child: _Page(zone: zone, exhibit: exhibit)),
           Positioned(
@@ -123,8 +127,85 @@ class ExhibitDetailScreen extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
+  }
+}
+
+/// MÀN HÌNH ĐI THEO TIẾNG, không đứng yên khi tiếng đã sang hiện vật khác.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// VÌ SAO CẦN
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+/// Nghe hết clip của hiện vật A, engine tự phát sang B theo thứ tự tour. Trước
+/// đây màn hình vẫn nằm ở A: khách nghe câu chuyện của một hiện vật trong khi
+/// đang nhìn ảnh và lời kể của một hiện vật khác. Đó là hai nguồn sự thật nói
+/// hai điều, và cái sai không phải ở tiếng — tiếng đang làm đúng.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+/// BỐN ĐIỀU KIỆN, VÀ MỖI CÁI CHẶN MỘT KIỂU HỎNG
+/// ═══════════════════════════════════════════════════════════════════════════
+///
+///   không phải phần dẫn khu   phần dẫn không thuộc hiện vật nào để mà nhảy tới
+///   CÙNG khu                  màn này ĐÓNG BĂNG theo `major`; tiếng sang khu
+///                             khác là việc của arbiter và màn Khu vực, không
+///                             phải chỗ này tự ý vượt biên
+///   khác hiện vật đang mở     bằng nhau thì không có gì để làm
+///   route đang ở TRÊN CÙNG    nếu không, một màn chi tiết nằm dưới đáy ngăn
+///                             xếp sẽ tự đẩy route trong lúc khách đang xem
+///                             màn khác — lỗi này không bao giờ lộ ra trong
+///                             test, chỉ lộ khi có người mở màn xem ảnh lớn
+///
+/// Điều hướng chạy ở POST-FRAME: đẩy một route ngay trong `build` là lỗi. Cờ
+/// [_navigating] chặn phát lại — engine có thể phát cùng một trạng thái nhiều
+/// lần, và mỗi lần phát lại là một `pushReplacement` nữa.
+class _FollowAudio extends StatefulWidget {
+  final int major;
+  final int minor;
+  final Widget child;
+
+  const _FollowAudio({
+    required this.major,
+    required this.minor,
+    required this.child,
+  });
+
+  @override
+  State<_FollowAudio> createState() => _FollowAudioState();
+}
+
+class _FollowAudioState extends State<_FollowAudio> {
+  bool _navigating = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.watch<AudioProvider>().current;
+    _maybeFollow(c);
+    return widget.child;
+  }
+
+  void _maybeFollow(AudioTrackRef? c) {
+    if (_navigating || c == null || c.isIntro) return;
+    if (c.zoneMajor != widget.major) return;
+    final target = c.exhibitMinor;
+    if (target == null || target == widget.minor) return;
+
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+
+    _navigating = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // THAY THẾ, không chồng: tour tự chạy qua sáu hiện vật thì ngăn xếp
+      // không được dày lên sáu tầng — lùi một bước phải về danh sách.
+      Navigator.of(context).pushReplacementNamed(
+        AppRouter.exhibitDetailRoute,
+        arguments:
+            ExhibitDetailArgs(major: widget.major, minor: target),
+      );
+    });
   }
 }
 
@@ -642,6 +723,7 @@ class _Player extends StatelessWidget {
     final total = isThis ? state.duration : null;
 
     final idx = zone.tourIndexOf(exhibit.minor);
+    final hasPrev = idx > 0;
     final hasNext = idx >= 0 && idx + 1 < zone.exhibits.length;
 
     return Padding(
@@ -659,7 +741,16 @@ class _Player extends StatelessWidget {
                   : pos.inMilliseconds / total.inMilliseconds;
               return Column(
                 children: [
-                  ProgressTrack(value: value),
+                  ProgressTrack(
+                    value: value,
+                    // TUA ĐƯỢC chỉ khi clip NÀY đang nạp và đã biết độ dài —
+                    // tua một clip chưa nạp thì không có gì để tua tới, và
+                    // `onSeek == null` làm vạch trở lại thuần trưng bày.
+                    onSeek: (total == null || !isThis)
+                        ? null
+                        : (f) => audio.seek(total * f),
+                    semanticLabel: content.ui(UiKeys.exhibitProgressLabel),
+                  ),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(
                         AppSpace.gutter, AppSpace.x3, AppSpace.gutter, 0),
@@ -686,15 +777,12 @@ class _Player extends StatelessWidget {
               PlayMark(
                 glyph: PlayGlyph.skipPrev,
                 size: 22,
-                color: t.inkMuted,
-                semanticLabel: content.ui(UiKeys.exhibitRestart),
-                onTap: () {
-                  final r = isThis
-                      ? audio.replay()
-                      : audio.tapExhibit(
-                          major: zone.major, minor: exhibit.minor);
-                  showAudioFeedback(context, r);
-                },
+                // Hiện vật ĐẦU thì nút tắt, đối xứng với nút phải ở hiện vật
+                // cuối. Trước đây nút này không bao giờ tắt vì nó chỉ tua lại
+                // clip đang nghe — xem doc [UiKeys.exhibitPrev].
+                color: hasPrev ? t.inkMuted : t.ctaDisabled,
+                semanticLabel: content.ui(UiKeys.exhibitPrev),
+                onTap: hasPrev ? () => _go(context, audio, idx - 1) : null,
               ),
               const SizedBox(width: AppSpace.x8),
               PlayMark(
@@ -726,7 +814,7 @@ class _Player extends StatelessWidget {
                 // 3:1 với `inkMuted`, xem test hợp đồng của token.
                 color: hasNext ? t.inkMuted : t.ctaDisabled,
                 semanticLabel: content.ui(UiKeys.exhibitNext),
-                onTap: hasNext ? () => _goNext(context, audio) : null,
+                onTap: hasNext ? () => _go(context, audio, idx + 1) : null,
               ),
             ],
           ),
@@ -735,14 +823,19 @@ class _Player extends StatelessWidget {
     );
   }
 
-  void _goNext(BuildContext context, AudioProvider audio) {
-    final idx = zone.tourIndexOf(exhibit.minor);
-    if (idx < 0 || idx + 1 >= zone.exhibits.length) return;
-    final next = zone.exhibits[idx + 1];
+  /// Nhảy tới hiện vật ở vị trí [target] trong thứ tự tour, theo cả hai chiều.
+  ///
+  /// MỘT HÀM CHO CẢ HAI NÚT. Trước đây chỉ có `_goNext`, còn nút trái đi một
+  /// đường hoàn toàn khác (tua lại clip) — và đó chính là lý do hai nút trông
+  /// đối xứng mà cư xử lệch nhau.
+  void _go(BuildContext context, AudioProvider audio, int target) {
+    if (target < 0 || target >= zone.exhibits.length) return;
+    final next = zone.exhibits[target];
     // Chạm là một yêu cầu tường minh ⇒ cắt ngang và phát clip được chọn.
     showAudioFeedback(
         context, audio.tapExhibit(major: zone.major, minor: next.minor));
-    // THAY THẾ, không chồng: lùi từ bất kỳ hiện vật nào cũng về đúng danh sách.
+    // THAY THẾ, không chồng: lùi từ bất kỳ hiện vật nào cũng về đúng danh sách,
+    // dù khách đã đi qua bao nhiêu hiện vật bằng hai nút này.
     Navigator.of(context).pushReplacementNamed(
       AppRouter.exhibitDetailRoute,
       arguments: ExhibitDetailArgs(major: zone.major, minor: next.minor),

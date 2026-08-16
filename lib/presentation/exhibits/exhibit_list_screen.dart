@@ -181,6 +181,7 @@ class _Body extends StatelessWidget {
                   heard: progress.heardExhibits
                       .contains(ExhibitKey(major, exhibit.minor)),
                   onTap: () => _openExhibit(context, exhibit),
+                  onPlayToggle: () => _togglePlay(context, exhibit),
                 );
               },
             ),
@@ -193,6 +194,30 @@ class _Body extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  /// Chỉ phát, KHÔNG điều hướng.
+  ///
+  /// Đang phát chính clip này ⇒ tạm dừng. Mọi trường hợp khác ⇒ phát từ đầu.
+  /// Không kèm `showAudioFeedback` cho nhánh tạm dừng: kết quả nghe thấy tức
+  /// thì, snackbar chỉ dành cho ý định có thể bị chính sách chặn trong im lặng.
+  void _togglePlay(BuildContext context, ExhibitInfo exhibit) {
+    final audio = context.read<AudioProvider>();
+    final c = audio.state.current;
+    final isThis = c != null &&
+        !c.isIntro &&
+        c.zoneMajor == major &&
+        c.exhibitMinor == exhibit.minor;
+    if (isThis && audio.isPlaying) {
+      audio.pause();
+      return;
+    }
+    showAudioFeedback(
+      context,
+      isThis
+          ? audio.play()
+          : audio.tapExhibit(major: major, minor: exhibit.minor),
     );
   }
 
@@ -400,6 +425,8 @@ class _IntroTrack extends StatelessWidget {
       );
     }
 
+    final content = context.watch<ContentProvider>();
+
     return StreamBuilder<Duration>(
       stream: audio.position,
       builder: (context, snap) {
@@ -410,7 +437,11 @@ class _IntroTrack extends StatelessWidget {
           // này và chỉ chỗ này.
           trackColor: t.inkOnImage.withValues(alpha: 0.28),
           fillColor: t.accentOnImage,
-          showHead: false,
+          // ĐẦU ĐỌC BẬT LÊN cùng lúc với việc tua được. Bản vẽ tắt nó ở đây vì
+          // lúc ấy vạch chỉ báo cáo tiến độ; giờ nó mời tua, nên nó phải nói ra
+          // điều đó — xem [ProgressTrack.onSeek].
+          onSeek: (f) => audio.seek(total * f),
+          semanticLabel: content.ui(UiKeys.exhibitProgressLabel),
         );
       },
     );
@@ -447,7 +478,12 @@ class _ExhibitTile extends StatelessWidget {
   final int major;
   final ContentProvider content;
   final bool heard;
+
+  /// Chạm vào ẢNH — mở màn chi tiết.
   final VoidCallback onTap;
+
+  /// Chạm vào DẤU PHÁT — chỉ phát/tạm dừng, ở lại bảng.
+  final VoidCallback onPlayToggle;
 
   const _ExhibitTile({
     super.key,
@@ -456,10 +492,16 @@ class _ExhibitTile extends StatelessWidget {
     required this.content,
     required this.heard,
     required this.onTap,
+    required this.onPlayToggle,
   });
 
-  /// Độ đậm của lớp phủ đen khi đã nghe. Xem chú giải tại chỗ dùng.
+  /// Độ đậm của lớp phủ đen khi đã nghe, và độ đục còn lại của cả ô.
+  ///
+  /// HAI CON SỐ, HAI VIỆC KHÁC NHAU — đừng gộp: [_heardDarken] làm ảnh tối mà
+  /// vẫn giữ chi tiết, [_heardFade] đẩy cả ô lùi ra sau. Chỉnh riêng từng cái
+  /// khi so trên máy.
   static const double _heardDarken = 0.42;
+  static const double _heardFade = 0.78;
 
   @override
   Widget build(BuildContext context) {
@@ -513,15 +555,23 @@ class _ExhibitTile extends StatelessWidget {
                   // ĐÃ CÓ, nên vùng trong suốt của một ảnh PNG không bị bôi đen
                   // thành một khối vuông.
                   if (heard)
-                    ColorFiltered(
-                      colorFilter: ColorFilter.mode(
-                        const Color(0xFF000000)
-                            .withValues(alpha: _heardDarken),
-                        BlendMode.srcATop,
-                      ),
-                      child: HeroImage(
-                        filePath: content.imagePath(exhibit.thumbnailPath),
-                        cacheWidth: decodeWidth,
+                    // TỐI ĐI **VÀ** LÙI RA SAU. Chỉ tối thì ô đọc ra là "ảnh
+                    // chụp thiếu sáng"; chỉ mờ thì ảnh bạc màu. Hai lớp cùng
+                    // làm mới ra đúng nghĩa "cái này xong rồi": lớp đen giữ
+                    // nguyên tương phản BÊN TRONG ảnh, lớp mờ đẩy cả ô lùi một
+                    // bước khỏi những ô chưa nghe.
+                    Opacity(
+                      opacity: _heardFade,
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          const Color(0xFF000000)
+                              .withValues(alpha: _heardDarken),
+                          BlendMode.srcATop,
+                        ),
+                        child: HeroImage(
+                          filePath: content.imagePath(exhibit.thumbnailPath),
+                          cacheWidth: decodeWidth,
+                        ),
                       ),
                     )
                   else
@@ -535,13 +585,26 @@ class _ExhibitTile extends StatelessWidget {
                   Positioned(
                     left: 0,
                     bottom: 0,
+                    // HAI VÙNG CHẠM, HAI Ý ĐỊNH KHÁC NHAU — và đó là toàn bộ
+                    // điểm của khối này:
+                    //
+                    //     chạm ẢNH      → mở màn chi tiết (và phát)
+                    //     chạm DẤU PHÁT → CHỈ phát, ở lại bảng
+                    //
+                    // Khách đang đứng trước tủ kính thật thường chỉ muốn nghe
+                    // mà vẫn nhìn hiện vật bằng mắt; đẩy họ sang một màn chữ
+                    // giữa lúc đó là cắt ngang đúng việc họ đang làm. Dấu phát
+                    // có `onTap` riêng nên nó NUỐT cú chạm, không rơi xuống
+                    // InkWell của cả ô.
                     child: PlayMark(
                       glyph: playing ? PlayGlyph.pause : PlayGlyph.play,
                       size: PlayMark.grid,
                       color: playing
                           ? t.accentOnImage
                           : t.inkOnImage.withValues(alpha: 0.62),
-                      semanticLabel: name,
+                      semanticLabel: content.ui(
+                          playing ? UiKeys.exhibitPause : UiKeys.exhibitPlay),
+                      onTap: onPlayToggle,
                     ),
                   ),
                 ],
