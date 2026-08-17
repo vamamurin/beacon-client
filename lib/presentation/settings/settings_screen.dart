@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:beacon_client/domain/interfaces/i_keep_alive.dart';
+import 'package:beacon_client/presentation/app/app_router.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
@@ -88,6 +89,8 @@ class SettingsScreen extends StatelessWidget {
             content.ui(UiKeys.settingsDistanceDesc),
             style: AppText.stopMeta.copyWith(color: t.inkFaint),
           ),
+          const SizedBox(height: 12),
+          const _ModelLabRow(),
           const SizedBox(height: 32),
 
           // ── MÁY CHỦ NỘI DUNG ──
@@ -330,6 +333,36 @@ class _DistanceToggle extends StatelessWidget {
         activeThumbColor: t.ctaFill,
         title: Text(content.ui(UiKeys.settingsDistanceToggle),
             style: AppText.sheetSub.copyWith(color: t.ink)),
+      ),
+    );
+  }
+}
+
+/// ⚠ SPIKE M0 — lối vào dụng cụ đo bộ dựng 3D. Xoá dòng này cùng lúc với việc
+/// gỡ `model_viewer_plus` khi M0 có kết luận.
+///
+/// CHUỖI Ở ĐÂY VIẾT THẲNG, KHÔNG QUA `ui()` — cố ý, và là ngoại lệ DUY NHẤT.
+/// Luật "mọi chữ lấy từ bundle" tồn tại để một quyết định kỹ thuật không âm
+/// thầm sửa một quyết định thiết kế. Ở đây không có quyết định thiết kế nào để
+/// sửa: khách không bao giờ thấy dòng này, và đưa nó vào manifest là bắt đội
+/// CMS dịch sang ba thứ tiếng một thứ sắp bị xoá.
+class _ModelLabRow extends StatelessWidget {
+  const _ModelLabRow();
+
+  @override
+  Widget build(BuildContext context) {
+    final t = context.tokens;
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text('Model Lab (spike 3D)',
+            style: AppText.sheetSub.copyWith(color: t.ink)),
+        subtitle: Text('Đo bộ dựng 3D trên máy thực địa. Không phải tính năng.',
+            style: AppText.stopMeta.copyWith(color: t.inkFaint)),
+        trailing: Icon(Icons.chevron_right, color: t.inkFaint),
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRouter.modelLabRoute),
       ),
     );
   }

@@ -6,6 +6,7 @@
 
 import 'package:flutter/material.dart';
 
+import 'package:beacon_client/presentation/debug/model_lab_screen.dart';
 import 'package:beacon_client/presentation/exhibits/exhibit_detail_screen.dart';
 import 'package:beacon_client/presentation/exhibits/exhibit_list_screen.dart';
 import 'package:beacon_client/presentation/app/tour_shell.dart';
@@ -67,6 +68,13 @@ abstract final class AppRouter {
   static const String articleRoute = '/article';
   static const String farewellRoute = '/farewell'; // cảm ơn / gửi lại máy
 
+  /// ⚠ SPIKE M0 — dụng cụ đo, không phải một màn của sản phẩm.
+  ///
+  /// Sống cạnh các màn toàn màn hình vì nó cũng phủ tab bar, nhưng khác chúng ở
+  /// một điểm: nó phải BIẾN MẤT cùng với `model_viewer_plus` khi M0 có kết luận.
+  /// Lối vào duy nhất là mục Chẩn đoán trong Cài đặt (màn của nhân viên).
+  static const String modelLabRoute = '/model-lab';
+
   /// MÀN NGHỈ — nơi máy quay về mỗi khi không có tour nào chạy: lúc nằm trên
   /// dock, lúc vừa được nhấc lên, và sau khi một chuyến đi khép lại.
   ///
@@ -122,6 +130,8 @@ abstract final class AppRouter {
         return _page(const SummaryScreen(), settings);
       case farewellRoute:
         return _page(const FarewellScreen(), settings);
+      case modelLabRoute:
+        return _page(const ModelLabScreen(), settings);
       default:
         return _error(settings, 'Unknown route: "${settings.name}".');
     }

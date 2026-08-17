@@ -31,6 +31,23 @@
         <domain includeSubdomains="false">10.0.2.2</domain>
     </domain-config>
 
+    <!-- SPIKE M0 — LOOPBACK CỦA CHÍNH MÁY.
+         model_viewer_plus không nạp file .glb thẳng vào WebView; nó dựng một
+         HTTP server trên 127.0.0.1 rồi trỏ <model-viewer> vào đó. Không có mục
+         này thì base-config bên dưới CHẶN, và triệu chứng là một khung trắng
+         câm lặng — không lỗi, không log, rất tốn thời gian để lần ra.
+
+         Lưu ý: android:usesCleartextTraffic="true" trong Manifest KHÔNG cứu
+         được, vì networkSecurityConfig ghi đè lên nó.
+
+         Phạm vi: chỉ loopback, tức chỉ chính máy này nói với chính nó. Không
+         mở thêm một đường ra ngoài nào. Nếu M0 kết luận bỏ bộ dựng 3D thì xoá
+         khối này cùng lúc với việc gỡ model_viewer_plus. -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+
     <!-- Everything else: cleartext stays BLOCKED (public internet = HTTPS). -->
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>

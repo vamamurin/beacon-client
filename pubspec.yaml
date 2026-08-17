@@ -28,6 +28,13 @@ dependencies:
   # QR "mang chuyến đi về nhà" ở màn tổng kết. Chỉ VẼ mã, không quét — không
   # kéo theo quyền camera nào.
   qr_flutter: ^4.1.0
+  # ⚠ SPIKE M0 — ĐO, CHƯA PHẢI QUYẾT ĐỊNH. Kéo theo webview_flutter +
+  # url_launcher. Nếu M0 kết luận không dùng bộ dựng 3D thời gian thực thì gỡ cả
+  # cụm này đi, đừng để lại một WebView không ai gọi trong bản giao cho khách.
+  #
+  # GHIM CỨNG, không dấu `^`: đây là bản đã đo trên máy thực địa, và một bản vá
+  # tự trôi vào sẽ làm mọi số đo trong docs/M0-baseline.md nói về một thứ khác.
+  model_viewer_plus: 1.10.0
 
 dev_dependencies:
   flutter_test:
@@ -50,3 +57,7 @@ flutter:
 
   assets:
     - assets/audio/
+    # ⚠ SPIKE M0 — hai mẫu Khronos để đo, KHÔNG phải nội dung bảo tàng và
+    # KHÔNG được đi theo bản phát hành (chúng cộng 5.4 MB vào APK). Model thật
+    # sẽ tới qua bundle nội dung như ảnh và audio, không nhúng vào app.
+    - assets/models_spike/
