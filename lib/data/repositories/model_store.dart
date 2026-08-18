@@ -38,6 +38,8 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:beacon_client/data/repositories/bundle_layout.dart';
+
 /// Một mô hình như máy chủ khai báo nó trong `models.json`.
 @immutable
 class ModelRef {
@@ -236,7 +238,7 @@ class ModelStore {
     // Kiểm chỗ trống TRƯỚC khi tải. `ContentSyncService` hiện không làm bước
     // này (nợ đã ghi nhận); ở đây làm ngay vì model là thứ nặng nhất bundle
     // từng phải mang, và hỏng vì đầy ổ giữa chừng là hỏng khó hiểu nhất.
-    final free = await _freeBytes();
+    final free = await BundleLayout.freeBytesFor(rootDir.path);
     if (free != null && free - ref.bytes < _minFreeBytesAfter) {
       return ModelFetchResult(
         ModelFetchStatus.noSpace,
@@ -349,24 +351,6 @@ class ModelStore {
 
   Future<String> _sha256OfFile(File f) async =>
       (await sha256.bind(f.openRead()).first).toString();
-
-  /// Chỗ trống của phân vùng chứa kho, hoặc null nếu không hỏi được.
-  /// Không có API dart:io cho việc này nên đọc qua `statvfs` của hệ thống;
-  /// hỏi không được thì trả null và BỎ QUA bước kiểm, chứ không chặn việc tải.
-  Future<int?> _freeBytes() async {
-    try {
-      final res = await Process.run('stat', ['-f', '-c', '%a %S', rootDir.path]);
-      if (res.exitCode != 0) return null;
-      final parts = res.stdout.toString().trim().split(RegExp(r'\s+'));
-      if (parts.length < 2) return null;
-      final blocks = int.tryParse(parts[0]);
-      final size = int.tryParse(parts[1]);
-      if (blocks == null || size == null) return null;
-      return blocks * size;
-    } on Exception {
-      return null;
-    }
-  }
 
   static String _mb(int bytes) => (bytes / 1024 / 1024).toStringAsFixed(1);
 

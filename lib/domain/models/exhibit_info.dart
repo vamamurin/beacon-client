@@ -25,6 +25,44 @@ class SpecEntry {
   int get hashCode => Object.hash(label, value);
 }
 
+/// Mô hình 3D của một hiện vật.
+///
+/// KHÔNG MANG ĐƯỜNG DẪN TỚI FILE `.glb`. Đó là điểm khác quan trọng nhất so với
+/// mọi tài sản khác của hiện vật (ảnh, audio) và nó có lý do:
+///
+/// Ảnh và audio đi TRONG bundle nội dung — tải nguyên khối, thay nguyên khối.
+/// Mô hình 3D thì không: chúng nặng gấp hàng chục lần, và nếu nhét vào bundle
+/// thì sửa một dấu phẩy trong manifest là cả đội máy tải lại hàng trăm MB. Nên
+/// model đi đường riêng, từng file, đánh địa chỉ bằng sha256 (xem [ModelStore]).
+///
+/// Vì thế manifest chỉ trỏ một KHOÁ [id] vào danh mục `models.json` của máy chủ,
+/// còn nội dung thì `ModelStore` tự đối chiếu và tải. Hệ quả kéo theo: quy tắc
+/// đường dẫn của `ManifestParser` KHÔNG cần biết tới `.glb` — bundle không bao
+/// giờ chứa file 3D, nên bề mặt của nó giữ nguyên như trước tính năng này.
+///
+/// [poster] thì NGƯỢC LẠI, nằm trong bundle và BẮT BUỘC. Nó là bảo hiểm: model
+/// có thể chưa tải xong, có thể tải hỏng, có thể máy quá yếu để dựng — nhưng
+/// khung hình đầu của sân khấu 04c thì luôn phải có gì đó để hiện. Một hiện vật
+/// khai `model` mà thiếu `poster` là một hiện vật có thể hiện ra khung trống,
+/// nên nó bị bỏ cả khối `model` (kèm warning) thay vì được nhận một nửa.
+@immutable
+class ExhibitModel {
+  /// Khoá vào `models.json` trên máy chủ ("tuong-phat"). KHÔNG phải đường dẫn.
+  final String id;
+
+  /// Ảnh giữ chỗ, đường dẫn tương đối trong bundle. Luôn có.
+  final String poster;
+
+  const ExhibitModel({required this.id, required this.poster});
+
+  @override
+  bool operator ==(Object other) =>
+      other is ExhibitModel && other.id == id && other.poster == poster;
+
+  @override
+  int get hashCode => Object.hash(id, poster);
+}
+
 /// Immutable exhibit metadata (successor of ArtifactInfo, zone-first model).
 ///
 /// Keyed by [minor] — the iBeacon minor value shared with beacon firmware and
@@ -77,6 +115,11 @@ class ExhibitInfo {
   /// Per-exhibit narration clip — one playlist item in the zone tour.
   final AudioClipInfo audio;
 
+  /// Mô hình 3D, hoặc null nếu hiện vật này không có. TUỲ CHỌN theo đúng nghĩa:
+  /// phần lớn hiện vật sẽ không bao giờ có model, và bundle nào không khai khối
+  /// này vẫn hợp lệ y như trước.
+  final ExhibitModel? model;
+
   const ExhibitInfo({
     required this.minor,
     this.id,
@@ -88,6 +131,7 @@ class ExhibitInfo {
     required this.thumbnailPath,
     this.extraImagePaths = const [],
     required this.audio,
+    this.model,
   });
 
   @override
@@ -103,7 +147,8 @@ class ExhibitInfo {
         other.imagePath == imagePath &&
         other.thumbnailPath == thumbnailPath &&
         listEquals(other.extraImagePaths, extraImagePaths) &&
-        other.audio == audio;
+        other.audio == audio &&
+        other.model == model;
   }
 
   @override
@@ -118,5 +163,6 @@ class ExhibitInfo {
         thumbnailPath,
         Object.hashAll(extraImagePaths),
         audio,
+        model,
       );
 }

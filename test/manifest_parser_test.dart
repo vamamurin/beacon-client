@@ -184,6 +184,96 @@ void main() {
     });
   });
 
+  // `exhibit.model` không trỏ tới file .glb — nó trỏ một KHOÁ vào models.json,
+  // vì model đi theo model pack riêng chứ không nằm trong bundle. Nhóm test này
+  // giữ đúng hai điều: khối model không bao giờ giết hiện vật, và một khối
+  // model KHÔNG ĐỦ (thiếu poster) bị bỏ hẳn chứ không được nhận một nửa.
+  group('ManifestParser — exhibit.model', () {
+    Map<String, dynamic> firstExhibit(Map<String, dynamic> m) =>
+        (((m['zones'] as List).first as Map)['exhibits'] as List).first
+            as Map<String, dynamic>;
+
+    test('vắng mặt là hợp lệ — mọi bundle cũ đi đường này', () {
+      final parsed = ManifestParser.parse(baseManifest());
+      expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull);
+      expect(parsed.warnings, isEmpty);
+    });
+
+    test('khối hợp lệ được đọc đúng', () {
+      final m = baseManifest();
+      firstExhibit(m)['model'] = {
+        'id': 'sung-ak-47',
+        'poster': 'images/exhibits/sung-ak-47/main.jpg',
+      };
+
+      final model = ManifestParser.parse(m).zones.first.exhibitByMinor(1)!.model;
+      expect(model, isNotNull);
+      expect(model!.id, 'sung-ak-47');
+      expect(model.poster, 'images/exhibits/sung-ak-47/main.jpg');
+    });
+
+    test('thiếu poster ⇒ bỏ CẢ khối, hiện vật vẫn sống', () {
+      final m = baseManifest();
+      firstExhibit(m)['model'] = {'id': 'sung-ak-47'};
+
+      final parsed = ManifestParser.parse(m);
+      final ex = parsed.zones.first.exhibitByMinor(1)!;
+      expect(ex.model, isNull, reason: 'không được nhận một nửa khối');
+      expect(ex.audio, isNotNull, reason: 'hiện vật KHÔNG được chết theo');
+      expect(parsed.warnings.single, contains('model.poster'));
+    });
+
+    test('poster phải đi qua đúng luật đường dẫn của bundle', () {
+      for (final bad in [
+        'images/../../../etc/passwd.jpg',
+        'https://cdn.example.com/x.jpg',
+        '/absolute/x.jpg',
+        'models/x.glb', // .glb KHÔNG hợp lệ trong bundle, kể cả ở đây
+      ]) {
+        final m = baseManifest();
+        firstExhibit(m)['model'] = {'id': 'ak', 'poster': bad};
+
+        final parsed = ManifestParser.parse(m);
+        expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull,
+            reason: 'với "$bad"');
+        expect(parsed.warnings.single, contains('model.poster'));
+      }
+    });
+
+    // id là khoá tra cứu, KHÔNG phải đường dẫn — nên nó chịu một bộ ký tự hẹp
+    // hơn hẳn, và mọi thứ mang hình dáng đường dẫn đều bị loại.
+    test('id chịu bộ ký tự hẹp', () {
+      for (final bad in [
+        '',
+        'có dấu cách',
+        '../escape',
+        'a/b',
+        'a.b',
+        '-mo-dau-bang-gach',
+      ]) {
+        final m = baseManifest();
+        firstExhibit(m)['model'] = {
+          'id': bad,
+          'poster': 'images/exhibits/sung-ak-47/main.jpg',
+        };
+
+        final parsed = ManifestParser.parse(m);
+        expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull,
+            reason: 'với "$bad"');
+        expect(parsed.warnings.single, contains('model.id'));
+      }
+    });
+
+    test('model không phải object thì bỏ kèm warning', () {
+      final m = baseManifest();
+      firstExhibit(m)['model'] = 'sung-ak-47.glb';
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull);
+      expect(parsed.warnings.single, contains('không phải object'));
+    });
+  });
+
   group('MockZoneRepository', () {
     test('preWarm is idempotent and exposes the parsed catalog', () async {
       final repo = MockZoneRepository(simulatedLatency: Duration.zero);

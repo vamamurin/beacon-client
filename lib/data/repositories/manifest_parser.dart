@@ -294,12 +294,63 @@ abstract final class ManifestParser {
         thumbnailPath: _reqPath(e, 'thumbnail', ctx),
         extraImagePaths: _optExtraImages(e, ctx, imagePath, warnings),
         audio: audio,
+        model: _optModel(e, ctx, warnings),
       );
     } on BundleValidationException catch (err) {
       warnings.add('$ctx: skipped — ${err.message}');
       return null;
     }
   }
+
+  /// `exhibit.model` — mô hình 3D, TÙY CHỌN.
+  ///
+  /// ```jsonc
+  /// "model": { "id": "tuong-phat", "poster": "images/…/poster.jpg" }
+  /// ```
+  ///
+  /// KHÔNG BAO GIỜ LÀM HỎNG HIỆN VẬT — cùng luật với `exhibit.images`, và ở đây
+  /// còn rõ hơn: một hiện vật mất mô hình 3D thì khách vẫn xem được ảnh và vẫn
+  /// nghe được thuyết minh. Huỷ cả bản ghi vì một khối trang trí là phản ứng
+  /// lớn hơn thiệt hại.
+  ///
+  /// `id` KHÔNG phải đường dẫn — nó là khoá vào `models.json` của máy chủ (xem
+  /// [ExhibitModel]). Vì thế nó không đi qua [_pathRule]; thứ nó phải chịu là
+  /// một bộ ký tự hẹp, vì chuỗi này rồi sẽ được so khớp với danh mục tải về.
+  ///
+  /// `poster` thì LÀ đường dẫn bundle và BẮT BUỘC: thiếu nó thì khung hình đầu
+  /// của sân khấu có thể rỗng khi model chưa tải xong. Thiếu ⇒ bỏ cả khối, chứ
+  /// không nhận một nửa rồi để màn hình tự xoay xở.
+  static ExhibitModel? _optModel(
+    Map<String, dynamic> e,
+    String ctx,
+    List<String> warnings,
+  ) {
+    final raw = e['model'];
+    if (raw == null) return null; // mọi bundle cũ đi đường này
+    if (raw is! Map<String, dynamic>) {
+      warnings.add('$ctx: "model" không phải object — bỏ');
+      return null;
+    }
+
+    final id = raw['id'];
+    if (id is! String || !_modelIdRule.hasMatch(id)) {
+      warnings.add('$ctx: model.id không hợp lệ ($id) — bỏ khối model');
+      return null;
+    }
+
+    final poster = raw['poster'];
+    if (poster is! String || !_pathRule.hasMatch(poster)) {
+      warnings.add('$ctx: model.poster thiếu hoặc không hợp lệ — bỏ khối model');
+      return null;
+    }
+
+    return ExhibitModel(id: id, poster: poster);
+  }
+
+  /// Bộ ký tự cho `model.id`. Hẹp có chủ ý: chuỗi này tới từ CMS và sẽ được so
+  /// khớp với `models.json`, nên nó chỉ cần đủ để làm một khoá — không cần dấu
+  /// chấm, dấu cách hay ký tự đường dẫn nào.
+  static final RegExp _modelIdRule = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$');
 
   /// `exhibit.images` — dải ảnh phụ, TÙY CHỌN.
   ///

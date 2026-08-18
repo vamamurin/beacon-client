@@ -105,6 +105,13 @@ class ContentSyncService {
   })  : _layout = layout,
         _transport = transport;
 
+  /// Chỗ trống phải còn lại SAU khi sync xong. Một máy đầy ổ không chỉ hỏng
+  /// việc tải — nó hỏng cả ghi analytics, ghi tiến trình tour và ghi log, tức
+  /// hỏng đúng những thứ cần nhất để hiểu vì sao nó hỏng.
+  static const int _minFreeBytesAfter = 200 * 1024 * 1024;
+
+  static String _mb(int bytes) => (bytes / 1024 / 1024).toStringAsFixed(0);
+
   final BundleLayout _layout;
   final SyncTransport _transport;
 
@@ -200,11 +207,36 @@ class ContentSyncService {
       if (await tmpDir.exists()) await tmpDir.delete(recursive: true);
       await _safeDelete(tarFile);
 
-      // 2. Download (resumable — untouched by the streaming rewrite).
+      // 2. Đủ chỗ chưa? Kiểm TRƯỚC khi tải, không phải khi ghi hỏng giữa chừng.
+      //
+      // Giải nén cần khoảng 3× dung lượng bundle cùng lúc trên đĩa: archive
+      // (.part) + tar trung gian + cây file đã bung. Ở 7.5 MB thì không ai để
+      // ý; khi bảo tàng bổ sung nội dung thì con số ấy lớn dần, và hỏng vì đầy
+      // ổ giữa lúc giải nén là kiểu hỏng khó hiểu nhất — nó để lại một máy có
+      // bundle cũ còn nguyên nhưng đầy rác, và thông báo lỗi thì nói về một
+      // thao tác file ngẫu nhiên nào đó.
+      //
+      // KHÔNG thêm SyncOutcome mới cho trường hợp này: một nhánh enum mới bắt
+      // hai `switch` phải mở rộng VÀ bắt đội CMS dịch một chuỗi giao diện mới
+      // cho một tình huống hiếm. `failed` kèm error nói rõ đã tới được đúng chỗ
+      // nhân viên đọc.
+      final free = await BundleLayout.freeBytesFor(_layout.rootDir.path);
+      final expectedBytes = (info['bytes'] as num?)?.toInt();
+      if (free != null && expectedBytes != null && expectedBytes > 0) {
+        final needed = expectedBytes * 3 + _minFreeBytesAfter;
+        if (free < needed) {
+          return SyncResult(SyncOutcome.failed,
+              version: version,
+              error: 'không đủ dung lượng: còn ${_mb(free)} MB, '
+                  'cần ${_mb(needed)} MB để tải và giải nén');
+        }
+      }
+
+      // 3. Download (resumable — untouched by the streaming rewrite).
       await _transport.downloadArchive(version, archiveFile,
           onProgress: onProgress);
 
-      // 3. Verify checksum BEFORE unpacking. Streams the file (openRead) — no
+      // 4. Verify checksum BEFORE unpacking. Streams the file (openRead) — no
       // whole-archive allocation here either.
       final actualSha = await _sha256OfFile(archiveFile);
       if (actualSha != expectedSha) {

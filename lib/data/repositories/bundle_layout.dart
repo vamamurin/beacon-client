@@ -89,6 +89,34 @@ class BundleLayout {
     }
   }
 
+  /// Bytes free on the filesystem holding [path], or null if it can't be asked.
+  ///
+  /// dart:io has no API for this, so it shells out to `stat`. Returning null on
+  /// any failure is deliberate: a missing free-space reading must SKIP the
+  /// check, never block a sync. Refusing to update content because we couldn't
+  /// run `stat` would trade a rare real problem for a common invented one.
+  ///
+  /// Lives here rather than beside its callers because both the bundle sync and
+  /// the model store need it, and two copies of a shell-out is two places to fix
+  /// when one platform parses the output differently.
+  static Future<int?> freeBytesFor(String path) async {
+    try {
+      // %a = free blocks available to a non-root process, %S = block size.
+      // Deliberately NOT %f (total free): the last few percent are reserved for
+      // root, and counting them would let a write fail after we said it fit.
+      final res = await Process.run('stat', ['-f', '-c', '%a %S', path]);
+      if (res.exitCode != 0) return null;
+      final parts = res.stdout.toString().trim().split(RegExp(r'\s+'));
+      if (parts.length < 2) return null;
+      final blocks = int.tryParse(parts[0]);
+      final size = int.tryParse(parts[1]);
+      if (blocks == null || size == null) return null;
+      return blocks * size;
+    } on Exception {
+      return null;
+    }
+  }
+
   /// The active version string, or null if none committed yet (fresh device).
   Future<String?> activeVersion() async {
     if (!await _activePointer.exists()) return null;
