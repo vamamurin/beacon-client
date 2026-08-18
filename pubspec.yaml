@@ -28,9 +28,21 @@ dependencies:
   # QR "mang chuyến đi về nhà" ở màn tổng kết. Chỉ VẼ mã, không quét — không
   # kéo theo quyền camera nào.
   qr_flutter: ^4.1.0
-  # ⚠ SPIKE M0 — ĐO, CHƯA PHẢI QUYẾT ĐỊNH. Kéo theo webview_flutter +
-  # url_launcher. Nếu M0 kết luận không dùng bộ dựng 3D thời gian thực thì gỡ cả
-  # cụm này đi, đừng để lại một WebView không ai gọi trong bản giao cho khách.
+  # BỘ DỰNG 3D ĐÃ CHỌN (chốt 18/08/2026 sau spike M0). Kéo theo webview_flutter
+  # + url_launcher.
+  #
+  # Ứng viên còn lại, `flutter_scene`, đã bị loại BẰNG THỰC NGHIỆM chứ không
+  # phải bằng lập luận: trên máy thực địa (PowerVR GE8300, KHÔNG có Vulkan) nó
+  # khởi tạo được và phân tích glTF nhanh gấp đôi, nhưng ở khung hình đầu thì
+  # backend OpenGL ES của Impeller gặp uniform sai kiểu và engine abort —
+  # SIGABRT trên luồng raster, giết cả tiến trình cùng foreground service, BLE
+  # và audio. WebView hỏng thì hệ điều hành hy sinh tiến trình khác và chuyến
+  # tham quan sống; flutter_scene hỏng thì chuyến tham quan chết theo.
+  #
+  # ⚠ ĐÂY KHÔNG PHẢI KẾT LUẬN VĨNH VIỄN. Lỗi nằm ở backend GLES; trên máy CÓ
+  # Vulkan thì flutter_scene mở lại được, và nó sẽ bỏ được ~200 MB Chromium mà
+  # gói này bắt buộc phải trả (§8 trong docs/M0-baseline.md). Nếu cấu hình máy
+  # giao đổi, đo lại trước khi coi lựa chọn này là đã xong.
   #
   # GHIM CỨNG, không dấu `^`: đây là bản đã đo trên máy thực địa, và một bản vá
   # tự trôi vào sẽ làm mọi số đo trong docs/M0-baseline.md nói về một thứ khác.

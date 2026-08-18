@@ -6,7 +6,6 @@
 
 import 'package:flutter/material.dart';
 
-import 'package:beacon_client/presentation/debug/model_lab_screen.dart';
 import 'package:beacon_client/presentation/exhibits/exhibit_detail_screen.dart';
 import 'package:beacon_client/presentation/exhibits/exhibit_list_screen.dart';
 import 'package:beacon_client/presentation/app/tour_shell.dart';
@@ -70,10 +69,24 @@ abstract final class AppRouter {
 
   /// ⚠ SPIKE M0 — dụng cụ đo, không phải một màn của sản phẩm.
   ///
-  /// Sống cạnh các màn toàn màn hình vì nó cũng phủ tab bar, nhưng khác chúng ở
-  /// một điểm: nó phải BIẾN MẤT cùng với `model_viewer_plus` khi M0 có kết luận.
   /// Lối vào duy nhất là mục Chẩn đoán trong Cài đặt (màn của nhân viên).
   static const String modelLabRoute = '/model-lab';
+
+  /// Route được TIÊM TỪ NGOÀI, rỗng trong app thật.
+  ///
+  /// VÌ SAO PHẢI VÒNG QUA ĐÂY thay vì `case modelLabRoute:` như mọi màn khác:
+  /// màn Model Lab dùng `flutter_scene`, và `flutter_scene` dựa trên
+  /// `flutter_gpu` — một thư viện do ENGINE cung cấp, KHÔNG tồn tại trong môi
+  /// trường `flutter test`. Bất kỳ file nào trong đồ thị import của app chạm
+  /// tới nó sẽ làm **mọi widget test** không biên dịch được, với lỗi
+  /// `Type 'gpu.VertexFormat' not found`. Đã xảy ra: ba test đỏ cùng lúc chỉ vì
+  /// bảng route này import màn Lab.
+  ///
+  /// Nên đồ thị của app KHÔNG được biết tới màn ấy. Nó được đăng ký từ một
+  /// entrypoint riêng (`lib/main_spike.dart`), và bảng này chỉ tra cứu một map.
+  /// Khi M0 kết thúc, xoá entrypoint đó là mọi dấu vết biến mất — không phải đi
+  /// gỡ từng `case` rải rác.
+  static Map<String, WidgetBuilder> extraRoutes = const {};
 
   /// MÀN NGHỈ — nơi máy quay về mỗi khi không có tour nào chạy: lúc nằm trên
   /// dock, lúc vừa được nhấc lên, và sau khi một chuyến đi khép lại.
@@ -130,9 +143,11 @@ abstract final class AppRouter {
         return _page(const SummaryScreen(), settings);
       case farewellRoute:
         return _page(const FarewellScreen(), settings);
-      case modelLabRoute:
-        return _page(const ModelLabScreen(), settings);
       default:
+        final extra = extraRoutes[settings.name];
+        if (extra != null) {
+          return MaterialPageRoute<dynamic>(builder: extra, settings: settings);
+        }
         return _error(settings, 'Unknown route: "${settings.name}".');
     }
   }

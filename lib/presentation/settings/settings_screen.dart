@@ -338,8 +338,12 @@ class _DistanceToggle extends StatelessWidget {
   }
 }
 
-/// ⚠ SPIKE M0 — lối vào dụng cụ đo bộ dựng 3D. Xoá dòng này cùng lúc với việc
-/// gỡ `model_viewer_plus` khi M0 có kết luận.
+/// ⚠ SPIKE M0 — lối vào dụng cụ đo bộ dựng 3D.
+///
+/// CHỈ HIỆN KHI ĐƯỢC ĐĂNG KÝ. Bản build thật không đăng ký route ấy, nên hàng
+/// này không tồn tại ở đó — và màn này KHÔNG import màn Lab, vì làm thế sẽ kéo
+/// `flutter_scene` → `flutter_gpu` vào đồ thị của app và mọi widget test hết
+/// biên dịch được. Xem chú giải ở `AppRouter.extraRoutes`.
 ///
 /// CHUỖI Ở ĐÂY VIẾT THẲNG, KHÔNG QUA `ui()` — cố ý, và là ngoại lệ DUY NHẤT.
 /// Luật "mọi chữ lấy từ bundle" tồn tại để một quyết định kỹ thuật không âm
@@ -352,6 +356,9 @@ class _ModelLabRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    if (!AppRouter.extraRoutes.containsKey(AppRouter.modelLabRoute)) {
+      return const SizedBox.shrink();
+    }
     return Material(
       color: Colors.transparent,
       child: ListTile(

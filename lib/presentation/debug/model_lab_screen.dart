@@ -5,7 +5,21 @@
 // thực địa, BÊN CẠNH một chuyến tham quan đang chạy hay không?*
 //
 // Nó KHÔNG phải bản nháp của màn 04c. Màn 04c đã có bố cục đúng theo bản vẽ và
-// không được đụng tới cho tới khi M0 có kết luận. Xem docs/M0-baseline.md.
+// không được đụng tới cho tới khi 3D thật vào chỗ đó. Xem docs/M0-baseline.md.
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// CHỈ CÒN MỘT BỘ DỰNG
+//
+// Bản trước của màn này có bộ chọn giữa `model_viewer_plus` và `flutter_scene`.
+// `flutter_scene` đã bị loại bằng thực nghiệm ngày 18/08/2026: nó khởi tạo
+// được trên máy không Vulkan (32ms) và phân tích glTF nhanh gấp đôi WebView
+// (1.96s), nhưng ở khung hình đầu thì backend OpenGL ES của Impeller gặp uniform
+// sai kiểu và engine abort — `SIGABRT` trên luồng raster, giết cả tiến trình
+// cùng foreground service, BLE và audio.
+//
+// Đó là khác biệt quyết định giữa hai đường: WebView hỏng thì hệ điều hành hy
+// sinh tiến trình khác và chuyến tham quan sống; `flutter_scene` hỏng thì
+// chuyến tham quan chết theo. Chi tiết ở docs/M0-baseline.md §8.
 //
 // ─────────────────────────────────────────────────────────────────────────────
 // MODEL ĐẾN TỪ MÁY CHỦ, KHÔNG TỪ ASSETS
@@ -13,7 +27,7 @@
 // Bản đầu của màn này nhúng hai mẫu `.glb` vào `assets/` — nghĩa là mỗi lần đổi
 // model phải build lại app. Sai ngay cả với một dụng cụ đo: nó biến một vòng
 // thử 30 giây thành một vòng build vài phút, và nó dựng một đường nạp model
-// KHÁC với đường mà sản phẩm thật sẽ dùng, nên số đo nói về sai thứ.
+// KHÁC với đường sản phẩm thật sẽ dùng, nên số đo nói về sai thứ.
 //
 // Nay model đi qua [ModelStore] — đúng cơ chế sẽ chạy trong sản phẩm: máy chủ
 // khai `models.json`, máy tải từng file, đánh địa chỉ bằng sha256, verify rồi
@@ -176,18 +190,18 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
       ..reset()
       ..start();
     setState(() => _mountedPath = store.fileFor(ref.sha256).path);
-    _note('nạp ${ref.id} — bắt đầu dựng widget');
+    _note('nạp ${ref.id}');
   }
 
   /// Nhả khối 3D RA KHỎI CÂY WIDGET, không chỉ ẩn đi.
   ///
-  /// Đây là nửa sau của phép đo và nó quan trọng ngang nửa đầu: nếu PSS không
-  /// tụt về gần mốc nền sau khi nhả, nghĩa là bộ dựng giữ lại bộ nhớ — và một
-  /// máy khách đi qua vài chục hiện vật trong buổi thì tích lại thành một vụ
-  /// OOM, dù mỗi lần mở đơn lẻ đều trông vô hại.
+  /// Đây là nửa sau của phép đo và nó quan trọng ngang nửa đầu. Đo được:
+  /// nhả chỉ thu hồi ~22% tức thời, và `Graphics` có thể còn TĂNG sau đó —
+  /// nhưng nạp một model nhẹ hơn thì nó tụt, nên là thu hồi chậm chứ không
+  /// phải rò rỉ tích luỹ. Chi tiết ở docs/M0-baseline.md §6.10–6.11.
   void _unload() {
     setState(() => _mountedPath = null);
-    _note('đã nhả — đo lại PSS lúc này, nó PHẢI tụt về gần mốc nền');
+    _note('đã nhả — đo lại PSS lúc này');
     _clock.stop();
   }
 
@@ -203,7 +217,8 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: t.ink),
-        title: Text('Model Lab', style: AppText.sheetTitle.copyWith(color: t.ink)),
+        title:
+            Text('Model Lab', style: AppText.sheetTitle.copyWith(color: t.ink)),
         actions: [
           IconButton(
             tooltip: 'Đọc lại models.json',
@@ -273,8 +288,7 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
                     const SizedBox(width: AppSpace.x3),
                     Expanded(
                       child: FilledButton(
-                        onPressed:
-                            ready && _mountedPath == null ? _load : null,
+                        onPressed: ready && _mountedPath == null ? _load : null,
                         child: const Text('NẠP'),
                       ),
                     ),
@@ -369,8 +383,8 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
                   Text(
                     '${(m.bytes / 1024 / 1024).toStringAsFixed(2)} MB · '
                     '${cached ? "đã có trên máy" : "chưa tải"}',
-                    style: AppText.stopMeta.copyWith(
-                        color: cached ? t.inkFaint : t.error),
+                    style: AppText.stopMeta
+                        .copyWith(color: cached ? t.inkFaint : t.error),
                   ),
                 ],
               ),

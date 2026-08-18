@@ -311,29 +311,52 @@ surface platform view + GPU của Chromium.
 
 ## 7. KẾT LUẬN M0
 
-### 7.1 Phán quyết
+### 7.1 Phán quyết — ⚠ ĐÃ SỬA 18/08/2026, xem §7.1b
 
-**`model_viewer_plus` DÙNG ĐƯỢC — với một điều kiện không thể thương lượng: ngân sách nội
-dung phải được ép ở khâu đóng gói.**
+> **CẢNH BÁO: đoạn dưới đây SAI và được giữ lại có chủ ý** để không ai suy luận
+> lại từ đầu rồi mắc đúng lỗi ấy. Bản sửa ở §7.1b.
 
-Mọi rủi ro đo được tối nay đều truy về **một nguyên nhân duy nhất**: `DamagedHelmet.glb`
-mang **5 × 2048² = 21.0 Mpx** texture JPEG chưa nén GPU — **gấp 3.5 lần** trần 6 Mpx đã đặt
-ở §5, và không có KTX2/Basis.
+~~Mọi rủi ro đo được đều truy về **một nguyên nhân duy nhất**: `DamagedHelmet.glb` mang
+21.0 Mpx texture, gấp 3.5 lần trần. Model đúng ngân sách sẽ ở một hạng khác hẳn.
+Ngân sách là thứ giữ cho máy sống.~~
 
-Bằng chứng nặng nhất là kernel tự khai:
+Bằng chứng làm tôi kết luận như vậy vẫn đúng và vẫn đáng ghi:
 ```
 04:45:32 lowmemorykiller: Kill 'com.android.vending' (31911), oom_score_adj 945
          to free 116288kB rss, 125836kB swap;
          reason: min watermark is breached even after kill
 ```
 Hệ thống **giết Play Store** để nuôi app này, và giết xong **vẫn chưa đủ**. App sống sót nhờ
-`oom_adj = 0` — tức nó sống bằng cách để hệ thống giết thứ khác. Đó là hành vi không được
-phép giao cho khách.
+`oom_adj = 0` — tức nó sống bằng cách để hệ thống giết thứ khác.
 
-Nhưng nguyên nhân là **một model vượt ngân sách 3.5 lần**, không phải bản thân bộ dựng.
-Model đúng ngân sách (≤ 6 Mpx + KTX2 ⇒ VRAM ~10 MB thay vì ~106 MB) sẽ ở một hạng khác hẳn.
+### 7.1b Phán quyết đã sửa
 
-**Ngân sách không phải khuyến nghị. Nó là thứ giữ cho máy sống.**
+Ba phép đo sau đó bác bỏ mệnh đề "ngân sách texture là nguyên nhân":
+
+| Model | Texture | `Graphics` đo được |
+|---|---|---|
+| `2CylinderEngine` | **0 Mpx** | 108 MB *(sau khi nhả)* |
+| `mercedes` | **5.1 Mpx** | **224.7 MB** |
+| `tuong phat` | 16.8 Mpx | 234.7 MB |
+| `DamagedHelmet` | **21.0 Mpx** | 239–251 MB |
+
+Lượng texture chênh nhau **4 lần**, `Graphics` chênh **11 %**. Và phép đối chứng bằng Chrome
+trên chính máy đó (§9) đóng lại câu hỏi:
+
+> **~200 MB là giá CỐ ĐỊNH của Chromium.** Không đến từ model, không đi khi model đi, và
+> **ngân sách nội dung không chạm được vào nó.**
+
+Ngân sách vẫn thật và vẫn bắt buộc — nhưng ở **trục khác**:
+
+| Trục | Cái gì chi phối | Ngân sách giúp? |
+|---|---|---|
+| Bộ nhớ (~600 MB) | Chi phí cố định của Chromium | **Gần như không** |
+| Thời gian nạp (3.8 → **13.6 s**) | Hình học, material, extension | **Rất nhiều** |
+| Khung hình / nhiệt | Hình học, `KHR_materials_transmission` | **Rất nhiều** |
+
+`mercedes` chứng minh vế phải: **nhẹ nhất về texture** nhưng **chậm nhất 3.5 lần**
+(13.6 s tới khung hình đầu) và **nóng nhất** (49.6 °C) — 337k tam giác, 115 lần gọi vẽ,
+31 material, cộng `transmission` để dựng kính xe.
 
 ### 7.2 Bảng chấm cuối
 
@@ -370,7 +393,130 @@ Model đúng ngân sách (≤ 6 Mpx + KTX2 ⇒ VRAM ~10 MB thay vì ~106 MB) s�
 
 ---
 
-## 8. Bước kế
+## 8. `flutter_scene` — loại bằng thực nghiệm (18/08/2026)
+
+Ứng viên thứ hai, và là ứng viên hứa hẹn nhất về lý thuyết: chạy qua `flutter_gpu`, **không
+mang Chromium**, nên về nguyên tắc không phải trả khoản 200 MB ở §7.1b.
+
+### 8.1 Đường tới lỗi — trước khi chết, nó chạy tốt
+
+```
+[0ms]     nạp tuong phat qua flutter_scene
+[32ms]    tài nguyên engine sẵn sàng — CÓ ngữ cảnh Flutter GPU
+          MSAA is not currently supported on this backend
+[83ms]    đọc 5.00 MB từ kho
+          Unpacking glTF (nodes: 1, meshes: 1, materials: 1, skins: 0)
+[1955ms]  phân tích glTF xong
+[1956ms]  cảnh sẵn sàng
+```
+
+| | `model_viewer_plus` | `flutter_scene` |
+|---|---|---|
+| Khởi tạo | 717 ms | **32 ms** |
+| Phân tích model | — | **1.96 s** |
+
+**`flutter_gpu` KHỞI TẠO ĐƯỢC trên máy không Vulkan.** Câu hỏi tồn tại treo suốt spike đã có
+đáp án, và đáp án là "được" — Impeller lùi về backend OpenGL ES đúng như tài liệu nói.
+
+### 8.2 Nó chết ở khung hình đầu
+
+```
+ERROR impeller/renderer/backend/gles/buffer_bindings_gles.cc(409):
+      Float uniform should have a float type
+IMGSRV: ScheduleTA: Skipping render from different gc/thread!
+FATAL impeller/renderer/backend/gles/render_pass_gles.cc(726):
+      Check failed: result. Must be able to encode GL commands without error.
+Fatal signal 6 (SIGABRT) in tid 18206 (1.raster), pid 10190
+```
+
+Backend **OpenGL ES** của Impeller gặp uniform sai kiểu trong shader của `flutter_scene`,
+không mã hoá nổi lệnh GL, và engine `CHECK` fail. App biến mất hoàn toàn — không còn tiến
+trình nào để đo, `MemAvailable` bật lên 1.018 MB vì mọi thứ đã chết.
+
+### 8.3 Đây mới là khác biệt quyết định
+
+| | Khi gặp sự cố |
+|---|---|
+| `model_viewer_plus` | Hệ điều hành giết **tiến trình khác** (Play Store, Play Services). Tour sống — đã chứng minh qua 38 phút và nhiều vòng nạp/nhả |
+| `flutter_scene` | **SIGABRT, giết cả tiến trình.** Foreground service, BLE, audio, tour — mất sạch trong một tín hiệu |
+
+`flutter_scene` chạy trong **chính tiến trình app**, nên hỏng là kéo tour theo. Nó còn không
+cần tới OOM: một assertion của engine là đủ.
+
+### 8.4 ⚠ KHÔNG phải kết luận vĩnh viễn
+
+Lỗi nằm ở backend **GLES** — đường ít được `flutter_scene` kiểm thử nhất, và máy này buộc
+phải đi đường đó vì **không có Vulkan**.
+
+| Máy giao | 3D khả thi |
+|---|---|
+| **Không Vulkan** (máy đang có) | Chỉ `model_viewer_plus` — ~200 MB Chromium, không giảm được bằng ngân sách, không trả lại khi nhả |
+| **Có Vulkan, ≥ 4 GB** | `flutter_scene` mở lại — đã cho thấy khởi tạo nhanh **22×**, phân tích nhanh **2×** |
+
+Đây là con số dùng để đàm phán cấu hình máy với khách: *"máy có Vulkan hay không quyết định
+app tốn 200 MB hay không"*.
+
+### 8.5 Chi phí vận hành của `flutter_scene` (ghi lại phòng khi quay lại)
+
+| Chi phí | |
+|---|---|
+| `flutter config --enable-native-assets` | mọi máy dev + mọi máy CI |
+| Metadata `EnableFlutterGPU` trong manifest | cờ `flutter run --enable-flutter-gpu` KHÔNG tới được embedding Android; phải scope theo buildType nếu ship |
+| Ràng buộc phiên bản không tin được | 0.18–0.20 khai `>=3.44.0` nhưng dùng ký hiệu `flutter_gpu` mà 3.44.4 không có |
+| `flutter analyze` XANH khi biên dịch HỎNG | analyzer và CFE giải `flutter_gpu` khác nhau ⇒ **phải build thật mới biết** |
+| `flutter_gpu` phá biên dịch widget test | `Type 'gpu.VertexFormat' not found` làm đỏ mọi widget test; đã cách ly bằng `lib/main_spike.dart` + `AppRouter.extraRoutes` |
+| Chỉ 0.15.0 khớp SDK 3.44.4 | bản cũ 3 tháng, không có `SceneView` / `PerspectiveCamera.framing` |
+
+Không khoản nào trong sáu khoản này xuất hiện với `model_viewer_plus`.
+
+---
+
+## 9. Đối chứng: cùng model, cùng thư viện, mở bằng Chrome
+
+Câu hỏi: ~200 MB kia là giá của **Chromium**, hay của cách **Flutter nhúng WebView**?
+
+Trang `serve/model-test.html` phục vụ đúng file `.glb` (cùng sha256 từ `models.json`) với
+đúng `model-viewer.min.js` mà `model_viewer_plus 1.10.0` nhúng. Chỉ khác vật chủ.
+
+Chrome tách **5 tiến trình**, cộng hết:
+
+| Tiến trình | PSS | Graphics |
+|---|---|---|
+| `com.android.chrome` (browser) | 151.7 MB | 34.2 MB |
+| `chrome_zygote` | 5.8 MB | — |
+| `sandboxed_process0` (render 1) | 45.8 MB | — |
+| **`privileged_process0` (GPU)** | **223.4 MB** | **163.4 MB** |
+| `sandboxed_process0` (render 2) | 135.2 MB | — |
+| **TỔNG** | **558.4 MB** | **196.8 MB** |
+
+| | Chrome (không tour) | App (WebView, **có tour**) |
+|---|---|---|
+| Tổng PSS | 558.4 MB | 584.0 MB |
+| **Graphics** | **196.8 MB** | **219.4 MB** |
+
+**Chênh 11 %**, và app còn cõng thêm cả một chuyến tham quan. ⇒ **Giá của Chromium.**
+
+Chi tiết giải luôn chỗ §6.1 đọc nhầm: trong Chrome, `Graphics` nằm ở **tiến trình GPU riêng**
+(163 MB). App không có tiến trình GPU riêng nên cùng khoản đó rơi vào tiến trình app. Cùng
+một cái giá, **chỉ khác chỗ ghi sổ** — không phải một đặc tính xấu của Flutter.
+
+### 9.1 Ghi chú về nhiễu trong số liệu nhiệt
+
+Người đo có **chủ động xoay bằng tay** ở nhiều lần đo. Ảnh hưởng:
+
+| Loại số đo | Bị ảnh hưởng? |
+|---|---|
+| PSS / Graphics / swap | **Không** — texture và hình học cấp phát lúc NẠP; xoay chỉ vẽ lại |
+| Thời gian tới khung hình đầu | **Không** — đo xong trước mọi thao tác |
+| Nhiệt / CPU / pin | **Có** |
+
+Vế thứ ba lệch về phía **an toàn**: phép thử 38 phút đã bật tự xoay và thao tác tay chồng
+lên trên, tức tải thực tế **cao hơn** cái ghi được, mà vẫn `Thermal Status: 0`. Chỉ đừng
+đọc quá kỹ chênh lệch nhiệt **giữa các model** (46.3 vs 49.6 °C) — trong đó có nhiễu.
+
+---
+
+## 10. Bước kế
 
 | # | Việc | Vì sao bây giờ |
 |---|---|---|
