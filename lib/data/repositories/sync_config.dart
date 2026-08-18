@@ -46,8 +46,18 @@ class SyncConfig {
   static const double _maxAutoSyncHours = 72;
 
   /// Resolve the active base URL (see precedence above). Never returns empty.
-  static String baseUrl(ISettingsStore settings) {
-    final override = settings.syncBaseUrlOverride;
+  static String baseUrl(ISettingsStore settings) =>
+      baseUrlFrom(settings.syncBaseUrlOverride);
+
+  /// Same precedence, taking the override string directly.
+  ///
+  /// Exists because callers in the presentation layer hold a SettingsProvider,
+  /// not an ISettingsStore, and the alternative was either exposing the store
+  /// through the provider or re-typing this precedence at a second call site.
+  /// Both of those end the same way: two copies that disagree the first time
+  /// someone edits one. [baseUrl] now delegates here, so there is exactly one
+  /// implementation and the tests over it cover both entry points.
+  static String baseUrlFrom(String? override) {
     if (override != null && override.isNotEmpty) return override;
     if (_buildDefaultBaseUrl.isNotEmpty) return _buildDefaultBaseUrl;
     return kFallbackBaseUrl;

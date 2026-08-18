@@ -8,6 +8,19 @@
 // không được đụng tới cho tới khi M0 có kết luận. Xem docs/M0-baseline.md.
 //
 // ─────────────────────────────────────────────────────────────────────────────
+// MODEL ĐẾN TỪ MÁY CHỦ, KHÔNG TỪ ASSETS
+//
+// Bản đầu của màn này nhúng hai mẫu `.glb` vào `assets/` — nghĩa là mỗi lần đổi
+// model phải build lại app. Sai ngay cả với một dụng cụ đo: nó biến một vòng
+// thử 30 giây thành một vòng build vài phút, và nó dựng một đường nạp model
+// KHÁC với đường mà sản phẩm thật sẽ dùng, nên số đo nói về sai thứ.
+//
+// Nay model đi qua [ModelStore] — đúng cơ chế sẽ chạy trong sản phẩm: máy chủ
+// khai `models.json`, máy tải từng file, đánh địa chỉ bằng sha256, verify rồi
+// mới dùng. Đội CMS thả một `.glb` mới lên máy chủ là thử được ngay, không cần
+// ai build hộ. Khi Lab này bị xoá, [ModelStore] Ở LẠI.
+//
+// ─────────────────────────────────────────────────────────────────────────────
 // VÌ SAO MÀN NÀY TRÔNG THÔ NHƯ VẬY
 //
 // Mọi thứ ở đây phục vụ phép đo, không phục vụ con mắt:
@@ -26,42 +39,20 @@
 // Màn này nhân viên kỹ thuật không bao giờ giao cho khách, và nhét mấy chục
 // khoá đo đạc vào manifest sẽ bắt đội CMS dịch một thứ sắp bị xoá.
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+import 'package:provider/provider.dart';
 
+import 'package:beacon_client/data/repositories/model_store.dart';
+import 'package:beacon_client/data/repositories/sync_config.dart';
+import 'package:beacon_client/presentation/providers/settings_provider.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
 import 'package:beacon_client/presentation/theme/museum_tokens.dart';
-
-/// Một mẫu để đo. Hai mẫu Khronos ở đây được chọn vì chúng hỏng theo HAI KIỂU
-/// KHÁC NHAU, và một phép đo chỉ chạm một kiểu là một phép đo nói nửa sự thật.
-enum LabModel {
-  /// 3.60 MB trên đĩa nhưng 5 texture 2048² ⇒ cận trên ~106 MB VRAM.
-  /// Đây là ca "chết vì texture" — dung lượng file không hề báo trước.
-  helmet(
-    label: 'DamagedHelmet — 15k tam giác, 5×2048² texture',
-    asset: 'assets/models_spike/DamagedHelmet.glb',
-    note: '3.60 MB đĩa · cận trên ~106 MB VRAM',
-  ),
-
-  /// Không một texture nào, nhưng 34 material trên 82 node ⇒ hàng chục lần đổi
-  /// trạng thái shader mỗi khung hình. Đây là ca "chết vì draw call".
-  engine(
-    label: '2CylinderEngine — 121k tam giác, 34 material',
-    asset: 'assets/models_spike/2CylinderEngine.glb',
-    note: '1.75 MB đĩa · 0 texture · 82 node',
-  );
-
-  const LabModel({
-    required this.label,
-    required this.asset,
-    required this.note,
-  });
-
-  final String label;
-  final String asset;
-  final String note;
-}
 
 class ModelLabScreen extends StatefulWidget {
   const ModelLabScreen({super.key});
@@ -71,40 +62,131 @@ class ModelLabScreen extends StatefulWidget {
 }
 
 class _ModelLabScreenState extends State<ModelLabScreen> {
-  LabModel _model = LabModel.helmet;
-  bool _mounted3d = false;
-  bool _autoRotate = true;
+  ModelStore? _store;
+  List<ModelRef> _catalog = const [];
+  final Set<String> _onDisk = {};
+  ModelRef? _picked;
 
-  /// Bắt đầu chạy đúng lúc bấm nạp. Mọi mốc dưới đây đo từ mốc đó.
+  /// Đường dẫn file của model đang được dựng. Null ⇒ không có khối 3D nào sống.
+  String? _mountedPath;
+  bool _autoRotate = true;
+  bool _busy = false;
+  double? _progress;
+
   final Stopwatch _clock = Stopwatch();
   final List<String> _log = [];
 
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  @override
+  void dispose() {
+    _store?.close();
+    super.dispose();
+  }
+
   void _note(String line) {
-    final ms = _clock.isRunning || _clock.elapsedMilliseconds > 0
+    final ms = _clock.elapsedMilliseconds > 0 || _clock.isRunning
         ? '${_clock.elapsedMilliseconds}ms'
-        : '—';
+        : '·';
     final entry = '[$ms] $line';
     debugPrint('[ModelLab] $entry');
     if (mounted) setState(() => _log.insert(0, entry));
   }
 
+  String get _baseUrl =>
+      SyncConfig.baseUrlFrom(context.read<SettingsProvider>().baseUrlOverride);
+
+  Future<void> _open() async {
+    final docs = await getApplicationDocumentsDirectory();
+    final store = ModelStore(Directory(p.join(docs.path, 'models')));
+    if (!mounted) return;
+    setState(() => _store = store);
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final store = _store;
+    if (store == null) return;
+    setState(() => _busy = true);
+    try {
+      final (list, warnings) = await store.catalog(_baseUrl);
+      for (final w in warnings) {
+        _note('⚠ $w');
+      }
+      final present = <String>{};
+      for (final m in list) {
+        if (await store.has(m.sha256)) present.add(m.sha256);
+      }
+      if (!mounted) return;
+      setState(() {
+        _catalog = list;
+        _onDisk
+          ..clear()
+          ..addAll(present);
+        _picked ??= list.isEmpty ? null : list.first;
+      });
+      _note('danh mục: ${list.length} model, ${present.length} đã có trên máy');
+    } on Exception catch (e) {
+      _note('⚠ không đọc được models.json từ $_baseUrl — $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Tải model đã chọn về kho. Tách RIÊNG khỏi việc nạp lên màn: thời gian tải
+  /// mạng không được lẫn vào "thời gian tới khung hình đầu", nếu không thì con
+  /// số ấy nói về tốc độ Wi-Fi chứ không nói về bộ dựng.
+  Future<void> _download() async {
+    final store = _store;
+    final ref = _picked;
+    if (store == null || ref == null) return;
+
+    setState(() {
+      _busy = true;
+      _progress = 0;
+    });
+    final res = await store.fetch(_baseUrl, ref,
+        onProgress: (v) => mounted ? setState(() => _progress = v) : null);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _progress = null;
+      if (res.ok) _onDisk.add(ref.sha256);
+    });
+
+    _note(switch (res.status) {
+      ModelFetchStatus.cached => '${ref.id}: đã có sẵn, không chạm mạng',
+      ModelFetchStatus.downloaded => '${ref.id}: tải + verify xong',
+      ModelFetchStatus.noSpace => '${ref.id}: KHÔNG ĐỦ CHỖ — ${res.error}',
+      ModelFetchStatus.checksumMismatch => '${ref.id}: BĂM LỆCH — ${res.error}',
+      ModelFetchStatus.failed => '${ref.id}: LỖI — ${res.error}',
+    });
+  }
+
   void _load() {
+    final store = _store;
+    final ref = _picked;
+    if (store == null || ref == null) return;
     _log.clear();
     _clock
       ..reset()
       ..start();
-    setState(() => _mounted3d = true);
-    _note('nạp ${_model.name} — bắt đầu dựng widget');
+    setState(() => _mountedPath = store.fileFor(ref.sha256).path);
+    _note('nạp ${ref.id} — bắt đầu dựng widget');
   }
 
   /// Nhả khối 3D RA KHỎI CÂY WIDGET, không chỉ ẩn đi.
   ///
   /// Đây là nửa sau của phép đo và nó quan trọng ngang nửa đầu: nếu PSS không
-  /// tụt về gần mốc nền sau khi nhả, nghĩa là bộ dựng RÒ RỈ — và một rò rỉ trên
-  /// máy khách đi qua vài chục hiện vật trong một buổi thì tích lại thành một
-  /// vụ OOM, dù mỗi lần mở đơn lẻ đều trông vô hại.
+  /// tụt về gần mốc nền sau khi nhả, nghĩa là bộ dựng giữ lại bộ nhớ — và một
+  /// máy khách đi qua vài chục hiện vật trong buổi thì tích lại thành một vụ
+  /// OOM, dù mỗi lần mở đơn lẻ đều trông vô hại.
   void _unload() {
-    setState(() => _mounted3d = false);
+    setState(() => _mountedPath = null);
     _note('đã nhả — đo lại PSS lúc này, nó PHẢI tụt về gần mốc nền');
     _clock.stop();
   }
@@ -112,6 +194,7 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
   @override
   Widget build(BuildContext context) {
     final t = context.tokens;
+    final ready = _picked != null && _onDisk.contains(_picked!.sha256);
 
     return Scaffold(
       backgroundColor: t.surface,
@@ -120,8 +203,14 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         iconTheme: IconThemeData(color: t.ink),
-        title: Text('Model Lab · spike M0',
-            style: AppText.sheetTitle.copyWith(color: t.ink)),
+        title: Text('Model Lab', style: AppText.sheetTitle.copyWith(color: t.ink)),
+        actions: [
+          IconButton(
+            tooltip: 'Đọc lại models.json',
+            onPressed: _busy ? null : _refresh,
+            icon: Icon(Icons.refresh, color: t.ink),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -130,25 +219,43 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
           // con số fps đo được ở đây nói về đúng diện tích pixel mà bản thật
           // sẽ phải tô. Đo trên một khung nhỏ hơn rồi suy ra là tự lừa mình.
           Expanded(
-            flex: 1,
             child: Container(
               width: double.infinity,
               color: t.surfaceRaised,
-              child: _mounted3d ? _viewer(t) : _idlePlate(t),
+              child: _mountedPath == null ? _idlePlate(t) : _viewer(t),
             ),
           ),
 
           // ── BẢNG ĐIỀU KHIỂN ──────────────────────────────────────────────
           Expanded(
-            flex: 1,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
                   AppSpace.gutter, AppSpace.x4, AppSpace.gutter, AppSpace.x6),
               children: [
-                Text('MẪU ĐO',
-                    style: AppText.kicker.copyWith(color: t.inkFaint)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('MODEL TRÊN MÁY CHỦ',
+                        style: AppText.kicker.copyWith(color: t.inkFaint)),
+                    if (_busy)
+                      SizedBox(
+                        width: 12,
+                        height: 12,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, value: _progress, color: t.accent),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: AppSpace.x2),
-                for (final m in LabModel.values) _modelRow(t, m),
+                if (_catalog.isEmpty)
+                  Text(
+                    _busy
+                        ? 'đang đọc…'
+                        : 'Không có model nào.\n$_baseUrl/models.json',
+                    style: AppText.stopMeta.copyWith(color: t.inkFaint),
+                  )
+                else
+                  for (final m in _catalog) _modelRow(t, m),
                 const SizedBox(height: AppSpace.x5),
 
                 Text('ĐIỀU KHIỂN',
@@ -157,15 +264,24 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
                 Row(
                   children: [
                     Expanded(
+                      child: OutlinedButton(
+                        onPressed:
+                            _busy || _picked == null || ready ? null : _download,
+                        child: const Text('TẢI VỀ'),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.x3),
+                    Expanded(
                       child: FilledButton(
-                        onPressed: _mounted3d ? null : _load,
+                        onPressed:
+                            ready && _mountedPath == null ? _load : null,
                         child: const Text('NẠP'),
                       ),
                     ),
                     const SizedBox(width: AppSpace.x3),
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _mounted3d ? _unload : null,
+                        onPressed: _mountedPath == null ? null : _unload,
                         child: const Text('NHẢ'),
                       ),
                     ),
@@ -185,7 +301,7 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
                     // Đổi cờ này phải dựng lại khối 3D mới có tác dụng, nên nếu
                     // đang nạp thì nhả ra để người đo không đọc nhầm một con số
                     // của chế độ cũ và ghi vào cột của chế độ mới.
-                    if (_mounted3d) _mounted3d = false;
+                    _mountedPath = null;
                   }),
                 ),
                 const SizedBox(height: AppSpace.x5),
@@ -194,7 +310,7 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
                     style: AppText.kicker.copyWith(color: t.inkFaint)),
                 const SizedBox(height: AppSpace.x2),
                 if (_log.isEmpty)
-                  Text('(chưa nạp lần nào)',
+                  Text('(chưa có gì)',
                       style: AppText.stopMeta.copyWith(color: t.inkFaint))
                 else
                   for (final line in _log)
@@ -226,13 +342,14 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
         ),
       );
 
-  Widget _modelRow(MuseumTokens t, LabModel m) {
-    final on = m == _model;
+  Widget _modelRow(MuseumTokens t, ModelRef m) {
+    final on = m.sha256 == _picked?.sha256;
+    final cached = _onDisk.contains(m.sha256);
     return InkWell(
-      // Đổi mẫu khi đang nạp cũng phải dựng lại — cùng lý do với cờ tự xoay.
+      // Đổi model khi đang nạp cũng phải dựng lại — cùng lý do với cờ tự xoay.
       onTap: () => setState(() {
-        _model = m;
-        if (_mounted3d) _mounted3d = false;
+        _picked = m;
+        _mountedPath = null;
       }),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpace.x2),
@@ -246,11 +363,15 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(m.label,
+                  Text(m.label ?? m.id,
                       style: AppText.meta
                           .copyWith(color: on ? t.ink : t.inkMuted)),
-                  Text(m.note,
-                      style: AppText.stopMeta.copyWith(color: t.inkFaint)),
+                  Text(
+                    '${(m.bytes / 1024 / 1024).toStringAsFixed(2)} MB · '
+                    '${cached ? "đã có trên máy" : "chưa tải"}',
+                    style: AppText.stopMeta.copyWith(
+                        color: cached ? t.inkFaint : t.error),
+                  ),
                 ],
               ),
             ),
@@ -262,15 +383,18 @@ class _ModelLabScreenState extends State<ModelLabScreen> {
 
   /// Khối `<model-viewer>` thật.
   ///
-  /// `key` mang tên mẫu + chế độ xoay: đổi một trong hai thì Flutter dựng một
+  /// `key` mang đường dẫn + chế độ xoay: đổi một trong hai thì Flutter dựng một
   /// State mới thay vì tái dùng cái cũ, nên WebView cũ được huỷ hẳn. Không có
   /// key này thì hai phép đo liên tiếp có thể dùng chung một WebView đã ấm sẵn,
   /// và thời gian tới khung hình đầu sẽ đẹp một cách giả tạo.
   Widget _viewer(MuseumTokens t) => ModelViewer(
-        key: ValueKey('${_model.name}-$_autoRotate'),
-        src: _model.asset,
+        key: ValueKey('$_mountedPath-$_autoRotate'),
+        // `file://` — model nằm trong kho trên máy, KHÔNG trong assets và KHÔNG
+        // tải qua mạng lúc này. Mạng đã xong ở bước TẢI VỀ, nên con số đo được
+        // dưới đây là chi phí của bộ dựng, không lẫn tốc độ Wi-Fi.
+        src: Uri.file(_mountedPath!).toString(),
         id: 'mv',
-        alt: _model.label,
+        alt: _picked?.label ?? _picked?.id ?? 'model',
         autoRotate: _autoRotate,
         cameraControls: true,
         // Nền trùng màu sân khấu để không có một khung xám nhảy ra lúc chuyển.

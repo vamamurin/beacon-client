@@ -57,7 +57,3 @@ flutter:
 
   assets:
     - assets/audio/
-    # ⚠ SPIKE M0 — hai mẫu Khronos để đo, KHÔNG phải nội dung bảo tàng và
-    # KHÔNG được đi theo bản phát hành (chúng cộng 5.4 MB vào APK). Model thật
-    # sẽ tới qua bundle nội dung như ảnh và audio, không nhúng vào app.
-    - assets/models_spike/
