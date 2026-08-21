@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:beacon_client/data/repositories/manifest_parser.dart';
+import 'package:beacon_client/domain/models/exhibit_info.dart';
 import 'package:beacon_client/data/repositories/mock_zone_repository.dart';
 
 /// Decode the embedded mock manifest fresh for each test so mutations
@@ -34,34 +35,38 @@ void main() {
       expect(zone1.exhibitByMinor(1)!.meaning, isNotNull);
       expect(zone1.exhibitByMinor(2)!.meaning, isNull);
 
-      // "images" is optional too: AK-47 carries two extra shots, Kar98 none.
-      // imagePaths always leads with the representative image.
+      // `media` giữ đúng thứ tự CMS xếp. AK-47 có ảnh chính + hai ảnh phụ;
+      // Kar98 chỉ có ảnh chính.
       final ak47 = zone1.exhibitByMinor(1)!;
-      expect(ak47.extraImagePaths, hasLength(2));
-      expect(ak47.imagePaths.first, ak47.imagePath);
-      expect(ak47.imagePaths, hasLength(3));
-      expect(zone1.exhibitByMinor(2)!.extraImagePaths, isEmpty);
-      expect(zone1.exhibitByMinor(2)!.imagePaths,
-          [zone1.exhibitByMinor(2)!.imagePath]);
+      expect(ak47.media, hasLength(3));
+      expect(ak47.media.every((m) => m is ImageMedia), isTrue);
+      expect(ak47.hasModel, isFalse);
+      // Không có mô hình ⇒ cuộn phim mang cả dải, lưới chỉ mang phần sau.
+      expect(ak47.stagePaths, hasLength(3));
+      expect(ak47.documentPaths, hasLength(2));
+      expect(ak47.gridThumbnailPath, (ak47.media.first as ImageMedia).thumb);
+
+      final kar98 = zone1.exhibitByMinor(2)!;
+      expect(kar98.media, hasLength(1));
+      expect(kar98.documentPaths, isEmpty);
     });
 
-    test('the representative image is never duplicated inside the gallery', () {
+    test('ảnh trùng đường dẫn bị lọc — cuộn phim không có hai trang y hệt', () {
       final m = baseManifest();
       final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
       final ak47 = exhibits.first as Map<String, dynamic>;
-      // CMS liệt kê cả ảnh chính, và lặp một ảnh phụ.
-      ak47['images'] = [
-        ak47['image'],
-        'images/exhibits/sung-ak-47/detail-bang.jpg',
-        'images/exhibits/sung-ak-47/detail-bang.jpg',
+      const main = 'images/exhibits/sung-ak-47/main.jpg';
+      const detail = 'images/exhibits/sung-ak-47/detail-bang.jpg';
+      // CMS liệt kê lặp — chuyện thường, và lọc ở parser rẻ hơn bắt họ không nhầm.
+      ak47['media'] = [
+        {'type': 'image', 'file': main, 'thumb': main},
+        {'type': 'image', 'file': detail, 'thumb': detail},
+        {'type': 'image', 'file': detail, 'thumb': detail},
       ];
 
       final parsed = ManifestParser.parse(m);
       expect(parsed.warnings, isEmpty);
-      expect(parsed.zones.first.exhibitByMinor(1)!.imagePaths, [
-        'images/exhibits/sung-ak-47/main.jpg',
-        'images/exhibits/sung-ak-47/detail-bang.jpg',
-      ]);
+      expect(parsed.zones.first.exhibitByMinor(1)!.stagePaths, [main, detail]);
     });
 
     test('audio resolve: two-axis fallback (audio vi, transcript still vi)',
@@ -148,33 +153,52 @@ void main() {
           throwsA(isA<BundleValidationException>()));
     });
 
-    test('bad entries in "images" are dropped, the exhibit survives', () {
+    test('phần tử media hỏng bị bỏ, hiện vật vẫn sống', () {
       final m = baseManifest();
       final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
       final ak47 = exhibits.first as Map<String, dynamic>;
-      ak47['images'] = [
-        'images/exhibits/sung-ak-47/detail-bang.jpg', // hợp lệ
-        'images/../../../etc/passwd.jpg', // traversal
-        'https://cdn.example.com/x.jpg', // URL
-        42, // sai kiểu
+      const good = 'images/exhibits/sung-ak-47/detail-bang.jpg';
+      ak47['media'] = [
+        {'type': 'image', 'file': good, 'thumb': good},
+        {'type': 'image', 'file': 'images/../../../etc/passwd.jpg', 'thumb': good},
+        {'type': 'image', 'file': 'https://cdn.example.com/x.jpg', 'thumb': good},
+        {'type': 'image', 'file': 42, 'thumb': good},
+        {'type': 'image', 'file': good}, // thiếu thumb
+        {'file': good, 'thumb': good}, // thiếu type
+        'không phải object',
       ];
 
       final parsed = ManifestParser.parse(m);
-      final parsedAk47 = parsed.zones.first.exhibitByMinor(1)!;
-      expect(parsedAk47.extraImagePaths,
-          ['images/exhibits/sung-ak-47/detail-bang.jpg']);
-      expect(parsed.warnings, hasLength(3));
+      final ak = parsed.zones.first.exhibitByMinor(1)!;
+      expect(ak.media, hasLength(1));
+      expect(ak.stagePaths, [good]);
+      expect(parsed.warnings, hasLength(6));
       expect(parsed.warnings.every((w) => w.contains('sung-ak-47')), isTrue);
     });
 
-    test('"images" that is not an array is ignored with a warning', () {
+    test('media rỗng sau khi lọc ⇒ bỏ CẢ hiện vật', () {
       final m = baseManifest();
       final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
-      (exhibits.first as Map<String, dynamic>)['images'] = 'main.jpg';
+      (exhibits.first as Map<String, dynamic>)['media'] = [
+        {'type': 'image', 'file': 'https://evil/x.jpg', 'thumb': 'x'},
+      ];
 
       final parsed = ManifestParser.parse(m);
-      expect(parsed.zones.first.exhibitByMinor(1)!.extraImagePaths, isEmpty);
-      expect(parsed.warnings.single, contains('"images" is not an array'));
+      // Một hiện vật không có gì để nhìn thì không có gì để bày — nhưng các
+      // hiện vật khác của khu KHÔNG được chết theo.
+      expect(parsed.zones.first.exhibitByMinor(1), isNull);
+      expect(parsed.zones.first.exhibits, isNotEmpty);
+      expect(parsed.warnings.any((w) => w.contains('media')), isTrue);
+    });
+
+    test('"media" không phải mảng ⇒ bỏ hiện vật kèm warning', () {
+      final m = baseManifest();
+      final exhibits = ((m['zones'] as List).first as Map)['exhibits'] as List;
+      (exhibits.first as Map<String, dynamic>)['media'] = 'main.jpg';
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.zones.first.exhibitByMinor(1), isNull);
+      expect(parsed.warnings.any((w) => w.contains('"media"')), isTrue);
     });
 
     test('unsupported schemaVersion is rejected up front', () {
@@ -184,43 +208,75 @@ void main() {
     });
   });
 
-  // `exhibit.model` không trỏ tới file .glb — nó trỏ một KHOÁ vào models.json,
-  // vì model đi theo model pack riêng chứ không nằm trong bundle. Nhóm test này
-  // giữ đúng hai điều: khối model không bao giờ giết hiện vật, và một khối
-  // model KHÔNG ĐỦ (thiếu poster) bị bỏ hẳn chứ không được nhận một nửa.
-  group('ManifestParser — exhibit.model', () {
+  // Mô hình 3D là một PHẦN TỬ của `media[]`, không phải một khối riêng — và nó
+  // chỉ được đứng ở vị trí 0. Nhóm này giữ hai điều: khối model hỏng không bao
+  // giờ giết hiện vật, và ràng buộc vị trí được thi hành thật.
+  group('ManifestParser — media type "model"', () {
     Map<String, dynamic> firstExhibit(Map<String, dynamic> m) =>
         (((m['zones'] as List).first as Map)['exhibits'] as List).first
             as Map<String, dynamic>;
 
-    test('vắng mặt là hợp lệ — mọi bundle cũ đi đường này', () {
-      final parsed = ManifestParser.parse(baseManifest());
-      expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull);
-      expect(parsed.warnings, isEmpty);
+    const img = 'images/exhibits/sung-ak-47/main.jpg';
+    const thumb = 'images/exhibits/sung-ak-47/thumb.jpg';
+    Map<String, dynamic> imageItem() =>
+        {'type': 'image', 'file': img, 'thumb': thumb};
+    Map<String, dynamic> modelItem({Object? id = 'tuong-phat', Object? poster,
+        Object? th = 'images/exhibits/sung-ak-47/model-thumb.jpg'}) =>
+        {
+          'type': 'model',
+          'id': id,
+          'poster': poster ?? 'images/exhibits/sung-ak-47/model-poster.jpg',
+          'thumb': th,
+        };
+
+    test('vắng mặt là hợp lệ — phần lớn hiện vật không có mô hình', () {
+      final ex = ManifestParser.parse(baseManifest())
+          .zones.first.exhibitByMinor(1)!;
+      expect(ex.hasModel, isFalse);
+      expect(ex.model, isNull);
     });
 
-    test('khối hợp lệ được đọc đúng', () {
+    test('đứng đầu media ⇒ đọc đúng, và đổi cả ba quy tắc bố cục', () {
       final m = baseManifest();
-      firstExhibit(m)['model'] = {
-        'id': 'sung-ak-47',
-        'poster': 'images/exhibits/sung-ak-47/main.jpg',
-      };
+      firstExhibit(m)['media'] = [modelItem(), imageItem()];
 
-      final model = ManifestParser.parse(m).zones.first.exhibitByMinor(1)!.model;
-      expect(model, isNotNull);
-      expect(model!.id, 'sung-ak-47');
-      expect(model.poster, 'images/exhibits/sung-ak-47/main.jpg');
+      final ex = ManifestParser.parse(m).zones.first.exhibitByMinor(1)!;
+      expect(ex.hasModel, isTrue);
+      expect(ex.model!.id, 'tuong-phat');
+
+      // Cuộn phim còn ĐÚNG một khung: vuốt ngang lúc này là xoay mô hình, nên
+      // mọi trang thêm vào đều là trang không ngón tay nào tới được.
+      expect(ex.stagePaths, [ex.model!.poster]);
+      // Và ảnh KHÔNG biến mất — chúng xuống lưới, kể cả ảnh chính.
+      expect(ex.documentPaths, [img]);
+      // Ô lưới 04b hứa đúng thứ khách sẽ thấy khi mở ra.
+      expect(ex.gridThumbnailPath, 'images/exhibits/sung-ak-47/model-thumb.jpg');
     });
 
-    test('thiếu poster ⇒ bỏ CẢ khối, hiện vật vẫn sống', () {
+    // Cả bố cục dựa trên "phần tử đầu LÀ sân khấu". Một mô hình ở giữa dải là
+    // một trang không lật tới được, nên nó bị bỏ chứ không được nhận.
+    test('model KHÔNG đứng đầu thì bị bỏ, hiện vật vẫn sống', () {
       final m = baseManifest();
-      firstExhibit(m)['model'] = {'id': 'sung-ak-47'};
+      firstExhibit(m)['media'] = [imageItem(), modelItem()];
 
       final parsed = ManifestParser.parse(m);
       final ex = parsed.zones.first.exhibitByMinor(1)!;
-      expect(ex.model, isNull, reason: 'không được nhận một nửa khối');
-      expect(ex.audio, isNotNull, reason: 'hiện vật KHÔNG được chết theo');
-      expect(parsed.warnings.single, contains('model.poster'));
+      expect(ex.hasModel, isFalse);
+      expect(ex.media, hasLength(1));
+      expect(parsed.warnings.single, contains('không đứng đầu'));
+    });
+
+    test('id chịu bộ ký tự hẹp — nó là khoá tra cứu, không phải đường dẫn', () {
+      for (final bad in ['', 'có dấu cách', '../escape', 'a/b', 'a.b', '-gach']) {
+        final m = baseManifest();
+        firstExhibit(m)['media'] = [modelItem(id: bad), imageItem()];
+
+        final parsed = ManifestParser.parse(m);
+        final ex = parsed.zones.first.exhibitByMinor(1)!;
+        expect(ex.hasModel, isFalse, reason: 'với "$bad"');
+        expect(ex.media, hasLength(1), reason: 'ảnh vẫn còn với "$bad"');
+        expect(parsed.warnings.single, contains('model.id'));
+      }
     });
 
     test('poster phải đi qua đúng luật đường dẫn của bundle', () {
@@ -228,49 +284,39 @@ void main() {
         'images/../../../etc/passwd.jpg',
         'https://cdn.example.com/x.jpg',
         '/absolute/x.jpg',
-        'models/x.glb', // .glb KHÔNG hợp lệ trong bundle, kể cả ở đây
+        'models/x.glb', // .glb KHÔNG hợp lệ trong bundle
       ]) {
         final m = baseManifest();
-        firstExhibit(m)['model'] = {'id': 'ak', 'poster': bad};
+        firstExhibit(m)['media'] = [modelItem(poster: bad), imageItem()];
 
         final parsed = ManifestParser.parse(m);
-        expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull,
+        expect(parsed.zones.first.exhibitByMinor(1)!.hasModel, isFalse,
             reason: 'với "$bad"');
         expect(parsed.warnings.single, contains('model.poster'));
       }
     });
 
-    // id là khoá tra cứu, KHÔNG phải đường dẫn — nên nó chịu một bộ ký tự hẹp
-    // hơn hẳn, và mọi thứ mang hình dáng đường dẫn đều bị loại.
-    test('id chịu bộ ký tự hẹp', () {
-      for (final bad in [
-        '',
-        'có dấu cách',
-        '../escape',
-        'a/b',
-        'a.b',
-        '-mo-dau-bang-gach',
-      ]) {
-        final m = baseManifest();
-        firstExhibit(m)['model'] = {
-          'id': bad,
-          'poster': 'images/exhibits/sung-ak-47/main.jpg',
-        };
-
-        final parsed = ManifestParser.parse(m);
-        expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull,
-            reason: 'với "$bad"');
-        expect(parsed.warnings.single, contains('model.id'));
-      }
-    });
-
-    test('model không phải object thì bỏ kèm warning', () {
+    test('thiếu thumb ⇒ bỏ, vì ô lưới sẽ trống mà không giải thích được', () {
       final m = baseManifest();
-      firstExhibit(m)['model'] = 'sung-ak-47.glb';
+      firstExhibit(m)['media'] = [modelItem(th: null), imageItem()];
 
       final parsed = ManifestParser.parse(m);
-      expect(parsed.zones.first.exhibitByMinor(1)!.model, isNull);
-      expect(parsed.warnings.single, contains('không phải object'));
+      expect(parsed.zones.first.exhibitByMinor(1)!.hasModel, isFalse);
+      expect(parsed.warnings.single, contains('thumb'));
+    });
+
+    // `video` đã có chỗ trong schema nhưng chưa dựng. Bỏ KÈM WARNING chứ không
+    // im lặng: một CMS khai video phải thấy ngay rằng app chưa đọc được nó.
+    test('type "video" là loại dành sẵn — bỏ kèm warning, không im lặng', () {
+      final m = baseManifest();
+      firstExhibit(m)['media'] = [
+        imageItem(),
+        {'type': 'video', 'file': 'images/x.mp4', 'thumb': thumb},
+      ];
+
+      final parsed = ManifestParser.parse(m);
+      expect(parsed.zones.first.exhibitByMinor(1)!.media, hasLength(1));
+      expect(parsed.warnings.single, contains('chưa được hỗ trợ'));
     });
   });
 

@@ -46,6 +46,8 @@ import 'package:beacon_client/presentation/providers/content_provider.dart';
 import 'package:beacon_client/presentation/providers/session_provider.dart';
 import 'package:beacon_client/presentation/providers/startup_provider.dart';
 import 'package:beacon_client/presentation/providers/settings_provider.dart';
+import 'package:beacon_client/data/repositories/sync_config.dart';
+import 'package:beacon_client/presentation/providers/model_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/providers/pending_zone_change_provider.dart';
 
@@ -109,6 +111,19 @@ Future<void> main() async {
         // không được thổi bay nó. Nó KHÔNG giữ GlobalKey nào — xem doc đầu
         // `shell_controller.dart` cho cái bẫy mà điều đó tránh được.
         ChangeNotifierProvider(create: (_) => ShellController()),
+
+        // Mô hình 3D. Nằm NGOÀI _BootstrapHost cùng lý do với ThemeController:
+        // nó là bộ đệm cho tài sản đã nằm trên đĩa, không phải state của
+        // pipeline, nên AppRestarter không được thổi bay nó — dựng lại graph mà
+        // vứt luôn danh mục model là bắt máy tải lại thứ đã có sẵn.
+        ChangeNotifierProvider(
+          create: (_) => ModelProvider(
+            // Đọc URL TẠI THỜI ĐIỂM GỌI, không chốt cứng: nhân viên đổi máy chủ
+            // trong Cài đặt thì lần hỏi kế tiếp dùng ngay giá trị mới, giống
+            // đúng cách HttpSyncTransport làm.
+            baseUrl: () => SyncConfig.baseUrl(settings),
+          ),
+        ),
       ],
       child: _BootstrapHost(settings: settings, audioHandler: audioHandler),
     ),

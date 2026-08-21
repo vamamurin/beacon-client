@@ -153,11 +153,10 @@ const String kMockManifestJson = r'''
             { "label": { "vi": "Xuất xứ", "en": "Origin" },
               "value": { "vi": "Liên Xô", "en": "Soviet Union" } }
           ],
-          "image": "images/exhibits/sung-ak-47/main.jpg",
-          "thumbnail": "images/exhibits/sung-ak-47/thumb.jpg",
-          "images": [
-            "images/exhibits/sung-ak-47/detail-bang.jpg",
-            "images/exhibits/sung-ak-47/detail-khoa-nong.jpg"
+          "media": [
+            { "type": "image", "file": "images/exhibits/sung-ak-47/main.jpg", "thumb": "images/exhibits/sung-ak-47/thumb.jpg" },
+            { "type": "image", "file": "images/exhibits/sung-ak-47/detail-bang.jpg", "thumb": "images/exhibits/sung-ak-47/detail-bang.jpg" },
+            { "type": "image", "file": "images/exhibits/sung-ak-47/detail-khoa-nong.jpg", "thumb": "images/exhibits/sung-ak-47/detail-khoa-nong.jpg" }
           ],
           "audio": {
             "tracks": {
@@ -178,8 +177,9 @@ const String kMockManifestJson = r'''
             "vi": "Chiến lợi phẩm phổ biến thời kỳ đầu kháng chiến.",
             "en": "A common war trophy of the early resistance years."
           },
-          "image": "images/exhibits/sung-kar98/main.jpg",
-          "thumbnail": "images/exhibits/sung-kar98/thumb.jpg",
+          "media": [
+            { "type": "image", "file": "images/exhibits/sung-kar98/main.jpg", "thumb": "images/exhibits/sung-kar98/thumb.jpg" }
+          ],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/sung-kar98.mp3",
@@ -200,9 +200,10 @@ const String kMockManifestJson = r'''
             "vi": "Kết tinh của tinh thần tự lực tự cường...",
             "en": "The spirit of self-reliance embodied..."
           },
-          "image": "images/exhibits/luu-dan-mo-vit/main.jpg",
-          "thumbnail": "images/exhibits/luu-dan-mo-vit/thumb.jpg",
-          "images": ["images/exhibits/luu-dan-mo-vit/detail-ngoi-no.jpg"],
+          "media": [
+            { "type": "image", "file": "images/exhibits/luu-dan-mo-vit/main.jpg", "thumb": "images/exhibits/luu-dan-mo-vit/thumb.jpg" },
+            { "type": "image", "file": "images/exhibits/luu-dan-mo-vit/detail-ngoi-no.jpg", "thumb": "images/exhibits/luu-dan-mo-vit/detail-ngoi-no.jpg" }
+          ],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/luu-dan-mo-vit.mp3",
@@ -252,8 +253,9 @@ const String kMockManifestJson = r'''
             { "label": { "vi": "Niên đại", "en": "Period" },
               "value": { "vi": "Đầu thế kỷ XX", "en": "Early 20th century" } }
           ],
-          "image": "images/exhibits/bo-do-nghe-tho-may/main.jpg",
-          "thumbnail": "images/exhibits/bo-do-nghe-tho-may/thumb.jpg",
+          "media": [
+            { "type": "image", "file": "images/exhibits/bo-do-nghe-tho-may/main.jpg", "thumb": "images/exhibits/bo-do-nghe-tho-may/thumb.jpg" }
+          ],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/bo-do-nghe-tho-may.mp3",
@@ -273,8 +275,9 @@ const String kMockManifestJson = r'''
             "vi": "Phương tiện đi lại giản dị những năm ở Hà Nội.",
             "en": "A humble means of transport in the Hanoi years."
           },
-          "image": "images/exhibits/chiec-xe-dap-thong-nhat/main.jpg",
-          "thumbnail": "images/exhibits/chiec-xe-dap-thong-nhat/thumb.jpg",
+          "media": [
+            { "type": "image", "file": "images/exhibits/chiec-xe-dap-thong-nhat/main.jpg", "thumb": "images/exhibits/chiec-xe-dap-thong-nhat/thumb.jpg" }
+          ],
           "audio": {
             "tracks": {
               "vi": { "file": "audio/vi/exhibits/chiec-xe-dap-thong-nhat.mp3",

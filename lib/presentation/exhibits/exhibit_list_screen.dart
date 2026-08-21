@@ -569,14 +569,14 @@ class _ExhibitTile extends StatelessWidget {
                           BlendMode.srcATop,
                         ),
                         child: HeroImage(
-                          filePath: content.imagePath(exhibit.thumbnailPath),
+                          filePath: content.imagePath(exhibit.gridThumbnailPath),
                           cacheWidth: decodeWidth,
                         ),
                       ),
                     )
                   else
                     HeroImage(
-                      filePath: content.imagePath(exhibit.thumbnailPath),
+                      filePath: content.imagePath(exhibit.gridThumbnailPath),
                       cacheWidth: decodeWidth,
                     ),
                   // `.extile .ph .pmark { left: 0; bottom: 0 }` — vùng chạm 44

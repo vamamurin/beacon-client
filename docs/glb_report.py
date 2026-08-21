@@ -42,14 +42,40 @@ def read_glb(path):
 
 
 def image_size(blob):
-    """(rộng, cao) đọc thẳng từ header PNG/JPEG/KTX2, hoặc None."""
+    """(rộng, cao) đọc từ header PNG/JPEG/KTX2/WebP, hoặc None.
+
+    WebP là chỗ ĐÃ TỪNG bỏ lọt: gltf-transform xuất texture sang WebP
+    (EXT_texture_webp), hàm này không đọc được, tổng pixel tính ra 0, và một
+    model vượt trần texture ĐI QUA bài kiểm ngân sách. Một bộ kiểm im lặng cho
+    qua thì tệ hơn không có bộ kiểm nào, vì nó tạo ra niềm tin sai.
+    """
+    # PNG
     if blob[:8] == b"\x89PNG\r\n\x1a\n":
-        w, h = struct.unpack(">II", blob[16:24])
-        return w, h
+        return struct.unpack(">II", blob[16:24])
+
+    # KTX2
     if blob[:12] == b"\xabKTX 20\xbb\r\n\x1a\n":
-        w, h = struct.unpack("<II", blob[20:28])
-        return w, h
-    if blob[:2] == b"\xff\xd8":  # JPEG: đi tìm marker SOF
+        return struct.unpack("<II", blob[20:28])
+
+    # WebP — RIFF....WEBP, rồi một trong ba loại chunk.
+    if blob[:4] == b"RIFF" and blob[8:12] == b"WEBP":
+        chunk = blob[12:16]
+        if chunk == b"VP8X":          # mở rộng: khổ canvas, 24-bit trừ 1
+            w = int.from_bytes(blob[24:27], "little") + 1
+            h = int.from_bytes(blob[27:30], "little") + 1
+            return w, h
+        if chunk == b"VP8L":          # không mất dữ liệu: 14-bit trừ 1, đóng gói
+            bits = int.from_bytes(blob[21:25], "little")
+            return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+        if chunk == b"VP8 ":          # có mất dữ liệu
+            # 8 byte header chunk + 3 byte frame tag, rồi start code 9d 01 2a
+            if blob[23:26] == b"\x9d\x01\x2a":
+                w = int.from_bytes(blob[26:28], "little") & 0x3FFF
+                h = int.from_bytes(blob[28:30], "little") & 0x3FFF
+                return w, h
+
+    # JPEG — đi tìm marker SOF
+    if blob[:2] == b"\xff\xd8":
         i = 2
         while i < len(blob) - 9:
             if blob[i] != 0xFF:
@@ -66,7 +92,6 @@ def image_size(blob):
             (seg,) = struct.unpack(">H", blob[i + 2:i + 4])
             i += 2 + seg
     return None
-
 
 def triangles_of(gltf):
     """Tổng số tam giác, cộng theo TỪNG LẦN node dùng mesh.

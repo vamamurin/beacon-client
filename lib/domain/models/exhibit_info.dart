@@ -25,42 +25,75 @@ class SpecEntry {
   int get hashCode => Object.hash(label, value);
 }
 
-/// Mô hình 3D của một hiện vật.
+/// Một phần tử trong dải tư liệu của hiện vật.
 ///
-/// KHÔNG MANG ĐƯỜNG DẪN TỚI FILE `.glb`. Đó là điểm khác quan trọng nhất so với
-/// mọi tài sản khác của hiện vật (ảnh, audio) và nó có lý do:
+/// ═══════════════════════════════════════════════════════════════════════════
+/// VÌ SAO MỘT DANH SÁCH THAY VÌ `image` + `thumbnail` + `images[]`
+/// ═══════════════════════════════════════════════════════════════════════════
 ///
-/// Ảnh và audio đi TRONG bundle nội dung — tải nguyên khối, thay nguyên khối.
-/// Mô hình 3D thì không: chúng nặng gấp hàng chục lần, và nếu nhét vào bundle
-/// thì sửa một dấu phẩy trong manifest là cả đội máy tải lại hàng trăm MB. Nên
-/// model đi đường riêng, từng file, đánh địa chỉ bằng sha256 (xem [ModelStore]).
+/// Bản trước tách ảnh đại diện thành trường riêng, có lý do rõ ràng: gộp thành
+/// list sẽ biến "ảnh đại diện" thành "phần tử [0]", và một bundle xếp sai thứ
+/// tự sẽ âm thầm đổi bộ mặt của hiện vật. Lý do đó vẫn đúng — nó được bù bằng
+/// một phép kiểm ở khâu đóng gói, không phải bằng cách bỏ qua.
 ///
-/// Vì thế manifest chỉ trỏ một KHOÁ [id] vào danh mục `models.json` của máy chủ,
-/// còn nội dung thì `ModelStore` tự đối chiếu và tải. Hệ quả kéo theo: quy tắc
-/// đường dẫn của `ManifestParser` KHÔNG cần biết tới `.glb` — bundle không bao
-/// giờ chứa file 3D, nên bề mặt của nó giữ nguyên như trước tính năng này.
+/// Cái mua về là hai quy tắc bố cục **thu về một**:
 ///
-/// [poster] thì NGƯỢC LẠI, nằm trong bundle và BẮT BUỘC. Nó là bảo hiểm: model
-/// có thể chưa tải xong, có thể tải hỏng, có thể máy quá yếu để dựng — nhưng
-/// khung hình đầu của sân khấu 04c thì luôn phải có gì đó để hiện. Một hiện vật
-/// khai `model` mà thiếu `poster` là một hiện vật có thể hiện ra khung trống,
-/// nên nó bị bỏ cả khối `model` (kèm warning) thay vì được nhận một nửa.
-@immutable
-class ExhibitModel {
-  /// Khoá vào `models.json` trên máy chủ ("tuong-phat"). KHÔNG phải đường dẫn.
-  final String id;
+///     sân khấu   media[0]      (mô hình, hoặc cả dải ảnh nếu không có mô hình)
+///     lưới đáy   media[1..]    ← MỘT quy tắc, không còn nhánh
+///
+/// Trước đó lưới cần hai nhánh: không có mô hình thì bày ảnh phụ, có mô hình
+/// thì bày cả ảnh chính. Với danh sách thì cả hai đều là "mọi thứ sau phần tử
+/// đầu" — vì khi có mô hình, chính mô hình mới là phần tử đầu.
+///
+/// VÀ nó mở đường cho video mà không phải sửa schema lần nữa: `type: "video"`
+/// là một nhánh mới của [ExhibitMedia], không phải một trường mới ở khắp nơi.
+sealed class ExhibitMedia {
+  /// Ảnh nhỏ cho ô lưới. MỌI loại đều phải có — kể cả mô hình, vì lưới 04b
+  /// được vẽ trước khi bất kỳ model nào được tải về.
+  final String thumb;
 
-  /// Ảnh giữ chỗ, đường dẫn tương đối trong bundle. Luôn có.
-  final String poster;
+  const ExhibitMedia({required this.thumb});
+}
 
-  const ExhibitModel({required this.id, required this.poster});
+/// Một tấm ảnh.
+class ImageMedia extends ExhibitMedia {
+  final String file;
+
+  const ImageMedia({required this.file, required super.thumb});
 
   @override
   bool operator ==(Object other) =>
-      other is ExhibitModel && other.id == id && other.poster == poster;
+      other is ImageMedia && other.file == file && other.thumb == thumb;
 
   @override
-  int get hashCode => Object.hash(id, poster);
+  int get hashCode => Object.hash(file, thumb);
+}
+
+/// Mô hình 3D. CHỈ được đứng ở vị trí [0] — xem [ExhibitInfo.media].
+class ModelMedia extends ExhibitMedia {
+  /// Khoá vào `models.json` trên máy chủ. KHÔNG phải đường dẫn.
+  final String id;
+
+  /// Ảnh giữ chỗ ở khung đầu sân khấu, trong bundle. Dải ảnh xoay phủ lên nó
+  /// khi tải xong, nên hai thứ phải khớp khung — poster được render từ chính
+  /// file `.glb`, không phải một tấm ảnh chụp.
+  final String poster;
+
+  const ModelMedia({
+    required this.id,
+    required this.poster,
+    required super.thumb,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is ModelMedia &&
+      other.id == id &&
+      other.poster == poster &&
+      other.thumb == thumb;
+
+  @override
+  int get hashCode => Object.hash(id, poster, thumb);
 }
 
 /// Immutable exhibit metadata (successor of ArtifactInfo, zone-first model).
@@ -91,34 +124,16 @@ class ExhibitInfo {
   /// Ordered spec rows. Empty list ⇒ hide the spec table.
   final List<SpecEntry> specs;
 
-  /// Bundle-relative image paths. [thumbnailPath] feeds the 2-column grid so
-  /// the grid never loads full-resolution images.
-  final String imagePath;
-  final String thumbnailPath;
-
-  /// Ảnh PHỤ của hiện vật (góc chụp khác, chi tiết hoa văn, mặt sau…), theo
-  /// đúng thứ tự CMS xếp. Rỗng ⇒ hiện vật chỉ có một ảnh, đúng như mọi bundle
-  /// đã phát hành trước tính năng này.
+  /// Dải tư liệu của hiện vật, ĐÚNG THỨ TỰ CMS xếp. Luôn có ít nhất một phần tử.
   ///
-  /// VÌ SAO KHÔNG GỘP THẲNG ẢNH CHÍNH VÀO ĐÂY: [imagePath] là một hợp đồng
-  /// riêng — nó là ảnh ĐẠI DIỆN, thứ duy nhất được phép xuất hiện ở nơi chỉ có
-  /// chỗ cho một ảnh. Một list gộp sẽ biến "ảnh đại diện" thành "phần tử [0]",
-  /// và một bundle xếp sai thứ tự sẽ âm thầm đổi bộ mặt của hiện vật ở màn 3.
-  /// Giữ hai trường ⇒ ảnh đại diện KHÔNG THỂ trôi.
-  ///
-  /// Dải để xem là [imagePaths] — luôn có ảnh chính đứng đầu.
-  final List<String> extraImagePaths;
-
-  /// Toàn bộ dải ảnh xem được, ảnh chính đứng đầu. Luôn có ít nhất 1 phần tử.
-  List<String> get imagePaths => [imagePath, ...extraImagePaths];
+  /// ⚠ RÀNG BUỘC VỊ TRÍ: mô hình 3D chỉ được đứng ở `media[0]`. Parser loại bỏ
+  /// một [ModelMedia] nằm ở chỗ khác kèm warning, vì cả bố cục dựa trên việc
+  /// phần tử đầu LÀ sân khấu — một mô hình ở giữa dải sẽ là một trang mà không
+  /// ngón tay nào tới được (vuốt ngang trên mô hình là xoay nó, không lật trang).
+  final List<ExhibitMedia> media;
 
   /// Per-exhibit narration clip — one playlist item in the zone tour.
   final AudioClipInfo audio;
-
-  /// Mô hình 3D, hoặc null nếu hiện vật này không có. TUỲ CHỌN theo đúng nghĩa:
-  /// phần lớn hiện vật sẽ không bao giờ có model, và bundle nào không khai khối
-  /// này vẫn hợp lệ y như trước.
-  final ExhibitModel? model;
 
   const ExhibitInfo({
     required this.minor,
@@ -127,12 +142,46 @@ class ExhibitInfo {
     required this.summary,
     this.meaning,
     this.specs = const [],
-    required this.imagePath,
-    required this.thumbnailPath,
-    this.extraImagePaths = const [],
+    required this.media,
     required this.audio,
-    this.model,
   });
+
+  // ── ba quy tắc quyết định hiện vật này TRÔNG NHƯ THẾ NÀO ─────────────────
+  //
+  // Sống ở đây chứ không ở màn hình, vì hai màn (04b và 04c) cùng phải tuân
+  // theo và chúng không được phép nghĩ khác nhau.
+
+  /// Mô hình 3D, hoặc null. Chỉ `media[0]` mới có thể là mô hình.
+  ModelMedia? get model {
+    final first = media.first;
+    return first is ModelMedia ? first : null;
+  }
+
+  bool get hasModel => model != null;
+
+  /// Những gì CUỘN PHIM ở nửa trên màn 04c bày ra.
+  ///
+  /// Có mô hình ⇒ **đúng một khung**. Không phải để tiết kiệm, mà vì cử chỉ đã
+  /// bị chiếm: vuốt ngang trên mô hình là XOAY nó, nên cuộn phim không lật
+  /// trang được nữa. Thêm ảnh vào dải là dựng những trang không ai tới được —
+  /// chúng đi xuống [documentPaths], nơi ngón tay còn tới.
+  List<String> get stagePaths => model != null
+      ? [model!.poster]
+      : [for (final m in media) if (m is ImageMedia) m.file];
+
+  /// Những gì LƯỚI TƯ LIỆU ở đáy màn 04c bày ra: **mọi thứ sau phần tử đầu**.
+  ///
+  /// MỘT quy tắc cho cả hai trường hợp, và đó chính là thứ danh sách mua về.
+  /// Không có mô hình ⇒ phần tử đầu là ảnh chính (đang đứng ở cuộn phim) nên
+  /// lưới bày ảnh phụ. Có mô hình ⇒ phần tử đầu là mô hình, nên lưới bày TẤT CẢ
+  /// ảnh kể cả ảnh chính — đúng như cần, vì cuộn phim không còn chỗ cho chúng.
+  List<String> get documentPaths =>
+      [for (final m in media.skip(1)) if (m is ImageMedia) m.file];
+
+  /// Ảnh cho ô lưới ở màn danh sách hiện vật (04b) — thumb của phần tử đầu.
+  /// Có mô hình thì đó là ảnh render của mô hình: ô lưới hứa đúng thứ khách sẽ
+  /// thấy khi mở ra.
+  String get gridThumbnailPath => media.first.thumb;
 
   @override
   bool operator ==(Object other) {
@@ -144,11 +193,8 @@ class ExhibitInfo {
         other.summary == summary &&
         other.meaning == meaning &&
         listEquals(other.specs, specs) &&
-        other.imagePath == imagePath &&
-        other.thumbnailPath == thumbnailPath &&
-        listEquals(other.extraImagePaths, extraImagePaths) &&
-        other.audio == audio &&
-        other.model == model;
+        listEquals(other.media, media) &&
+        other.audio == audio;
   }
 
   @override
@@ -159,10 +205,7 @@ class ExhibitInfo {
         summary,
         meaning,
         Object.hashAll(specs),
-        imagePath,
-        thumbnailPath,
-        Object.hashAll(extraImagePaths),
+        Object.hashAll(media),
         audio,
-        model,
       );
 }

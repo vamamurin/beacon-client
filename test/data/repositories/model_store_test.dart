@@ -112,6 +112,61 @@ void main() {
       expect(w, hasLength(2));
     });
 
+    test('turntable vắng mặt là hợp lệ', () {
+      final w = <String>[];
+      expect(ModelRef.tryParse(_entry(), w)!.turntable, isNull);
+      expect(w, isEmpty);
+    });
+
+    test('turntable hợp lệ được đọc, tên khung suy ra có đệm 0', () {
+      final ref = ModelRef.tryParse({
+        ..._entry(),
+        'turntable': {'dir': 'turntable/tuong-phat', 'frames': 24, 'ext': 'webp'},
+      }, <String>[])!;
+      expect(ref.turntable!.frames, 24);
+      expect(ref.turntable!.fileName(0), '000.webp');
+      expect(ref.turntable!.fileName(7), '007.webp');
+      expect(ref.turntable!.fileName(23), '023.webp');
+    });
+
+    test('dir phải nằm trong turntable/ và không thoát ra được', () {
+      for (final bad in [
+        'turntable/../../etc',
+        'models/tuong-phat',
+        '/turntable/x',
+        'turntable/x/y',
+        'https://evil/turntable/x',
+      ]) {
+        final w = <String>[];
+        final ref = ModelRef.tryParse(
+            {..._entry(), 'turntable': {'dir': bad, 'frames': 24}}, w);
+        expect(ref!.turntable, isNull, reason: 'với "$bad"');
+        expect(w.single, contains('turntable.dir'));
+      }
+    });
+
+    // Trần 360 chặn một máy chủ bị chỉnh sửa bảo máy khách tải vài nghìn file.
+    test('frames phải nằm trong khoảng dùng được', () {
+      for (final bad in [0, 1, -5, 361, 100000, 'nhiều']) {
+        final w = <String>[];
+        final ref = ModelRef.tryParse({
+          ..._entry(),
+          'turntable': {'dir': 'turntable/x', 'frames': bad},
+        }, w);
+        expect(ref!.turntable, isNull, reason: 'với "$bad"');
+        expect(w.single, contains('turntable.frames'));
+      }
+    });
+
+    test('turntable hỏng KHÔNG kéo theo cả model', () {
+      final w = <String>[];
+      final ref = ModelRef.tryParse(
+          {..._entry(), 'turntable': 'khong-phai-object'}, w);
+      expect(ref, isNotNull, reason: 'model vẫn phải dùng được cho lớp 3D');
+      expect(ref!.turntable, isNull);
+      expect(w.single, contains('turntable'));
+    });
+
     test('hai bản ghi cùng băm và id thì bằng nhau', () {
       final a = ModelRef.tryParse(_entry(), <String>[])!;
       final b = ModelRef.tryParse(_entry(), <String>[])!;

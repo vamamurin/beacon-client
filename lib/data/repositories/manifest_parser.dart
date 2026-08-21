@@ -280,7 +280,11 @@ abstract final class ManifestParser {
       }
 
       final meaningRaw = e['meaning'];
-      final imagePath = _reqPath(e, 'image', ctx);
+      final media = _parseMedia(e, ctx, warnings);
+      if (media.isEmpty) {
+        warnings.add('$ctx: skipped — "media" rỗng hoặc không dùng được');
+        return null;
+      }
       return ExhibitInfo(
         minor: _reqInt(e, 'minor', ctx),
         id: e['id'] as String?,
@@ -290,11 +294,8 @@ abstract final class ManifestParser {
             ? _localized(meaningRaw, ctx, fallbackLang)
             : null,
         specs: List.unmodifiable(specs),
-        imagePath: imagePath,
-        thumbnailPath: _reqPath(e, 'thumbnail', ctx),
-        extraImagePaths: _optExtraImages(e, ctx, imagePath, warnings),
+        media: media,
         audio: audio,
-        model: _optModel(e, ctx, warnings),
       );
     } on BundleValidationException catch (err) {
       warnings.add('$ctx: skipped — ${err.message}');
@@ -302,92 +303,100 @@ abstract final class ManifestParser {
     }
   }
 
-  /// `exhibit.model` — mô hình 3D, TÙY CHỌN.
+  /// `exhibit.media[]` — dải tư liệu, BẮT BUỘC và có thứ tự.
   ///
   /// ```jsonc
-  /// "model": { "id": "tuong-phat", "poster": "images/…/poster.jpg" }
+  /// "media": [
+  ///   { "type": "model", "id": "tuong-phat",
+  ///     "poster": "images/…/model-poster.webp", "thumb": "images/…/model-thumb.webp" },
+  ///   { "type": "image", "file": "images/…/main.jpg", "thumb": "images/…/thumb.jpg" }
+  /// ]
   /// ```
   ///
-  /// KHÔNG BAO GIỜ LÀM HỎNG HIỆN VẬT — cùng luật với `exhibit.images`, và ở đây
-  /// còn rõ hơn: một hiện vật mất mô hình 3D thì khách vẫn xem được ảnh và vẫn
-  /// nghe được thuyết minh. Huỷ cả bản ghi vì một khối trang trí là phản ứng
-  /// lớn hơn thiệt hại.
+  /// LUẬT HỎNG, theo đúng khuôn cũ của `exhibit.images`:
+  ///   • một phần tử hỏng ⇒ bỏ phần tử đó kèm warning
+  ///   • rỗng sau khi lọc ⇒ bỏ CẢ hiện vật (gọi ở [_parseExhibit]), vì một hiện
+  ///     vật không có gì để nhìn thì không có gì để bày
   ///
-  /// `id` KHÔNG phải đường dẫn — nó là khoá vào `models.json` của máy chủ (xem
-  /// [ExhibitModel]). Vì thế nó không đi qua [_pathRule]; thứ nó phải chịu là
-  /// một bộ ký tự hẹp, vì chuỗi này rồi sẽ được so khớp với danh mục tải về.
-  ///
-  /// `poster` thì LÀ đường dẫn bundle và BẮT BUỘC: thiếu nó thì khung hình đầu
-  /// của sân khấu có thể rỗng khi model chưa tải xong. Thiếu ⇒ bỏ cả khối, chứ
-  /// không nhận một nửa rồi để màn hình tự xoay xở.
-  static ExhibitModel? _optModel(
+  /// RÀNG BUỘC VỊ TRÍ CỦA MÔ HÌNH — xem [ExhibitInfo.media]. Một `model` không
+  /// đứng đầu bị bỏ: cả bố cục dựa trên "phần tử đầu là sân khấu", và một mô
+  /// hình ở giữa dải là một trang không ngón tay nào lật tới được.
+  static List<ExhibitMedia> _parseMedia(
     Map<String, dynamic> e,
     String ctx,
     List<String> warnings,
   ) {
-    final raw = e['model'];
-    if (raw == null) return null; // mọi bundle cũ đi đường này
-    if (raw is! Map<String, dynamic>) {
-      warnings.add('$ctx: "model" không phải object — bỏ');
-      return null;
+    final raw = e['media'];
+    if (raw is! List) {
+      warnings.add('$ctx: "media" thiếu hoặc không phải mảng');
+      return const [];
     }
 
-    final id = raw['id'];
-    if (id is! String || !_modelIdRule.hasMatch(id)) {
-      warnings.add('$ctx: model.id không hợp lệ ($id) — bỏ khối model');
-      return null;
-    }
+    final out = <ExhibitMedia>[];
+    final seen = <String>{};
+    for (var i = 0; i < raw.length; i++) {
+      final item = raw[i];
+      if (item is! Map<String, dynamic>) {
+        warnings.add('$ctx: media[$i] không phải object — bỏ');
+        continue;
+      }
 
-    final poster = raw['poster'];
-    if (poster is! String || !_pathRule.hasMatch(poster)) {
-      warnings.add('$ctx: model.poster thiếu hoặc không hợp lệ — bỏ khối model');
-      return null;
-    }
+      // `thumb` BẮT BUỘC cho mọi loại: lưới 04b và lưới tư liệu đều vẽ bằng nó,
+      // và một phần tử không có thumb là một ô trống không giải thích được.
+      final thumb = item['thumb'];
+      if (thumb is! String || !_pathRule.hasMatch(thumb)) {
+        warnings.add('$ctx: media[$i] thiếu "thumb" hợp lệ — bỏ');
+        continue;
+      }
 
-    return ExhibitModel(id: id, poster: poster);
+      switch (item['type']) {
+        case 'image':
+          final file = item['file'];
+          if (file is! String || !_pathRule.hasMatch(file)) {
+            warnings.add('$ctx: media[$i] "file" không hợp lệ — bỏ');
+            continue;
+          }
+          // Trùng đường dẫn ⇒ hai trang y hệt nhau trong cuộn phim. CMS liệt kê
+          // lặp là chuyện thường; lọc ở đây rẻ hơn bắt họ không nhầm.
+          if (!seen.add(file)) continue;
+          out.add(ImageMedia(file: file, thumb: thumb));
+
+        case 'model':
+          if (i != 0) {
+            warnings.add('$ctx: media[$i] là "model" nhưng không đứng đầu — bỏ');
+            continue;
+          }
+          final id = item['id'];
+          if (id is! String || !_modelIdRule.hasMatch(id)) {
+            warnings.add('$ctx: media[$i] model.id không hợp lệ ($id) — bỏ');
+            continue;
+          }
+          final poster = item['poster'];
+          if (poster is! String || !_pathRule.hasMatch(poster)) {
+            warnings.add('$ctx: media[$i] model.poster không hợp lệ — bỏ');
+            continue;
+          }
+          out.add(ModelMedia(id: id, poster: poster, thumb: thumb));
+
+        // `video` là loại DÀNH SẴN, chưa dựng. Bỏ kèm warning thay vì im lặng:
+        // một CMS khai video sẽ thấy ngay rằng ứng dụng chưa đọc được nó, thay
+        // vì tưởng đã xong rồi đi tìm lỗi ở chỗ khác.
+        case final String t:
+          warnings.add('$ctx: media[$i] type "$t" chưa được hỗ trợ — bỏ');
+
+        default:
+          warnings.add('$ctx: media[$i] thiếu "type" — bỏ');
+      }
+    }
+    return List.unmodifiable(out);
   }
 
   /// Bộ ký tự cho `model.id`. Hẹp có chủ ý: chuỗi này tới từ CMS và sẽ được so
   /// khớp với `models.json`, nên nó chỉ cần đủ để làm một khoá — không cần dấu
   /// chấm, dấu cách hay ký tự đường dẫn nào.
+  ///
+  /// ⚠ PHẢI KHỚP `MODEL_ID_RULE` trong pack_models.py bên máy chủ.
   static final RegExp _modelIdRule = RegExp(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$');
-
-  /// `exhibit.images` — dải ảnh phụ, TÙY CHỌN.
-  ///
-  /// KHÔNG bao giờ làm hỏng hiện vật. Đây là quy tắc khác với `image` (bắt
-  /// buộc, sai ⇒ bỏ cả hiện vật): mất một ảnh phụ thì khách vẫn xem được hiện
-  /// vật và vẫn nghe được thuyết minh — huỷ cả bản ghi vì một đường dẫn thừa
-  /// gõ sai là phản ứng lớn hơn thiệt hại. Mỗi phần tử hỏng ⇒ một warning và
-  /// bị bỏ; trường không có / sai kiểu ⇒ rỗng (mọi bundle cũ đi đường này).
-  ///
-  /// [mainPath] bị LỌC RA: CMS có thể liệt kê cả ảnh chính trong `images` cho
-  /// đủ bộ, và nếu không lọc thì màn 4 sẽ có hai trang y hệt nhau ở đầu dải.
-  /// Trùng lặp giữa các ảnh phụ cũng bị loại theo cùng lý do.
-  static List<String> _optExtraImages(
-    Map<String, dynamic> e,
-    String ctx,
-    String mainPath,
-    List<String> warnings,
-  ) {
-    final raw = e['images'];
-    if (raw == null) return const [];
-    if (raw is! List) {
-      warnings.add('$ctx: "images" is not an array — ignored');
-      return const [];
-    }
-
-    final out = <String>[];
-    final seen = <String>{mainPath};
-    for (final item in raw) {
-      if (item is! String || !_pathRule.hasMatch(item)) {
-        warnings.add('$ctx: dropped invalid entry in "images": $item');
-        continue;
-      }
-      if (!seen.add(item)) continue; // trùng ảnh chính hoặc trùng nhau
-      out.add(item);
-    }
-    return List.unmodifiable(out);
-  }
 
   // ---- audio clip -------------------------------------------------------------
 

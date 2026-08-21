@@ -64,6 +64,9 @@ import 'package:beacon_client/presentation/app/museum_top_bar.dart';
 import 'package:beacon_client/presentation/audio_feedback.dart';
 import 'package:beacon_client/presentation/providers/audio_provider.dart';
 import 'package:beacon_client/presentation/providers/content_provider.dart';
+import 'package:beacon_client/presentation/exhibits/model_route.dart';
+import 'package:beacon_client/presentation/exhibits/turntable_view.dart';
+import 'package:beacon_client/presentation/providers/model_provider.dart';
 import 'package:beacon_client/presentation/providers/language_controller.dart';
 import 'package:beacon_client/presentation/theme/app_space.dart';
 import 'package:beacon_client/presentation/theme/app_text.dart';
@@ -249,11 +252,42 @@ class _StageState extends State<_Stage> {
   final PageController _controller = PageController();
   int _index = 0;
 
-  /// Khung đầu là ẢNH CHÍNH (chỗ của mô hình 3D sau này), các khung sau là ảnh
-  /// tư liệu. Cùng một mảng dựng nên cuộn phim ở trên VÀ lưới ở dưới, nên hai
-  /// nơi không bao giờ lệch số.
-  List<String> get _frames =>
-      [widget.exhibit.imagePath, ...widget.exhibit.extraImagePaths];
+  /// Nội dung cuộn phim — quy tắc sống ở [ExhibitInfo.stagePaths], không ở đây.
+  ///
+  /// Có mô hình ⇒ đúng MỘT khung. Vuốt ngang lúc đó là xoay mô hình, nên cuộn
+  /// phim không lật trang được; ảnh của hiện vật chuyển hết xuống lưới tư liệu
+  /// ở đáy màn, nơi ngón tay còn tới được.
+  List<String> get _frames => widget.exhibit.stagePaths;
+
+  /// Dải ảnh xoay, chỉ hỏi MỘT LẦN cho mỗi hiện vật.
+  ///
+  /// Giữ Future trong State chứ không gọi trong `build`: build chạy lại mỗi lần
+  /// lật trang cuộn phim, và một `FutureBuilder` nhận Future mới mỗi lần sẽ
+  /// khởi động lại vòng tải, nhấp nháy về poster rồi quay lại vòng xoay.
+  Future<List<String>>? _turntable;
+
+  @override
+  void initState() {
+    super.initState();
+    final model = widget.exhibit.model;
+    if (model != null) {
+      _turntable = context.read<ModelProvider>().turntableFrames(model.id);
+    }
+  }
+
+  @override
+  void didUpdateWidget(_Stage old) {
+    super.didUpdateWidget(old);
+    // Khách bấm "Bài tiếp" thì CÙNG widget này nhận một hiện vật khác — phải
+    // hỏi lại, nếu không sân khấu sẽ xoay mô hình của hiện vật trước đó.
+    if (old.exhibit.minor != widget.exhibit.minor) {
+      final model = widget.exhibit.model;
+      _turntable = model == null
+          ? null
+          : context.read<ModelProvider>().turntableFrames(model.id);
+      _index = 0;
+    }
+  }
 
   @override
   void dispose() {
@@ -324,6 +358,35 @@ class _StageState extends State<_Stage> {
 
   Widget _frame(
       BuildContext context, List<String> frames, int i, MediaQueryData media) {
+    // KHUNG ĐẦU LÀ SÂN KHẤU CỦA MÔ HÌNH. Khi hiện vật có dải ảnh xoay, nó phủ
+    // lên tấm poster tĩnh — và poster vẫn là thứ hiện ra TRƯỚC, nên khung này
+    // không bao giờ trống dù dải ảnh chưa tải xong hay không bao giờ tới.
+    //
+    // Chỉ khung 0, và chỉ khi đang ở khung 0: một vòng xoay chạy ticker ở trang
+    // bên cạnh là đốt GPU cho thứ không ai nhìn. `PageView` dựng sẵn trang kề,
+    // nên nếu không chặn ở đây thì nó thật sự chạy.
+    final tt = _turntable;
+    if (i == 0 && tt != null && _index == 0) {
+      return Padding(
+        padding: EdgeInsets.only(
+          top: media.padding.top + MuseumTopBar.height,
+          bottom: AppSpace.x10,
+        ),
+        child: TurntableOrPoster(
+          frames: tt,
+          decodeWidth: (media.size.width * media.devicePixelRatio).round(),
+          placeholder: _frameImage(context, frames, i, media),
+          onTap: () => _openFrame(context, i),
+          semanticLabel:
+              context.read<ContentProvider>().ui(UiKeys.exhibitImageOpen),
+        ),
+      );
+    }
+    return _frameImage(context, frames, i, media);
+  }
+
+  Widget _frameImage(
+      BuildContext context, List<String> frames, int i, MediaQueryData media) {
     final content = context.read<ContentProvider>();
     return _Frame(
       path: frames[i],
@@ -343,11 +406,26 @@ class _StageState extends State<_Stage> {
       // Bản vẽ ghi 100 cho mép trên; ở đây tính từ vùng an toàn cộng chiều cao
       // thanh, nên nó đúng trên mọi máy thay vì đúng trên đúng một máy.
       topInset: media.padding.top + MuseumTopBar.height,
-      onTap: () => _openViewer(context, i),
+      onTap: () => _openFrame(context, i),
       // Nhãn của KHUNG nói việc chạm vào nó làm gì; vị trí trong dải do
       // container phía trên báo. Hai vai khác nhau, hai chuỗi khác nhau.
       semanticLabel: content.ui(UiKeys.exhibitImageOpen),
     );
+  }
+
+  /// Chạm vào KHUNG ĐẦU của một hiện vật có mô hình ⇒ mở 3D thật.
+  ///
+  /// `open` trả về false khi không mở được — đã có một khối 3D đang sống, hoặc
+  /// máy chưa có file model. Khi đó rơi xuống trình xem ảnh, nên cú chạm LUÔN
+  /// dẫn tới một thứ gì đó. Một cú chạm không làm gì cả là lỗi tệ hơn hẳn so
+  /// với việc mở nhầm lớp.
+  Future<void> _openFrame(BuildContext context, int index) async {
+    final model = widget.exhibit.model;
+    if (index == 0 && model != null) {
+      final opened = await ExhibitModelRoute.open(context, model.id);
+      if (opened || !context.mounted) return;
+    }
+    if (context.mounted) await _openViewer(context, index);
   }
 
   /// Màn xem lớn trả về trang cuối cùng khách dừng ở đó, và cuộn phim NHẢY
@@ -921,7 +999,10 @@ class _Documents extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final content = context.watch<ContentProvider>();
-    final paths = exhibit.extraImagePaths;
+    // Quy tắc ở [ExhibitInfo.documentPaths]: khi hiện vật có mô hình, lưới này
+    // bày CẢ ảnh chính — vì cuộn phim ở trên chỉ còn chỗ cho mô hình, và đây
+    // thành đường duy nhất tới ảnh của hiện vật.
+    final paths = exhibit.documentPaths;
 
     // Không có tư liệu nào ⇒ không có khối. Một tiêu đề treo trên khoảng trống
     // đọc ra là app hỏng; mà ở đây còn không có cả tiêu đề để treo.
